@@ -1,0 +1,24 @@
+Hardest parts:
+- Connections
+- Interface to the data structures (map, struct, array)
+- Multithreading - need to talk to Thiago
+- Well-defined names, special names: might be really easy, might be surprisingly hard / ugly
+- Server
+- Dispatching messages to/from interfaces, (interface registration?)
+
+Other stuff:
+- Build system
+- Serialization, probably not hard
+- Authentication
+
+Some ideas for classes:
+- Message
+- Connection
+- Interface?
+- Address?
+- Path?
+- Authenticator or AuthenticationMethod
+
+Scope (aka for now: features not planned):
+- probably not in scope: code generator for the XML interface description format
+  because it needs to work against the consumer API (Qt, GLib, ?)
