@@ -1,6 +1,7 @@
 Hardest parts:
 - Connections
 - Interface to the data structures (map, struct, array)
+  - Do it like QDBusArgument: doesn't need any non-primitive data types, very binding-friendly
 - Multithreading - need to talk to Thiago
 - Well-defined names, special names: might be really easy, might be surprisingly hard / ugly
 - Server
