@@ -11,6 +11,10 @@ Other stuff:
 - Build system
 - Serialization, probably not hard
 - Authentication
+- Event loop integration. Easy enough at least with Qt on Linux because epoll() is only available
+  on Linux. An epoll set has a file descriptor, so it can be watched like a file using a single
+  QSocketNotifier which then tells d-sel that something happened. d-sel then uses epoll() the
+  usual way to find out which file or socket is ready for reading or writing.
 
 Some ideas for classes:
 - Message
