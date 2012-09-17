@@ -45,7 +45,7 @@ public:
     ReadCursor beginRead() { return ReadCursor(m_writeCursor ? 0 : this); }
     WriteCursor beginWrite() { return WriteCursor((m_writeCursor || m_readCursorCount) ? 0 : this); }
 
-    static bool isSignatureValid(array signature);
+    static bool isSignatureValid(array signature, bool requireSingleCompleteType = false);
 
     // a cursor is similar to an iterator, but more tied to the underlying data structure
     // error handling is done by asking state() or isError(), not by method return values.
@@ -96,10 +96,12 @@ public:
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
 
-        void beginArray(int *size);
-        void endArray(); // leaves the current array even when not finished reading it
+        void beginArray();
+        bool nextArrayEntry(); // call this before reading each entry; when it returns false the array has ended
+        void endArray(); // leaves the current array; only  call this in state EndArray!
 
-        bool beginDict(int *size);
+        bool beginDict();
+        bool nextDictEntry(); // like nextArrayEntry()
         bool endDict(); // like endArray()
 
         bool beginStruct();
@@ -108,7 +110,7 @@ public:
         bool beginVariant();
         bool endVariant(); // like endArray()
 
-        std::vector<Type> aggregateStack() const; // the aggregates the cursor is currently in
+        std::vector<State> aggregateStack() const; // the aggregates the cursor is currently in
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
         // least return garbage.
@@ -122,9 +124,9 @@ public:
         uint64 readUint64() { uint64 ret = m_Uint64; advanceState(); return ret; }
         double readDouble() { byte ret = m_Double; advanceState(); return ret; }
         // ### note that the terminating nul is counted in array.length!
-        array readString() { array ret = m_String; advanceState(); return ret; }
-        array readObjectPath() { array ret = m_String; advanceState(); return ret; }
-        array readSignature() { array ret = m_String; advanceState(); return ret; }
+        array readString() { array ret(m_String.begin, m_String.length); advanceState(); return ret; }
+        array readObjectPath() { array ret(m_String.begin, m_String.length); advanceState(); return ret; }
+        array readSignature() { array ret(m_String.begin, m_String.length); return ret; }
         uint32 readUnixFd() { uint32 ret = m_Uint32; advanceState(); return ret; }
 
     private:
@@ -139,12 +141,40 @@ public:
         array m_data;
         int m_signaturePosition;
         int m_dataPosition;
-        static const int maxNesting = 64; // this is in the standard
-        // to go back to the beginning of e.g. an array signature before fetching the next element
-        int m_signaturePositionStack[maxNesting];
 
-        // it is more efficient to read the data in one big method and store the result for
-        // retrieval in readFoo()
+        struct podArray // can't put the array type into a union because it has a constructor :/
+        {
+            byte *begin;
+            uint32 length;
+        };
+
+        struct ArrayInfo
+        {
+            uint32 dataEndPosition; // one past the last data byte of the array
+            uint32 signatureContainedTypePosition; // to rewind when reading the next element
+        };
+
+        struct VariantInfo
+        {
+            podArray prevSignature;       // a variant switches the currently parsed signature, so we
+            uint32 prevSignaturePosition; // need to store the old signature and parse position.
+        };
+
+        // for structs, we don't need to know more than that we are in a struct
+
+        struct AggregateInfo
+        {
+            State aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+            union {
+                ArrayInfo arr;
+                VariantInfo var;
+            };
+        };
+        // to go back to the beginning of e.g. an array signature before fetching the next element
+        std::vector<AggregateInfo> m_aggregateStack;
+
+        // it is more efficient, in code size and performance, to read the data in advanceState()
+        // and store the result for later retrieval in readFoo()
         union {
             byte m_Byte;
             bool m_Boolean;
@@ -155,8 +185,8 @@ public:
             int64 m_Int64;
             uint64 m_Uint64;
             double m_Double;
-            array m_string; // also for ObjectPath and Signature
-        }
+            podArray m_String; // also for ObjectPath and Signature
+        };
     };
 
     class WriteCursor

@@ -152,12 +152,28 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
 }
 
 //static
-bool ArgumentList::isSignatureValid(array signature)
+bool ArgumentList::isSignatureValid(array signature, bool requireSingleCompleteType)
 {
     Nesting nest;
-    while (signature.length) {
+    if (signature.length < 1 || signature.length > 256) {
+        return false;
+    }
+    if (signature.begin[signature.length - 1] != 0) {
+        return false; // not null-terminated
+    }
+    signature.length -= 1; // ignore the null-termination
+    if (requireSingleCompleteType) {
         if (!parseSingleCompleteType(&signature, &nest)) {
             return false;
+        }
+        if (signature.length) {
+            return false;
+        }
+    } else {
+        while (signature.length) {
+            if (!parseSingleCompleteType(&signature, &nest)) {
+                return false;
+            }
         }
     }
     // all aggregates must be closed at the end; if those asserts trigger the parsing code is not correct
@@ -177,7 +193,7 @@ ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
      m_dataPosition(0)
 {
     if (m_argList) {
-        if (m_data.length > 255) {
+        if (!ArgumentList::isSignatureValid(m_signature)) {
             m_state = InvalidData;
         }
         advanceState();
@@ -198,10 +214,120 @@ void ArgumentList::ReadCursor::replaceData(array data)
     m_data = data;
 }
 
+static void getTypeInfo(byte letterCode, ArgumentList::State *beginState, uint32 *alignment,
+                        bool *isPrimitiveType, bool *isStringType)
+{
+    ArgumentList::State state = ArgumentList::InvalidData;
+    bool isPrimitive = true;
+    bool isString = false;
+    int align = 4;
+    // TODO use table lookup instead
+    switch (letterCode) {
+    case 'y':
+        state = ArgumentList::Byte;
+        align = 1;
+        break;
+    case 'b':
+        state = ArgumentList::Boolean;
+        break;
+    case 'n':
+        state = ArgumentList::Int16;
+        align = 2;
+        break;
+    case 'q':
+        state = ArgumentList::Uint16;
+        align = 2;
+        break;
+    case 'i':
+        state = ArgumentList::Int32;
+        break;
+    case 'u':
+        state = ArgumentList::Uint32;
+        break;
+    case 'x':
+        state = ArgumentList::Int64;
+        align = 8;
+        break;
+    case 't':
+        state = ArgumentList::Uint64;
+        align = 8;
+        break;
+    case 'd':
+        state = ArgumentList::Double;
+        align = 8;
+        break;
+    case 's':
+        state = ArgumentList::String;
+        isPrimitive = false;
+        isString = true;
+        break;
+    case 'o':
+        state = ArgumentList::ObjectPath;
+        isPrimitive = false;
+        isString = true;
+        break;
+    case 'g':
+        state = ArgumentList::Signature;
+        isPrimitive = false;
+        isString = true;
+        align = 1;
+        break;
+    case 'h':
+        state = ArgumentList::UnixFd;
+        // this is handled like a primitive type with some extra postprocessing
+        break;
+    case 'v':
+        state = ArgumentList::BeginVariant;
+        isPrimitive = false;
+        break;
+    case '(':
+        state = ArgumentList::BeginStruct;
+        isPrimitive = false;
+        align = 8;
+        break;
+    case ')':
+        state = ArgumentList::EndStruct;
+        isPrimitive = false;
+        align = 1;
+        break;
+    case 'a':
+        state = ArgumentList::BeginArray;
+        isPrimitive = false;
+    case '{':
+        state = ArgumentList::BeginDict;
+        isPrimitive = false;
+        align = 8;
+        break;
+    case '}':
+        state = ArgumentList::EndDict;
+        isPrimitive = false;
+        align = 1;
+        break;
+    default:
+        break;
+    }
+    if (beginState) {
+        *beginState = state;
+    }
+    if (alignment) {
+        *alignment = align;
+    }
+    if (isPrimitiveType) {
+        *isPrimitiveType = isPrimitive;
+    }
+    if (isStringType) {
+        *isStringType = isString;
+    }
+}
+
 void ArgumentList::ReadCursor::advanceState()
 {
-    // general note: if we don't have enough data, the strategy is to keep everything unchanged
+    // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
+    // we don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
+    // for aggregate nesting which cannot be checked using only one signature, due to variants.
+    // variant signatures are only parsed while reading the data. individual variant signatures
+    // ARE checked beforehand whenever we find one in this method.
 
     if (m_state == InvalidData) { // nonrecoverable...
         return;
@@ -214,125 +340,35 @@ void ArgumentList::ReadCursor::advanceState()
     }
 
     const int savedSignaturePosition = m_signaturePosition;
-    // in case of aggregate types, it's actually just the alignment
-    int requiredDataSize = 4;
-    bool isPrimitiveType = false;
-    bool isStringType = false;
+    const int savedDataPosition = m_dataPosition;
+
+    // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
+    int requiredDataSize;
+    bool isPrimitiveType;
+    bool isStringType;
 
     // see what the next type is supposed to be
-    switch (m_signature.begin[++m_signaturePosition]) {
-    case 'y':
-        m_state = Byte;
-        isPrimitiveType = true;
-        requiredDataSize = 1;
-        break;
-    case 'b':
-        m_state = Boolean;
-        isPrimitiveType = true;
-        break;
-    case 'n':
-        m_state = Int16;
-        isPrimitiveType = true;
-        requiredDataSize = 2;
-        break;
-    case 'q':
-        m_state = Uint16;
-        isPrimitiveType = true;
-        requiredDataSize = 2;
-        break;
-    case 'i':
-        m_state = Int32;
-        isPrimitiveType = true;
-        break;
-    case 'u':
-        m_state = Uint32;
-        isPrimitiveType = true;
-        break;
-    case 'x':
-        m_state = Int64;
-        isPrimitiveType = true;
-        requiredDataSize = 8;
-        break;
-    case 't':
-        m_state = Uint64;
-        isPrimitiveType = true;
-        requiredDataSize = 8;
-        break;
-    case 'd':
-        m_state = Double;
-        isPrimitiveType = true;
-        requiredDataSize = 8;
-        break;
-    case 's':
-        m_state = String;
-        isStringType = true;
-        break;
-    case 'o':
-        m_state = ObjectPath;
-        isStringType = true;
-        break;
-    case 'g':
-        m_state = Signature;
-        isStringType = true;
-        requiredDataSize = 1;
-        break;
-    case 'h':
-        m_state = UnixFd;
-        isPrimitiveType = true; // for our purposes it *is* true
-        break;
-    case 'v':
-        if (!m_nesting->beginVariant()) {
-            m_state = InvalidData;
-            break;
-        }
-        requiredDataSize = 1;
-        break;
-    case '(':
-        if (!m_nesting->beginParen()) {
-            m_state = InvalidData;
-            break;
-        }
-        m_state = BeginStruct;
-        requiredDataSize = 8;
-        break;
-    case ')':
-        // TODO
-        break;
-    case 'a':
-        // if the next char is a '{' which starts a dictionary we'll handle it below, so there is
-        // no case label for it here
-        if (!m_nesting->beginArray()) {
-            m_state = InvalidData;
-            break;
-        }
-        m_state = BeginArray;
-    case '}':
-        // TODO
-        m_state = EndDict;
-        break;
-    default:
-        m_state = InvalidData;
-        break;
-    }
+    getTypeInfo(m_signature.begin[++m_signaturePosition],
+                &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
 
     if (m_state == InvalidData) {
-        m_signaturePosition = savedSignaturePosition;
         return;
     }
 
+    // TODO check, maybe around here, if we just got done reading an array (from data postion).
+    //      then check if the signature parsing state is consistent with the data state.
+
     // check if we have enough data for the next type, and read it
 
-    const int savedDataPosition = m_dataPosition;
     m_dataPosition = align(m_dataPosition, requiredDataSize);
+
+    if (((isPrimitiveType || isStringType) && m_dataPosition + requiredDataSize > m_data.length)
+        || m_dataPosition > m_data.length) {
+        goto out_needMoreData;
+    }
 
     // easy cases...
     if (isPrimitiveType) {
-        if (m_dataPosition + requiredDataSize > m_data.length) {
-            m_state = NeedMoreData;
-            m_signaturePosition = savedSignaturePosition;
-            m_dataPosition = savedDataPosition;
-            return;
-        }
         switch(m_state) {
         case Byte:
             m_Byte = m_data.begin[m_dataPosition];
@@ -380,7 +416,7 @@ void ArgumentList::ReadCursor::advanceState()
 
     // strings
     if (isStringType) {
-        int stringLength = 1; // terminating nul
+        uint32 stringLength = 1; // terminating nul
         if (m_state == Signature) {
             stringLength += m_data.begin[m_dataPosition];
         } else {
@@ -389,62 +425,150 @@ void ArgumentList::ReadCursor::advanceState()
         }
         m_dataPosition += requiredDataSize;
         if (m_dataPosition + stringLength > m_data.length) {
-            m_state = NeedMoreData;
-            m_signaturePosition = savedSignaturePosition;
-            m_dataPosition = savedDataPosition;
-            return;
+            goto out_needMoreData;
         }
-        array ret(m_data.begin + m_dataPosition, stringLength);
-        m_String = ret; // TODO validate signature(?), string (no nuls) or object path (cf. spec)
+        // TODO validate signature(?), string (no nuls) or object path (cf. spec)
+        m_String.begin = m_data.begin + m_dataPosition;
+        m_String.length = stringLength;
         m_dataPosition += stringLength;
         return;
     }
 
     // now the interesting part: aggregates
-    switch (m_state) {
-    case Variant:
-    case Struct:
-        a->chopFirst();
-        while (parseSingleCompleteType(a, m_nesting)) {}
-        if (!a->length || *a->begin != ')') {
-            return false;
-        }
-        a->chopFirst();
-        m_nesting->endParen();
-        return true;
 
-    case Array:
-        a->chopFirst();
-        if (*a->begin == '{') { // an "array of dict entries", i.e. a dict
-            if (!m_nesting->beginParen() || a->length < 4) {
+    AggregateInfo aggregateInfo;
+
+    switch (m_state) {
+    case BeginStruct:
+        if (!m_nesting->beginParen()) {
+            m_state = InvalidData;
+            return;
+        }
+        aggregateInfo.aggregateType = BeginStruct;
+        m_aggregateStack.push_back(aggregateInfo);
+        break;
+    case EndStruct:
+        m_nesting->endParen();
+        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginStruct) {
+            m_state = InvalidData;
+            break;
+        }
+        m_aggregateStack.pop_back();
+        break;
+
+    case BeginVariant: {
+        if (m_dataPosition >= m_data.length) {
+            goto out_needMoreData;
+        }
+        array signature;
+        signature.length = m_data.begin[m_dataPosition] + 1;
+        signature.begin = ++m_dataPosition;
+        m_dataPosition += signature.length;
+        if (m_dataPosition > m_data.length) {
+            goto out_needMoreData;
+        }
+        // do not clobber nesting before potentially going to out_needMoreData!
+        if (!m_nesting->beginVariant()) {
+            m_state = InvalidData;
+            return;
+        }
+
+        if (!ArgumentList::isSignatureValid(signature, /*requireSingleCompleteType = */ true)) {
+            m_state = InvalidData;
+            return;
+        }
+
+        aggregateInfo.aggregateType = BeginVariant;
+        aggregateInfo.var.prevSignature.begin = m_signature.begin;
+        aggregateInfo.var.prevSignature.length = m_signature.length;
+        aggregateInfo.var.prevSignaturePosition = m_signaturePosition;
+        m_aggregateStack.push_back(aggregateInfo);
+        m_signature = signature;
+        m_signaturePosition = 0;
+        break; }
+    case EndVariant:
+        m_nesting->endVariant();
+        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginVariant) {
+            m_state = InvalidData;
+            return;
+        }
+        aggregateInfo = m_aggregateStack.back();
+        m_aggregateStack.pop_back();
+        m_signature.begin = aggregateInfo.var.prevSignature.begin;
+        m_signature.length = aggregateInfo.var.prevSignature.length;
+        m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+        break;
+
+    case BeginArray: {
+        if (m_dataPosition + 4 > m_data.length) {
+            goto out_needMoreData;
+        }
+        static const int maxArrayDataLength = 67108864; // from the spec
+        uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+        if (arrayLength > maxArrayDataLength) {
+            m_state = InvalidData;
+            return;
+        }
+        m_dataPosition += 4;
+
+        ArgumentList::State firstElementType;
+        uint32 firstElementAlignment;
+        getTypeInfo(m_signature.begin[++m_signaturePosition],
+                    &firstElementType, &firstElementAlignment, 0, 0);
+
+        m_dataPosition = align(m_dataPosition, firstElementAlignment);
+        aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
+        if (aggregateInfo.arr.dataEndPosition > m_data.length) {
+            goto out_needMoreData;
+        }
+        // do not clobber nesting befor potentially going to out_needMoreData!
+        if (!m_nesting->beginArray()) {
+            m_state = InvalidData;
+            return;
+        }
+
+        aggregateInfo.aggregateType = BeginArray;
+        if (firstElementType == ArgumentList::BeginDict) {
+            aggregateInfo.aggregateType = BeginDict;
+
+            m_signaturePosition++;
+            if (!m_nesting->beginParen()) {
                 m_state = InvalidData;
-                break;
-            }
-            a->chopFirst();
-            // key must be a basic type
-            if (!parseBasicType(a)) {
-                return false;
-            }
-            // value can be any type
-            if (!parseSingleCompleteType(a, m_nesting)) {
-                return false;
-            }
-            if (!a->length || *a->begin != '}') {
-                return false;
-            }
-            a->chopFirst();
-            m_nesting->endParen();
-        } else { // regular array
-            if (!parseSingleCompleteType(a, m_nesting)) {
-                return false;
+                return;
             }
         }
+        aggregateInfo.arr.signatureContainedTypePosition = m_signaturePosition;
+
+        m_aggregateStack.push_back(aggregateInfo);
+        break; }
+    case EndArray:
         m_nesting->endArray();
-        return true;
+        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginArray) {
+            m_state = InvalidData;
+            return;
+        }
+        m_aggregateStack.pop_back();
+        // TODO
+    case EndDict:
+        m_nesting->endParen();
+        m_nesting->endArray();
+        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginDict) {
+            m_state = InvalidData;
+            return;
+        }
+        m_aggregateStack.pop_back();
+        // TODO
     default:
         assert(false);
         break;
     }
+
+    return;
+
+out_needMoreData:
+    m_state = NeedMoreData;
+    m_signaturePosition = savedSignaturePosition;
+    m_dataPosition = savedDataPosition;
 }
 
 void ArgumentList::ReadCursor::beginArray(int *size);
@@ -479,8 +603,14 @@ bool ArgumentList::ReadCursor::endVariant();
 {
 }
 
-std::vector<Type> ArgumentList::ReadCursor::aggregateStack() const
+std::vector<State> ArgumentList::ReadCursor::aggregateStack() const
 {
+    const int count = m_aggregateStack.count();
+    std::vector<State> ret;
+    for (int i = 0; i < count; i++) {
+        ret.push_back(m_aggregateStack[i].aggregateType);
+    }
+    return ret;
 }
 
 ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
