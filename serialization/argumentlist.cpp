@@ -578,37 +578,47 @@ void ArgumentList::ReadCursor::advanceState()
             goto out_needMoreData;
         }
         static const int maxArrayDataLength = 67108864; // from the spec
-        uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        const uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
         if (arrayLength > maxArrayDataLength) {
             m_state = InvalidData;
             return;
         }
         m_dataPosition += 4;
 
-        ArgumentList::CursorState firstElementType;
+        CursorState firstElementType;
         uint32 firstElementAlignment;
         getTypeInfo(m_signature.begin[m_signaturePosition + 1],
                     &firstElementType, &firstElementAlignment, 0, 0);
 
+        aggregateInfo.aggregateType = firstElementType == BeginDict ? BeginDict : BeginArray;
+
+        // TODO are we supposed to align m_dataPosition if the array is empty?
         m_dataPosition = align(m_dataPosition, firstElementAlignment);
         aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
         if (aggregateInfo.arr.dataEndPosition > m_data.length) {
             goto out_needMoreData;
         }
-        // do not clobber nesting before potentially going to out_needMoreData!
-        if (!m_nesting->beginArray()) {
-            m_state = InvalidData;
-            return;
-        }
-
-        aggregateInfo.aggregateType = BeginArray;
-        if (firstElementType == ArgumentList::BeginDict) {
-            aggregateInfo.aggregateType = BeginDict;
-
-            m_signaturePosition++;
-            if (!m_nesting->beginParen()) {
+        if (!arrayLength) {
+            // zero length array: must skip the contained type manually
+            array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
+            if (!parseSingleCompleteType(&temp, m_nesting)) {
+                // must have been a nesting problem (assuming no bugs)
                 m_state = InvalidData;
                 return;
+            }
+            m_signaturePosition = m_signature.length - temp.length - 1; // TODO check the indexing
+        } else {
+            // do not clobber nesting before potentially going to out_needMoreData!
+            if (!m_nesting->beginArray()) {
+                m_state = InvalidData;
+                return;
+            }
+            if (firstElementType == BeginDict) {
+                m_signaturePosition++;
+                if (!m_nesting->beginParen()) {
+                    m_state = InvalidData;
+                    return;
+                }
             }
         }
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
