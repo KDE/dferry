@@ -84,16 +84,14 @@ void Message::parseVariableHeaders()
     ArgumentList::ReadCursor reader = m_headerParser->beginRead();
     assert(reader.isValid());
 
-    int varFieldCount;
-    reader.beginArray(&varFieldCount);
-    for (int i = 0; i < varFieldCount; i++) {
+    for (reader.beginArray(); reader.nextArrayEntry(); ) {
         reader.beginStruct();
         byte headerType = reader.readByte();
         reader.beginVariant();
 
         switch (headerType) {
         case PATH: {
-            assert(reader.state() == ArgumentList::ReadCursor::ObjectPath);
+            assert(reader.state() == ArgumentList::ObjectPath);
             m_stringHeaders[headerType] = reader.readObjectPath();
             break;
         }
@@ -102,18 +100,18 @@ void Message::parseVariableHeaders()
         case ERROR_NAME:
         case DESTINATION:
         case SENDER: {
-            assert(reader.state() == ArgumentList::ReadCursor::String);
+            assert(reader.state() == ArgumentList::String);
             m_stringHeaders[headerType] = reader.readString();
             break;
         }
         case REPLY_SERIAL:
         case UNIX_FDS: {
-            assert(reader.state() == ArgumentList::ReadCursor::Uint32);
+            assert(reader.state() == ArgumentList::UnixFd);
             m_intHeaders[headerType] = reader.readUint32();
             break;
         }
         case SIGNATURE: {
-            assert(reader.state() == ArgumentList::ReadCursor::Signature);
+            assert(reader.state() == ArgumentList::Signature);
             m_stringHeaders[headerType] = reader.readSignature();
             break;
         }
@@ -125,6 +123,9 @@ void Message::parseVariableHeaders()
         reader.endStruct();
     }
     reader.endArray();
+
+    static const int maxMessageLength = 134217728;
+    // TODO check header length + message length <= maxMessageLength
 
     if (false) { // TODO when done parsing...
         delete m_headerParser;

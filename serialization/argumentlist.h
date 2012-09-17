@@ -7,27 +7,6 @@ class Nesting; // TODO remove this when we've d-pointerized everything
 class ArgumentList
 {
 public:
-    enum Type {
-        // using all-caps in order to match the d-bus spec. this also distinguishes spec-mandated
-        // enums / enum values from implementation-specific ones.
-        INVALID = 0,
-        BYTE = 121, // y
-        BOOLEAN = 98, // b
-        INT16 = 110, // n
-        UINT16 = 113, // q
-        INT32 = 105, // i
-        UINT32 = 117, // u
-        INT64 = 120, // x
-        UINT64 = 116, // t
-        DOUBLE = 100, // d
-        STRING = 115, // s
-        ARRAY = 97, // a
-        STRUCT = 114, // r
-        VARIANT = 118, // v
-        DICT_ENTRY = 101, // e
-        UNIX_FD = 104 // h
-    };
-
     ArgumentList(); // constructs an empty argument list
      // constructs an argument list to deserialize data in @p data with signature @p signature
     ArgumentList(array signature, array data, bool isByteSwapped);
@@ -47,6 +26,44 @@ public:
 
     static bool isSignatureValid(array signature, bool requireSingleCompleteType = false);
 
+    enum CursorState {
+        // "exceptional" states
+        NotStarted = 0,
+        Finished,
+        NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
+        InvalidData, // non-recoverable
+        AnyData, // occurs in WriteCursor when you are free to add any type
+
+        // the following occur in ReadCursor, and in WriteCursor when in the second or higher iteration
+        // of an array or dict where the types must match the first iteration (except inside variants).
+
+        // states pertaining to aggregates
+        BeginArray,
+        NextArrayEntry,
+        EndArray, // TODO do we really need this and endArray()? same for EndDict.
+        BeginDict,
+        NextDictEntry,
+        EndDict,
+        BeginStruct,
+        EndStruct,
+        BeginVariant,
+        EndVariant,
+        // the next element is plain data
+        Byte,
+        Boolean,
+        Int16,
+        Uint16,
+        Int32,
+        Uint32,
+        Int64,
+        Uint64,
+        Double,
+        String,
+        ObjectPath,
+        Signature,
+        UnixFd
+    };
+
     // a cursor is similar to an iterator, but more tied to the underlying data structure
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
@@ -57,41 +74,11 @@ public:
 
         bool isValid() const { return m_argList; }
 
-        enum State {
-            // "exceptional" states
-            NotStarted = 0,
-            Finished,
-            NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
-            InvalidData, // non-recoverable
-            // states pertaining to aggregates
-            BeginArray,
-            NextArrayElement,
-            EndArray,
-            BeginDict,
-            NextDictElement,
-            EndDict,
-            BeginStruct,
-            EndStruct,
-            BeginVariant,
-            EndVariant,
-            // the next element is plain data
-            Byte,
-            Boolean,
-            Int16,
-            Uint16,
-            Int32,
-            Uint32,
-            Int64,
-            Uint64,
-            Double,
-            String,
-            ObjectPath,
-            Signature,
-            UnixFd
-        };
-
-        State state() const { return m_state; }
-        replaceData(array data); // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
+        CursorState state() const { return m_state; }
+         // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
+         // ### will need to fix up any VariantInfo::prevSignature on the stack where prevSignature
+         //     is inside m_data; length will still work but begin will be outdated.
+        void replaceData(array data);
 
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
@@ -110,7 +97,7 @@ public:
         bool beginVariant();
         bool endVariant(); // like endArray()
 
-        std::vector<State> aggregateStack() const; // the aggregates the cursor is currently in
+        std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
         // least return garbage.
@@ -135,7 +122,7 @@ public:
         void advanceState();
 
         ArgumentList *m_argList;
-        State m_state;
+        CursorState m_state;
         Nesting *m_nesting;
         array m_signature;
         array m_data;
@@ -164,7 +151,7 @@ public:
 
         struct AggregateInfo
         {
-            State aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+            CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
             union {
                 ArrayInfo arr;
                 VariantInfo var;
@@ -195,14 +182,7 @@ public:
 
         bool isValid() const { return m_argList; }
 
-        enum State {
-            NotStarted = 0,
-            Toplevel, // in this state writing can be stopped and the result will be a valid message
-            InAggregate, // in this state at least one aggregate has been begun and not finished
-            RepeatedElementTypeMismatch, // when trying to add different types to an array; the first element dictates the type.
-        };
-
-        State state() const;
+        CursorState state() const;
 
         void beginArray();
         void nextArrayEntry();
@@ -218,7 +198,7 @@ public:
         void beginVariant();
         void endVariant();
 
-        std::vector<Type> aggregateStack() const; // the aggregates the cursor is currently in
+        std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
 
         void writeByte(byte b);
         void writeBoolean(bool b);

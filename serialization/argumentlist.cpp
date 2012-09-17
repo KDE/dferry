@@ -4,7 +4,7 @@
 
 #include <cassert>
 
-static int align(int index, index alignment)
+static int align(uint32 index, uint32 alignment)
 {
     const int maxStepUp = alignment - 1;
     return (index + maxStepUp) & ~maxStepUp;
@@ -214,10 +214,10 @@ void ArgumentList::ReadCursor::replaceData(array data)
     m_data = data;
 }
 
-static void getTypeInfo(byte letterCode, ArgumentList::State *beginState, uint32 *alignment,
+static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, uint32 *alignment,
                         bool *isPrimitiveType, bool *isStringType)
 {
-    ArgumentList::State state = ArgumentList::InvalidData;
+    ArgumentList::CursorState state = ArgumentList::InvalidData;
     bool isPrimitive = true;
     bool isString = false;
     int align = 4;
@@ -343,7 +343,7 @@ void ArgumentList::ReadCursor::advanceState()
     const int savedDataPosition = m_dataPosition;
 
     // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
-    int requiredDataSize;
+    uint32 requiredDataSize;
     bool isPrimitiveType;
     bool isStringType;
 
@@ -374,37 +374,37 @@ void ArgumentList::ReadCursor::advanceState()
             m_Byte = m_data.begin[m_dataPosition];
             break;
         case Boolean: {
-            uint32 num = basic::readUint32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            uint32 num = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             if (num > 1) {
                 m_state = InvalidData;
             }
             m_Boolean = num == 1;
             break; }
         case Int16:
-            m_Int16 = basic::readInt16(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Int16 = basic::readInt16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Uint16:
-            m_Uint16 = basic::readUint16(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Uint16 = basic::readUint16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Int32:
-            m_Int32 = basic::readInt32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped)
+            m_Int32 = basic::readInt32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Uint32:
-            m_Uint32 = basic::readUint32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Uint32 = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Int64:
-            m_Int64 = basic::readInt64(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Int64 = basic::readInt64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Uint64:
-            m_Uint64 = basic::readUint64(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Uint64 = basic::readUint64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case Double:
-            m_Double = basic::readDouble(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            m_Double = basic::readDouble(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             break;
         case UnixFd: {
-            uint32 index = basic::readUint32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+            uint32 index = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
             uint32 ret; // TODO use index to retrieve the actual file descriptor
-            m_UnixFd = ret;
+            m_Uint32 = ret;
             break; }
         default:
             assert(false);
@@ -461,8 +461,8 @@ void ArgumentList::ReadCursor::advanceState()
             goto out_needMoreData;
         }
         array signature;
-        signature.length = m_data.begin[m_dataPosition] + 1;
-        signature.begin = ++m_dataPosition;
+        signature.length = m_data.begin[m_dataPosition++] + 1;
+        signature.begin = m_data.begin + m_dataPosition;
         m_dataPosition += signature.length;
         if (m_dataPosition > m_data.length) {
             goto out_needMoreData;
@@ -504,14 +504,14 @@ void ArgumentList::ReadCursor::advanceState()
             goto out_needMoreData;
         }
         static const int maxArrayDataLength = 67108864; // from the spec
-        uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_args->m_isByteSwapped);
+        uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
         if (arrayLength > maxArrayDataLength) {
             m_state = InvalidData;
             return;
         }
         m_dataPosition += 4;
 
-        ArgumentList::State firstElementType;
+        ArgumentList::CursorState firstElementType;
         uint32 firstElementAlignment;
         getTypeInfo(m_signature.begin[++m_signaturePosition],
                     &firstElementType, &firstElementAlignment, 0, 0);
@@ -571,42 +571,42 @@ out_needMoreData:
     m_dataPosition = savedDataPosition;
 }
 
-void ArgumentList::ReadCursor::beginArray(int *size);
+void ArgumentList::ReadCursor::beginArray()
 {
 }
 
-void ArgumentList::ReadCursor::endArray();
+void ArgumentList::ReadCursor::endArray()
 {
 }
 
-bool ArgumentList::ReadCursor::beginDict(int *size);
+bool ArgumentList::ReadCursor::beginDict()
 {
 }
 
-bool ArgumentList::ReadCursor::endDict();
+bool ArgumentList::ReadCursor::endDict()
 {
 }
 
-bool ArgumentList::ReadCursor::beginStruct();
+bool ArgumentList::ReadCursor::beginStruct()
 {
 }
 
-bool ArgumentList::ReadCursor::endStruct();
+bool ArgumentList::ReadCursor::endStruct()
 {
 }
 
-bool ArgumentList::ReadCursor::beginVariant();
+bool ArgumentList::ReadCursor::beginVariant()
 {
 }
 
-bool ArgumentList::ReadCursor::endVariant();
+bool ArgumentList::ReadCursor::endVariant()
 {
 }
 
-std::vector<State> ArgumentList::ReadCursor::aggregateStack() const
+std::vector<ArgumentList::CursorState> ArgumentList::ReadCursor::aggregateStack() const
 {
-    const int count = m_aggregateStack.count();
-    std::vector<State> ret;
+    const int count = m_aggregateStack.size();
+    std::vector<CursorState> ret;
     for (int i = 0; i < count; i++) {
         ret.push_back(m_aggregateStack[i].aggregateType);
     }
