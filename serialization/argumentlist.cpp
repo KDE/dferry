@@ -285,6 +285,7 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, 
     case 'v':
         state = ArgumentList::BeginVariant;
         isPrimitive = false;
+        align = 1;
         break;
     case '(':
         state = ArgumentList::BeginStruct;
@@ -310,6 +311,7 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, 
         align = 1;
         break;
     default:
+        align = 1; // don't move the data read/write pointer by aligning it
         break;
     }
     if (beginState) {
@@ -339,30 +341,91 @@ void ArgumentList::ReadCursor::advanceState()
         return;
     }
 
-    assert(m_signature.length - m_signaturePosition >= 0);
-    if (m_signature.length - m_signaturePosition < 1) {
-        m_state = Finished;
-        return;
-    }
+    assert(m_signaturePosition < m_signature.length);
 
     const int savedSignaturePosition = m_signaturePosition;
     const int savedDataPosition = m_dataPosition;
 
     // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
-    uint32 requiredDataSize;
-    bool isPrimitiveType;
-    bool isStringType;
+    uint32 requiredDataSize = 1;
+    bool isPrimitiveType = false;
+    bool isStringType = false;
 
-    // see what the next type is supposed to be
-    getTypeInfo(m_signature.begin[++m_signaturePosition],
-                &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
+    // how to recognize end of...
+    // - array entry: BeginArray at top of aggregate stack and we're not at the beginning
+    //                of the array (so we've just finished reading a single complete type)
+    // - array: at/past end of array data; end of array element condition must apply, too
+    // - dict: like end of array, additional condition that current signature char = '}'
+    //         (no need to check though, because signatures are pre-validated)
+    // - struct: current char = ')'
+    // - variant: at end of signature and there's a BeginVariant at top of aggregate stack
+    // - argument list: at end of signature and the aggregate stack is empty
 
+    // check if we are about to close any aggregate or even the whole argument list
+
+    bool doReadNextSignatureChar = true;
+
+    if (m_aggregateStack.empty()) {
+        if (m_signaturePosition + 1 >= m_signature.length) {
+            m_state = Finished;
+            return;
+        }
+    } else {
+        const AggregateInfo &aggregateInfo = m_aggregateStack.back();
+        switch (aggregateInfo.aggregateType) {
+        case BeginStruct:
+            break; // already handled by getTypeInfo recognizing ')'
+        case BeginVariant:
+            if (m_signaturePosition + 1 >= m_signature.length) {
+                m_state = EndVariant;
+                doReadNextSignatureChar = false;
+            }
+            break;
+        case BeginDict:
+            // fall through
+        case BeginArray: {
+            const bool isEndOfEntry = m_signaturePosition >
+                                      aggregateInfo.arr.signatureContainedTypePosition;
+            const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
+            if (isEndOfData && !isEndOfEntry) {
+                m_state = InvalidData;
+                return;
+            }
+            if (isEndOfEntry) {
+                if (isEndOfData) {
+                    if (aggregateInfo.aggregateType == BeginDict) {
+                        m_signaturePosition++; // skip '}'
+                        m_state = EndDict;
+                    } else {
+                        m_state = EndArray;
+                    }
+                } else {
+                    if (aggregateInfo.aggregateType == BeginDict) {
+                        m_state = NextDictEntry;
+                    } else {
+                        m_state = NextArrayEntry;
+                    }
+                    // rewind to start of contained type
+                    m_signaturePosition = aggregateInfo.arr.signatureContainedTypePosition;
+                    return;
+                }
+                doReadNextSignatureChar = false;
+            }
+            break; }
+        default:
+            break;
+        }
+    }
+
+    if (doReadNextSignatureChar) {
+        m_signaturePosition++;
+        getTypeInfo(m_signature.begin[m_signaturePosition],
+                    &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
+    }
     if (m_state == InvalidData) {
         return;
     }
 
-    // TODO check, maybe around here, if we just got done reading an array (from data postion).
-    //      then check if the signature parsing state is consistent with the data state.
 
     // check if we have enough data for the next type, and read it
 
@@ -433,10 +496,20 @@ void ArgumentList::ReadCursor::advanceState()
         if (m_dataPosition + stringLength > m_data.length) {
             goto out_needMoreData;
         }
-        // TODO validate signature(?), string (no nuls) or object path (cf. spec)
         m_String.begin = m_data.begin + m_dataPosition;
         m_String.length = stringLength;
         m_dataPosition += stringLength;
+        bool isValidString;
+        if (m_state == String) {
+            // TODO
+        } else if (m_state == ObjectPath) {
+            // TODO
+        } else if (m_state == Signature) {
+            isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
+        }
+        if (!isValidString) {
+            m_state = InvalidData;
+        }
         return;
     }
 
@@ -456,8 +529,7 @@ void ArgumentList::ReadCursor::advanceState()
     case EndStruct:
         m_nesting->endParen();
         if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginStruct) {
-            m_state = InvalidData;
-            break;
+            assert(false); // should never happen due to the pre-validated signature
         }
         m_aggregateStack.pop_back();
         break;
@@ -490,14 +562,10 @@ void ArgumentList::ReadCursor::advanceState()
         aggregateInfo.var.prevSignaturePosition = m_signaturePosition;
         m_aggregateStack.push_back(aggregateInfo);
         m_signature = signature;
-        m_signaturePosition = 0;
+        m_signaturePosition = -1; // because we increment m_signaturePosition before reading a char
         break; }
     case EndVariant:
         m_nesting->endVariant();
-        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginVariant) {
-            m_state = InvalidData;
-            return;
-        }
         aggregateInfo = m_aggregateStack.back();
         m_aggregateStack.pop_back();
         m_signature.begin = aggregateInfo.var.prevSignature.begin;
@@ -519,7 +587,7 @@ void ArgumentList::ReadCursor::advanceState()
 
         ArgumentList::CursorState firstElementType;
         uint32 firstElementAlignment;
-        getTypeInfo(m_signature.begin[++m_signaturePosition],
+        getTypeInfo(m_signature.begin[m_signaturePosition + 1],
                     &firstElementType, &firstElementAlignment, 0, 0);
 
         m_dataPosition = align(m_dataPosition, firstElementAlignment);
@@ -527,7 +595,7 @@ void ArgumentList::ReadCursor::advanceState()
         if (aggregateInfo.arr.dataEndPosition > m_data.length) {
             goto out_needMoreData;
         }
-        // do not clobber nesting befor potentially going to out_needMoreData!
+        // do not clobber nesting before potentially going to out_needMoreData!
         if (!m_nesting->beginArray()) {
             m_state = InvalidData;
             return;
@@ -543,27 +611,17 @@ void ArgumentList::ReadCursor::advanceState()
                 return;
             }
         }
+        // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
         aggregateInfo.arr.signatureContainedTypePosition = m_signaturePosition;
 
         m_aggregateStack.push_back(aggregateInfo);
         break; }
-    case EndArray:
-        m_nesting->endArray();
-        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginArray) {
-            m_state = InvalidData;
-            return;
-        }
-        m_aggregateStack.pop_back();
-        // TODO
     case EndDict:
         m_nesting->endParen();
+        // fall through
+    case EndArray:
         m_nesting->endArray();
-        if (!m_aggregateStack.size() || m_aggregateStack.back().aggregateType != BeginDict) {
-            m_state = InvalidData;
-            return;
-        }
         m_aggregateStack.pop_back();
-        // TODO
     default:
         assert(false);
         break;
