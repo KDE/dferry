@@ -14,7 +14,6 @@ struct array
     array() : begin(0), length(0) {}
     array(byte *b, int l) : begin(b), length(l) {}
     array(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
-    void chopFirst() { begin++; length--; }
     byte *begin;
     int length;
 };

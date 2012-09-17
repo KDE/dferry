@@ -47,6 +47,12 @@ ArgumentList::ArgumentList(array signature, array data, bool isByteSwapped)
 {
 }
 
+static void chopFirst(array *a)
+{
+    a->begin++;
+    a->length--;
+}
+
 static bool parseBasicType(array *a)
 {
     assert(a->length >= 0);
@@ -67,7 +73,7 @@ static bool parseBasicType(array *a)
     case 'o':
     case 'g':
     case 'h': // this doesn't seem to make sense, though...
-        a->chopFirst();
+        chopFirst(a);
         return true;
     default:
         return false;
@@ -95,37 +101,37 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
     case 'o':
     case 'g':
     case 'h':
-        a->chopFirst();
+        chopFirst(a);
         return true;
     case 'v':
         if (!nest->beginVariant()) {
             return false;
         }
-        a->chopFirst();
+        chopFirst(a);
         nest->endVariant();
         return true;
     case '(':
         if (!nest->beginParen()) {
             return false;
         }
-        a->chopFirst();
+        chopFirst(a);
         while (parseSingleCompleteType(a, nest)) {}
         if (!a->length || *a->begin != ')') {
             return false;
         }
-        a->chopFirst();
+        chopFirst(a);
         nest->endParen();
         return true;
     case 'a':
         if (!nest->beginArray()) {
             return false;
         }
-        a->chopFirst();
+        chopFirst(a);
         if (*a->begin == '{') { // an "array of dict entries", i.e. a dict
             if (!nest->beginParen() || a->length < 4) {
                 return false;
             }
-            a->chopFirst();
+            chopFirst(a);
             // key must be a basic type
             if (!parseBasicType(a)) {
                 return false;
@@ -137,7 +143,7 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
             if (!a->length || *a->begin != '}') {
                 return false;
             }
-            a->chopFirst();
+            chopFirst(a);
             nest->endParen();
         } else { // regular array
             if (!parseSingleCompleteType(a, nest)) {
