@@ -40,7 +40,7 @@ public:
         // states pertaining to aggregates
         BeginArray,
         NextArrayEntry,
-        EndArray, // TODO do we really need this and endArray()? same for EndDict.
+        EndArray, // TODO do we really need this and ReadCursor::endArray()? same for EndDict.
         BeginDict,
         NextDictEntry,
         EndDict,
@@ -138,7 +138,7 @@ public:
         struct ArrayInfo
         {
             uint32 dataEndPosition; // one past the last data byte of the array
-            uint32 signatureContainedTypePosition; // to rewind when reading the next element
+            uint32 containedTypeBegin; // to rewind when reading the next element
         };
 
         struct VariantInfo

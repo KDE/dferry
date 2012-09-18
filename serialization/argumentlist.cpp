@@ -346,11 +346,6 @@ void ArgumentList::ReadCursor::advanceState()
     const int savedSignaturePosition = m_signaturePosition;
     const int savedDataPosition = m_dataPosition;
 
-    // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
-    uint32 requiredDataSize = 1;
-    bool isPrimitiveType = false;
-    bool isStringType = false;
-
     // how to recognize end of...
     // - array entry: BeginArray at top of aggregate stack and we're not at the beginning
     //                of the array (so we've just finished reading a single complete type)
@@ -363,8 +358,6 @@ void ArgumentList::ReadCursor::advanceState()
 
     // check if we are about to close any aggregate or even the whole argument list
 
-    bool doReadNextSignatureChar = true;
-
     if (m_aggregateStack.empty()) {
         if (m_signaturePosition + 1 >= m_signature.length) {
             m_state = Finished;
@@ -374,18 +367,24 @@ void ArgumentList::ReadCursor::advanceState()
         const AggregateInfo &aggregateInfo = m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
         case BeginStruct:
-            break; // already handled by getTypeInfo recognizing ')'
+            break; // already handled by getTypeInfo recognizing ')' -> EndStruct
         case BeginVariant:
             if (m_signaturePosition + 1 >= m_signature.length) {
                 m_state = EndVariant;
-                doReadNextSignatureChar = false;
+                m_nesting->endVariant();
+                m_signature.begin = aggregateInfo.var.prevSignature.begin;
+                m_signature.length = aggregateInfo.var.prevSignature.length;
+                m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+                m_aggregateStack.pop_back();
+                return;
             }
             break;
         case BeginDict:
             // fall through
         case BeginArray: {
-            const bool isEndOfEntry = m_signaturePosition >
-                                      aggregateInfo.arr.signatureContainedTypePosition;
+            const bool isDict = aggregateInfo.aggregateType == BeginDict;
+            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
+                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
             const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
             if (isEndOfData && !isEndOfEntry) {
                 m_state = InvalidData;
@@ -393,23 +392,19 @@ void ArgumentList::ReadCursor::advanceState()
             }
             if (isEndOfEntry) {
                 if (isEndOfData) {
-                    if (aggregateInfo.aggregateType == BeginDict) {
+                    m_state = isDict ? EndDict : EndArray;
+                    if (isDict) {
+                        m_nesting->endParen();
                         m_signaturePosition++; // skip '}'
-                        m_state = EndDict;
-                    } else {
-                        m_state = EndArray;
                     }
-                } else {
-                    if (aggregateInfo.aggregateType == BeginDict) {
-                        m_state = NextDictEntry;
-                    } else {
-                        m_state = NextArrayEntry;
-                    }
-                    // rewind to start of contained type
-                    m_signaturePosition = aggregateInfo.arr.signatureContainedTypePosition;
+                    m_nesting->endArray();
+                    m_aggregateStack.pop_back();
                     return;
                 }
-                doReadNextSignatureChar = false;
+                m_state = isDict ? NextDictEntry : NextArrayEntry;
+                // rewind to start of contained type
+                m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+                return;
             }
             break; }
         default:
@@ -417,11 +412,15 @@ void ArgumentList::ReadCursor::advanceState()
         }
     }
 
-    if (doReadNextSignatureChar) {
-        m_signaturePosition++;
-        getTypeInfo(m_signature.begin[m_signaturePosition],
-                    &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
-    }
+    // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
+    uint32 requiredDataSize = 1;
+    bool isPrimitiveType = false;
+    bool isStringType = false;
+
+    m_signaturePosition++;
+    getTypeInfo(m_signature.begin[m_signaturePosition],
+                &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
+
     if (m_state == InvalidData) {
         return;
     }
@@ -564,14 +563,6 @@ void ArgumentList::ReadCursor::advanceState()
         m_signature = signature;
         m_signaturePosition = -1; // because we increment m_signaturePosition before reading a char
         break; }
-    case EndVariant:
-        m_nesting->endVariant();
-        aggregateInfo = m_aggregateStack.back();
-        m_aggregateStack.pop_back();
-        m_signature.begin = aggregateInfo.var.prevSignature.begin;
-        m_signature.length = aggregateInfo.var.prevSignature.length;
-        m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
-        break;
 
     case BeginArray: {
         if (m_dataPosition + 4 > m_data.length) {
@@ -596,6 +587,7 @@ void ArgumentList::ReadCursor::advanceState()
         m_dataPosition = align(m_dataPosition, firstElementAlignment);
         aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
         if (aggregateInfo.arr.dataEndPosition > m_data.length) {
+            // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
             goto out_needMoreData;
         }
         if (!arrayLength) {
@@ -608,7 +600,6 @@ void ArgumentList::ReadCursor::advanceState()
             }
             m_signaturePosition = m_signature.length - temp.length - 1; // TODO check the indexing
         } else {
-            // do not clobber nesting before potentially going to out_needMoreData!
             if (!m_nesting->beginArray()) {
                 m_state = InvalidData;
                 return;
@@ -622,16 +613,10 @@ void ArgumentList::ReadCursor::advanceState()
             }
         }
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
-        aggregateInfo.arr.signatureContainedTypePosition = m_signaturePosition;
+        aggregateInfo.arr.containedTypeBegin = m_signaturePosition;
 
         m_aggregateStack.push_back(aggregateInfo);
         break; }
-    case EndDict:
-        m_nesting->endParen();
-        // fall through
-    case EndArray:
-        m_nesting->endArray();
-        m_aggregateStack.pop_back();
     default:
         assert(false);
         break;
