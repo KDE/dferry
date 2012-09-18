@@ -383,8 +383,15 @@ void ArgumentList::ReadCursor::advanceState()
             // fall through
         case BeginArray: {
             const bool isDict = aggregateInfo.aggregateType == BeginDict;
-            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
-                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
+            bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
+                                       : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
+            if (m_state == BeginArray || m_state == BeginDict) {
+                // Make nextFooEntry() work after beginFoo(). A somewhat cleaner, more expensive solution
+                // is parsing the array's contained type to the end and placing m_signaturePosition
+                // at the end when setting up the BeginArray state. That solution is already employed
+                // for empty arrays because otherwise m_signaturePosition wouldn't go past the array.
+                isEndOfEntry = true;
+            }
             const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
             if (isEndOfData && !isEndOfEntry) {
                 m_state = InvalidData;
@@ -631,36 +638,76 @@ out_needMoreData:
     m_dataPosition = savedDataPosition;
 }
 
+void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
+{
+    if (m_state == expectedState) {
+        advanceState();
+    } else {
+        m_state = InvalidData;
+    }
+}
+
+// TODO introduce an error state different from InvalidData when the wrong method is called
 void ArgumentList::ReadCursor::beginArray()
 {
+    advanceStateFrom(BeginArray);
+}
+
+bool ArgumentList::ReadCursor::nextArrayEntry()
+{
+    if (m_state == NextArrayEntry) {
+        advanceState();
+        return true;
+    } else if (m_state != EndArray) {
+        m_state = InvalidData;
+    }
+    return false;
 }
 
 void ArgumentList::ReadCursor::endArray()
 {
+    advanceStateFrom(EndArray);
 }
 
 bool ArgumentList::ReadCursor::beginDict()
 {
+    advanceStateFrom(BeginDict);
+}
+
+bool ArgumentList::ReadCursor::nextDictEntry()
+{
+    if (m_state == NextDictEntry) {
+        advanceState();
+        return true;
+    } else if (m_state != EndDict) {
+        m_state = InvalidData;
+    }
+    return false;
 }
 
 bool ArgumentList::ReadCursor::endDict()
 {
+    advanceStateFrom(EndDict);
 }
 
 bool ArgumentList::ReadCursor::beginStruct()
 {
+    advanceStateFrom(BeginStruct);
 }
 
 bool ArgumentList::ReadCursor::endStruct()
 {
+    advanceStateFrom(EndStruct);
 }
 
 bool ArgumentList::ReadCursor::beginVariant()
 {
+    advanceStateFrom(BeginVariant);
 }
 
 bool ArgumentList::ReadCursor::endVariant()
 {
+    advanceStateFrom(EndVariant);
 }
 
 std::vector<ArgumentList::CursorState> ArgumentList::ReadCursor::aggregateStack() const

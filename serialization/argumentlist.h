@@ -119,6 +119,7 @@ public:
     private:
         friend class ArgumentList;
         ReadCursor(ArgumentList *al);
+        void advanceStateFrom(CursorState expectedState);
         void advanceState();
 
         ArgumentList *m_argList;
