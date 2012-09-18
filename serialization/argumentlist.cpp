@@ -349,12 +349,12 @@ void ArgumentList::ReadCursor::advanceState()
     // how to recognize end of...
     // - array entry: BeginArray at top of aggregate stack and we're not at the beginning
     //                of the array (so we've just finished reading a single complete type)
-    // - array: at/past end of array data; end of array element condition must apply, too
-    // - dict: like end of array, additional condition that current signature char = '}'
-    //         (no need to check though, because signatures are pre-validated)
-    // - struct: current char = ')'
-    // - variant: at end of signature and there's a BeginVariant at top of aggregate stack
-    // - argument list: at end of signature and the aggregate stack is empty
+    // - dict entry: BeginDict at top of aggregate stack and the current type signature char is '}'
+    // - array: at/past end of array data; end of array entry condition must hold, too
+    // - dict: at/past end of dict data; end of dict entry conditions must hold, too
+    // - struct: BeginStruct at top of aggregate stack and current char = ')'
+    // - variant: BeginVariant at top of aggregate stack and at end of type signature
+    // - argument list: aggregate stack is empty and at end of type signature
 
     // check if we are about to close any aggregate or even the whole argument list
 
