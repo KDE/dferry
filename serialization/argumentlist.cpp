@@ -581,7 +581,8 @@ void ArgumentList::ReadCursor::advanceState()
         getTypeInfo(m_signature.begin[m_signaturePosition + 1],
                     &firstElementType, &firstElementAlignment, 0, 0);
 
-        aggregateInfo.aggregateType = firstElementType == BeginDict ? BeginDict : BeginArray;
+        m_state = firstElementType == BeginDict ? BeginDict : BeginArray;
+        aggregateInfo.aggregateType = m_state;
 
         // TODO are we supposed to align m_dataPosition if the array is empty?
         m_dataPosition = align(m_dataPosition, firstElementAlignment);
