@@ -158,7 +158,7 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
 }
 
 //static
-bool ArgumentList::isSignatureValid(array signature, bool requireSingleCompleteType)
+bool ArgumentList::isSignatureValid(array signature, bool isVariantSignature)
 {
     Nesting nest;
     if (signature.length < 1 || signature.length > 256) {
@@ -168,8 +168,8 @@ bool ArgumentList::isSignatureValid(array signature, bool requireSingleCompleteT
         return false; // not null-terminated
     }
     signature.length -= 1; // ignore the null-termination
-    if (requireSingleCompleteType) {
-        if (!parseSingleCompleteType(&signature, &nest)) {
+    if (isVariantSignature) {
+        if (signature.length && !parseSingleCompleteType(&signature, &nest)) {
             return false;
         }
         if (signature.length) {
@@ -557,7 +557,7 @@ void ArgumentList::ReadCursor::advanceState()
             return;
         }
 
-        if (!ArgumentList::isSignatureValid(signature, /*requireSingleCompleteType = */ true)) {
+        if (!ArgumentList::isSignatureValid(signature, /* isVariantSignature = */ true)) {
             m_state = InvalidData;
             return;
         }
@@ -625,6 +625,7 @@ void ArgumentList::ReadCursor::advanceState()
 
         m_aggregateStack.push_back(aggregateInfo);
         break; }
+
     default:
         assert(false);
         break;
