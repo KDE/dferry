@@ -110,18 +110,21 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
         chopFirst(a);
         nest->endVariant();
         return true;
-    case '(':
+    case '(': {
         if (!nest->beginParen()) {
             return false;
         }
         chopFirst(a);
-        while (parseSingleCompleteType(a, nest)) {}
-        if (!a->length || *a->begin != ')') {
+        bool isEmptyStruct = true;
+        while (parseSingleCompleteType(a, nest)) {
+            isEmptyStruct = false;
+        }
+        if (!a->length || *a->begin != ')' || isEmptyStruct) {
             return false;
         }
         chopFirst(a);
         nest->endParen();
-        return true;
+        return true; }
     case 'a':
         if (!nest->beginArray()) {
             return false;
