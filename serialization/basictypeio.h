@@ -4,7 +4,6 @@
 #include "types.h"
 
 // ### this is the dumb version for now (unrolled for possible performance gain)
-// TODO remove default swap = false and handle differing byte-order in calling code
 
 // note that there are no writeFoo() methods; we just expect the receiver to deal with our byte order.
 
