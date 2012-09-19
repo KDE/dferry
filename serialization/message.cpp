@@ -84,41 +84,45 @@ void Message::parseVariableHeaders()
     ArgumentList::ReadCursor reader = m_headerParser->beginRead();
     assert(reader.isValid());
 
-    for (reader.beginArray(); reader.nextArrayEntry(); ) {
+    // TODO the isZeroLengthArray stuff is just an API demo(!), we don't actually want to do anything
+    //      if the array is empty. remove it when we have tests / examples.
+    bool isZeroLengthArray;
+    for (reader.beginArray(); reader.nextArrayEntry(&isZeroLengthArray); ) {
         reader.beginStruct();
         byte headerType = reader.readByte();
+
         reader.beginVariant();
-
-        switch (headerType) {
-        case PATH: {
-            assert(reader.state() == ArgumentList::ObjectPath);
-            m_stringHeaders[headerType] = reader.readObjectPath();
-            break;
+        if (!isZeroLengthArray) {
+            switch (headerType) {
+            case PATH: {
+                assert(reader.state() == ArgumentList::ObjectPath);
+                m_stringHeaders[headerType] = reader.readObjectPath();
+                break;
+            }
+            case INTERFACE:
+            case MEMBER:
+            case ERROR_NAME:
+            case DESTINATION:
+            case SENDER: {
+                assert(reader.state() == ArgumentList::String);
+                m_stringHeaders[headerType] = reader.readString();
+                break;
+            }
+            case REPLY_SERIAL:
+            case UNIX_FDS: {
+                assert(reader.state() == ArgumentList::UnixFd);
+                m_intHeaders[headerType] = reader.readUint32();
+                break;
+            }
+            case SIGNATURE: {
+                assert(reader.state() == ArgumentList::Signature);
+                m_stringHeaders[headerType] = reader.readSignature();
+                break;
+            }
+            default:
+                break; // ignore unknown headers
+            };
         }
-        case INTERFACE:
-        case MEMBER:
-        case ERROR_NAME:
-        case DESTINATION:
-        case SENDER: {
-            assert(reader.state() == ArgumentList::String);
-            m_stringHeaders[headerType] = reader.readString();
-            break;
-        }
-        case REPLY_SERIAL:
-        case UNIX_FDS: {
-            assert(reader.state() == ArgumentList::UnixFd);
-            m_intHeaders[headerType] = reader.readUint32();
-            break;
-        }
-        case SIGNATURE: {
-            assert(reader.state() == ArgumentList::Signature);
-            m_stringHeaders[headerType] = reader.readSignature();
-            break;
-        }
-        default:
-            break; // ignore unknown headers
-        };
-
         reader.endVariant();
         reader.endStruct();
     }

@@ -84,11 +84,17 @@ public:
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
 
         void beginArray();
-        bool nextArrayEntry(); // call this before reading each entry; when it returns false the array has ended
+        // call this before reading each entry; when it returns false the array has ended.
+        // when @p isZeroLength is not null and the array contains no elements, the array is iterated
+        // over once so you can get the type information. in that case, *setZeroLength is set to
+        // true, false otherwise. any values returned by read... will be garbage.
+        // TODO implement & document that all values returned by read... are zero/null?
+        // all contained arrays, dicts and variants (but not structs) will be empty.
+        bool nextArrayEntry(bool *isZeroLength = 0);
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
         bool beginDict();
-        bool nextDictEntry(); // like nextArrayEntry()
+        bool nextDictEntry(bool *isZeroLength = 0); // like nextArrayEntry()
         bool endDict(); // like endArray()
 
         bool beginStruct();
@@ -121,6 +127,7 @@ public:
         ReadCursor(ArgumentList *al);
         void advanceStateFrom(CursorState expectedState);
         void advanceState();
+        bool nextArrayOrDictEntry(bool isDict, bool *outIsZeroLength);
 
         ArgumentList *m_argList;
         CursorState m_state;
@@ -129,6 +136,7 @@ public:
         array m_data;
         int m_signaturePosition;
         int m_dataPosition;
+        int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
 
         struct podArray // can't put the array type into a union because it has a constructor :/
         {
@@ -140,6 +148,7 @@ public:
         {
             uint32 dataEndPosition; // one past the last data byte of the array
             uint32 containedTypeBegin; // to rewind when reading the next element
+            bool isZeroLength; // if we are iterating over a zero-length array (to extract the types)
         };
 
         struct VariantInfo

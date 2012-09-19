@@ -199,7 +199,8 @@ ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
      m_signature(al->m_signature),
      m_data(al->m_data),
      m_signaturePosition(-1),
-     m_dataPosition(0)
+     m_dataPosition(0),
+     m_zeroLengthArrayNesting(0)
 {
     if (m_argList) {
         if (!ArgumentList::isSignatureValid(m_signature)) {
@@ -333,6 +334,11 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, 
 
 void ArgumentList::ReadCursor::advanceState()
 {
+    // TODO: when inside any array, we may never run out of data because the array length is given
+    //       in the data stream and we won't start the array until its data is complete.
+    // TODO: don't try to read any data when m_zeroLengthArrayNesting > 0; this needs special attention
+    //       for arrays (automatically zero length) and variants (automatically empty signature)
+
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
     // we don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
@@ -386,35 +392,17 @@ void ArgumentList::ReadCursor::advanceState()
             // fall through
         case BeginArray: {
             const bool isDict = aggregateInfo.aggregateType == BeginDict;
-            bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
-                                       : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
-            if (m_state == BeginArray || m_state == BeginDict) {
-                // Make nextFooEntry() work after beginFoo(). A somewhat cleaner, more expensive solution
-                // is parsing the array's contained type to the end and placing m_signaturePosition
-                // at the end when setting up the BeginArray state. That solution is already employed
-                // for empty arrays because otherwise m_signaturePosition wouldn't go past the array.
-                isEndOfEntry = true;
-            }
-            const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
-            if (isEndOfData && !isEndOfEntry) {
-                m_state = InvalidData;
-                return;
-            }
+            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
+                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
             if (isEndOfEntry) {
+                m_state = isDict ? NextDictEntry : NextArrayEntry;
+                return; // the rest is handled in nextArrayOrDictEntry()
+            } else {
+                const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
                 if (isEndOfData) {
-                    m_state = isDict ? EndDict : EndArray;
-                    if (isDict) {
-                        m_nesting->endParen();
-                        m_signaturePosition++; // skip '}'
-                    }
-                    m_nesting->endArray();
-                    m_aggregateStack.pop_back();
+                    m_state = InvalidData;
                     return;
                 }
-                m_state = isDict ? NextDictEntry : NextArrayEntry;
-                // rewind to start of contained type
-                m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
-                return;
             }
             break; }
         default:
@@ -601,30 +589,20 @@ void ArgumentList::ReadCursor::advanceState()
             // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
             goto out_needMoreData;
         }
-        if (!arrayLength) {
-            // zero length array: must skip the contained type manually
-            array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
-            if (!parseSingleCompleteType(&temp, m_nesting)) {
-                // must have been a nesting problem (assuming no bugs)
+        if (!m_nesting->beginArray()) {
+            m_state = InvalidData;
+            return;
+        }
+        if (firstElementType == BeginDict) {
+            m_signaturePosition++;
+            if (!m_nesting->beginParen()) {
                 m_state = InvalidData;
                 return;
-            }
-            m_signaturePosition = m_signature.length - temp.length - 1; // TODO check the indexing
-        } else {
-            if (!m_nesting->beginArray()) {
-                m_state = InvalidData;
-                return;
-            }
-            if (firstElementType == BeginDict) {
-                m_signaturePosition++;
-                if (!m_nesting->beginParen()) {
-                    m_state = InvalidData;
-                    return;
-                }
             }
         }
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
         aggregateInfo.arr.containedTypeBegin = m_signaturePosition;
+        aggregateInfo.arr.isZeroLength = !arrayLength;
 
         m_aggregateStack.push_back(aggregateInfo);
         break; }
@@ -654,18 +632,93 @@ void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
 // TODO introduce an error state different from InvalidData when the wrong method is called
 void ArgumentList::ReadCursor::beginArray()
 {
-    advanceStateFrom(BeginArray);
-}
-
-bool ArgumentList::ReadCursor::nextArrayEntry()
-{
-    if (m_state == NextArrayEntry) {
-        advanceState();
-        return true;
-    } else if (m_state != EndArray) {
+    if (m_state == BeginArray) {
+        m_state = NextArrayEntry;
+    } else {
         m_state = InvalidData;
     }
-    return false;
+}
+
+bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict, bool *outIsZeroLength)
+{
+    // cases to handle:
+    // A zero-length array, first iteration, user does not want to look at types -> skip signature
+    //   and clean up aggregate stack
+    // B zero-length array, first iteration, user does want to look at types
+    //   -> set it up, increase zero-length array nesting level
+    // C zero-length array, second iteration -> clean up the aggregate stack and decrease zero-length
+    //   array nesting level, thus possible leaving zero-length array mode
+    // D nonzero-length array, not last iteration -> go back to start of signature
+    // E nonzero-length array, last iteration -> ensure that data and signature both end,
+    //   clean up aggregate stack
+
+    assert(!m_aggregateStack.empty());
+    AggregateInfo &aggregateInfo = m_aggregateStack.back();
+    assert(aggregateInfo.aggregateType == BeginArray);
+
+    if (outIsZeroLength) {
+        *outIsZeroLength = aggregateInfo.arr.isZeroLength;
+    }
+    const bool isFirstIteration = m_signaturePosition <= aggregateInfo.arr.containedTypeBegin;
+    if (aggregateInfo.arr.isZeroLength) {
+        if (isFirstIteration) {
+            if (outIsZeroLength) {
+                // B
+                m_zeroLengthArrayNesting++;
+                return true; // TODO anything else?
+            } else {
+                // A
+                // fix up nesting before we re-parse the beginning of the array signature
+                array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
+                if (isDict) {
+                    m_nesting->endParen();
+                    m_signaturePosition--; // it was moved ahead by one to skip the '{'
+                }
+                m_nesting->endArray();
+                if (!parseSingleCompleteType(&temp, m_nesting)) {
+                    // must have been a nesting problem (assuming no bugs)
+                    m_state = InvalidData;
+                    return false;
+                }
+                m_signaturePosition = m_signature.length - temp.length - 1; // TODO check the indexing
+            }
+        } else {
+            // C
+            m_zeroLengthArrayNesting--;
+        }
+        // A and C
+        m_state = isDict ? EndDict : EndArray;
+        m_aggregateStack.pop_back();
+        return false;
+    } else {
+        const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
+        if (isEndOfData) {
+            // E
+            m_state = isDict ? EndDict : EndArray;
+            if (isDict) {
+                m_nesting->endParen();
+                m_signaturePosition++; // skip '}'
+            }
+            m_nesting->endArray();
+            m_aggregateStack.pop_back();
+            return false;
+        }
+        // D
+        // rewind to start of contained type and read the data there
+        m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+        advanceState();
+        return m_state != InvalidData;
+    }
+}
+
+bool ArgumentList::ReadCursor::nextArrayEntry(bool *outIsZeroLength)
+{
+    if (m_state == NextArrayEntry) {
+        return nextArrayOrDictEntry(false, outIsZeroLength);
+    } else {
+        m_state = InvalidData;
+        return false;
+    }
 }
 
 void ArgumentList::ReadCursor::endArray()
@@ -678,15 +731,14 @@ bool ArgumentList::ReadCursor::beginDict()
     advanceStateFrom(BeginDict);
 }
 
-bool ArgumentList::ReadCursor::nextDictEntry()
+bool ArgumentList::ReadCursor::nextDictEntry(bool *outIsZeroLength)
 {
-    if (m_state == NextDictEntry) {
-        advanceState();
-        return true;
-    } else if (m_state != EndDict) {
+    if (m_state == NextArrayEntry) {
+        return nextArrayOrDictEntry(true, outIsZeroLength);
+    } else {
         m_state = InvalidData;
+        return false;
     }
-    return false;
 }
 
 bool ArgumentList::ReadCursor::endDict()
