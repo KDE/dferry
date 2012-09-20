@@ -332,6 +332,82 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, 
     }
 }
 
+ArgumentList::CursorState ArgumentList::ReadCursor::doReadPrimitiveType()
+{
+    switch(m_state) {
+    case Byte:
+        m_Byte = m_data.begin[m_dataPosition];
+        break;
+    case Boolean: {
+        uint32 num = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        m_Boolean = num == 1;
+        if (num > 1) {
+            return InvalidData;
+        }
+        break; }
+    case Int16:
+        m_Int16 = basic::readInt16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Uint16:
+        m_Uint16 = basic::readUint16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Int32:
+        m_Int32 = basic::readInt32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Uint32:
+        m_Uint32 = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Int64:
+        m_Int64 = basic::readInt64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Uint64:
+        m_Uint64 = basic::readUint64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case Double:
+        m_Double = basic::readDouble(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        break;
+    case UnixFd: {
+        uint32 index = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+        uint32 ret; // TODO use index to retrieve the actual file descriptor
+        m_Uint32 = ret;
+        break; }
+    default:
+        assert(false);
+        return InvalidData;
+    }
+    return m_state;
+}
+
+ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefixSize)
+{
+    uint32 stringLength = 1; // terminating nul
+    if (lengthPrefixSize == 1) {
+        stringLength += m_data.begin[m_dataPosition];
+    } else {
+        stringLength += basic::readUint32(m_data.begin + m_dataPosition,
+                                          m_argList->m_isByteSwapped);
+    }
+    m_dataPosition += lengthPrefixSize;
+    if (m_dataPosition + stringLength > m_data.length) {
+        return NeedMoreData;
+    }
+    m_String.begin = m_data.begin + m_dataPosition;
+    m_String.length = stringLength;
+    m_dataPosition += stringLength;
+    bool isValidString = false;
+    if (m_state == String) {
+        isValidString = true; // TODO
+    } else if (m_state == ObjectPath) {
+        isValidString = true; // TODO
+    } else if (m_state == Signature) {
+        isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
+    }
+    if (!isValidString) {
+        return InvalidData;
+    }
+    return m_state;
+}
+
 void ArgumentList::ReadCursor::advanceState()
 {
     // TODO: when inside any array, we may never run out of data because the array length is given
@@ -433,79 +509,16 @@ void ArgumentList::ReadCursor::advanceState()
         goto out_needMoreData;
     }
 
-    // easy cases...
     if (isPrimitiveType) {
-        switch(m_state) {
-        case Byte:
-            m_Byte = m_data.begin[m_dataPosition];
-            break;
-        case Boolean: {
-            uint32 num = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            if (num > 1) {
-                m_state = InvalidData;
-            }
-            m_Boolean = num == 1;
-            break; }
-        case Int16:
-            m_Int16 = basic::readInt16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Uint16:
-            m_Uint16 = basic::readUint16(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Int32:
-            m_Int32 = basic::readInt32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Uint32:
-            m_Uint32 = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Int64:
-            m_Int64 = basic::readInt64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Uint64:
-            m_Uint64 = basic::readUint64(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case Double:
-            m_Double = basic::readDouble(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            break;
-        case UnixFd: {
-            uint32 index = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            uint32 ret; // TODO use index to retrieve the actual file descriptor
-            m_Uint32 = ret;
-            break; }
-        default:
-            assert(false);
-            break;
-        }
+        m_state = doReadPrimitiveType();
         m_dataPosition += requiredDataSize;
         return;
     }
 
-    // strings
     if (isStringType) {
-        uint32 stringLength = 1; // terminating nul
-        if (m_state == Signature) {
-            stringLength += m_data.begin[m_dataPosition];
-        } else {
-            stringLength += basic::readUint32(m_data.begin + m_dataPosition,
-                                              m_argList->m_isByteSwapped);
-        }
-        m_dataPosition += requiredDataSize;
-        if (m_dataPosition + stringLength > m_data.length) {
+        m_state = doReadString(requiredDataSize);
+        if (m_state == NeedMoreData) {
             goto out_needMoreData;
-        }
-        m_String.begin = m_data.begin + m_dataPosition;
-        m_String.length = stringLength;
-        m_dataPosition += stringLength;
-        bool isValidString;
-        if (m_state == String) {
-            // TODO
-        } else if (m_state == ObjectPath) {
-            // TODO
-        } else if (m_state == Signature) {
-            isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
-        }
-        if (!isValidString) {
-            m_state = InvalidData;
         }
         return;
     }
@@ -582,24 +595,23 @@ void ArgumentList::ReadCursor::advanceState()
         m_state = firstElementType == BeginDict ? BeginDict : BeginArray;
         aggregateInfo.aggregateType = m_state;
 
-        // TODO are we supposed to align m_dataPosition if the array is empty?
+        // ### are we supposed to align m_dataPosition if the array is empty?
         m_dataPosition = align(m_dataPosition, firstElementAlignment);
         aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
         if (aggregateInfo.arr.dataEndPosition > m_data.length) {
             // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
             goto out_needMoreData;
         }
-        if (!m_nesting->beginArray()) {
+        bool nestOk = m_nesting->beginArray();
+        if (firstElementType == BeginDict) {
+            m_signaturePosition++;
+            nestOk = nestOk && m_nesting->beginParen();
+        }
+        if (!nestOk) {
             m_state = InvalidData;
             return;
         }
-        if (firstElementType == BeginDict) {
-            m_signaturePosition++;
-            if (!m_nesting->beginParen()) {
-                m_state = InvalidData;
-                return;
-            }
-        }
+
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
         aggregateInfo.arr.containedTypeBegin = m_signaturePosition;
         aggregateInfo.arr.isZeroLength = !arrayLength;
@@ -615,6 +627,8 @@ void ArgumentList::ReadCursor::advanceState()
     return;
 
 out_needMoreData:
+    assert(m_nesting->array == 0); // ### must rearrange, this is going to fail if we were just opening an array
+    assert(m_zeroLengthArrayNesting == 0);
     m_state = NeedMoreData;
     m_signaturePosition = savedSignaturePosition;
     m_dataPosition = savedDataPosition;
@@ -654,7 +668,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict, bool *outIsZero
 
     assert(!m_aggregateStack.empty());
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
-    assert(aggregateInfo.aggregateType == BeginArray);
+    assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
 
     if (outIsZeroLength) {
         *outIsZeroLength = aggregateInfo.arr.isZeroLength;

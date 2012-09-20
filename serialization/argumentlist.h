@@ -85,16 +85,17 @@ public:
 
         void beginArray();
         // call this before reading each entry; when it returns false the array has ended.
-        // when @p isZeroLength is not null and the array contains no elements, the array is iterated
-        // over once so you can get the type information. in that case, *setZeroLength is set to
-        // true, false otherwise. any values returned by read... will be garbage.
+        // when @p iteratingEmptyArray is not null and the array contains no elements, the array is
+        // iterated over once so you can get the type information. in that case, *iteratingEmptyArray
+        // is set to true, false otherwise. any values returned by read... will be garbage when
+        // iterating over an empty array.
         // TODO implement & document that all values returned by read... are zero/null?
         // all contained arrays, dicts and variants (but not structs) will be empty.
-        bool nextArrayEntry(bool *isZeroLength = 0);
+        bool nextArrayEntry(bool *iteratingEmptyArray = 0);
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
         bool beginDict();
-        bool nextDictEntry(bool *isZeroLength = 0); // like nextArrayEntry()
+        bool nextDictEntry(bool *iteratingEmptyDict = 0); // like nextArrayEntry()
         bool endDict(); // like endArray()
 
         bool beginStruct();
@@ -125,18 +126,11 @@ public:
     private:
         friend class ArgumentList;
         ReadCursor(ArgumentList *al);
-        void advanceStateFrom(CursorState expectedState);
+        CursorState doReadPrimitiveType();
+        CursorState doReadString(int lengthPrefixSize);
         void advanceState();
+        void advanceStateFrom(CursorState expectedState);
         bool nextArrayOrDictEntry(bool isDict, bool *outIsZeroLength);
-
-        ArgumentList *m_argList;
-        CursorState m_state;
-        Nesting *m_nesting;
-        array m_signature;
-        array m_data;
-        int m_signaturePosition;
-        int m_dataPosition;
-        int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
 
         struct podArray // can't put the array type into a union because it has a constructor :/
         {
@@ -167,6 +161,16 @@ public:
                 VariantInfo var;
             };
         };
+
+        ArgumentList *m_argList;
+        CursorState m_state;
+        Nesting *m_nesting;
+        array m_signature;
+        array m_data;
+        int m_signaturePosition;
+        int m_dataPosition;
+        int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
+
         // to go back to the beginning of e.g. an array signature before fetching the next element
         std::vector<AggregateInfo> m_aggregateStack;
 
