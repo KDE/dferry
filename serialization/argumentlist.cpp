@@ -412,8 +412,6 @@ void ArgumentList::ReadCursor::advanceState()
 {
     // TODO: when inside any array, we may never run out of data because the array length is given
     //       in the data stream and we won't start the array until its data is complete.
-    // TODO: don't try to read any data when m_zeroLengthArrayNesting > 0; this needs special attention
-    //       for arrays (automatically zero length) and variants (automatically empty signature)
 
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
@@ -452,7 +450,7 @@ void ArgumentList::ReadCursor::advanceState()
         const AggregateInfo &aggregateInfo = m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
         case BeginStruct:
-            break; // already handled by getTypeInfo recognizing ')' -> EndStruct
+            break; // handled later by getTypeInfo recognizing ')' -> EndStruct
         case BeginVariant:
             if (m_signaturePosition + 1 >= m_signature.length) {
                 m_state = EndVariant;
@@ -501,6 +499,11 @@ void ArgumentList::ReadCursor::advanceState()
 
 
     // check if we have enough data for the next type, and read it
+    // if we're in a zero-length array, we are iterating only over the types without reading any data
+
+    if (m_zeroLengthArrayNesting && (isPrimitiveType || isStringType)) {
+        return; // nothing to do
+    }
 
     m_dataPosition = align(m_dataPosition, requiredDataSize);
 
@@ -549,11 +552,16 @@ void ArgumentList::ReadCursor::advanceState()
             goto out_needMoreData;
         }
         array signature;
-        signature.length = m_data.begin[m_dataPosition++] + 1;
-        signature.begin = m_data.begin + m_dataPosition;
-        m_dataPosition += signature.length;
-        if (m_dataPosition > m_data.length) {
-            goto out_needMoreData;
+        if (m_zeroLengthArrayNesting) {
+            static const char *emptyString = "";
+            signature = array(const_cast<char *>(emptyString), 1);
+        } else {
+            signature.length = m_data.begin[m_dataPosition++] + 1;
+            signature.begin = m_data.begin + m_dataPosition;
+            m_dataPosition += signature.length;
+            if (m_dataPosition > m_data.length) {
+                goto out_needMoreData;
+            }
         }
         // do not clobber nesting before potentially going to out_needMoreData!
         if (!m_nesting->beginVariant()) {
@@ -576,16 +584,19 @@ void ArgumentList::ReadCursor::advanceState()
         break; }
 
     case BeginArray: {
-        if (m_dataPosition + 4 > m_data.length) {
-            goto out_needMoreData;
+        uint32 arrayLength = 0;
+        if (!m_zeroLengthArrayNesting) {
+            if (m_dataPosition + 4 > m_data.length) {
+                goto out_needMoreData;
+            }
+            static const int maxArrayDataLength = 67108864; // from the spec
+            arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
+            if (arrayLength > maxArrayDataLength) {
+                m_state = InvalidData;
+                return;
+            }
+            m_dataPosition += 4;
         }
-        static const int maxArrayDataLength = 67108864; // from the spec
-        const uint32 arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-        if (arrayLength > maxArrayDataLength) {
-            m_state = InvalidData;
-            return;
-        }
-        m_dataPosition += 4;
 
         CursorState firstElementType;
         uint32 firstElementAlignment;
@@ -596,7 +607,9 @@ void ArgumentList::ReadCursor::advanceState()
         aggregateInfo.aggregateType = m_state;
 
         // ### are we supposed to align m_dataPosition if the array is empty?
-        m_dataPosition = align(m_dataPosition, firstElementAlignment);
+        if (!m_zeroLengthArrayNesting) {
+            m_dataPosition = align(m_dataPosition, firstElementAlignment);
+        }
         aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
         if (aggregateInfo.arr.dataEndPosition > m_data.length) {
             // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
@@ -627,9 +640,12 @@ void ArgumentList::ReadCursor::advanceState()
     return;
 
 out_needMoreData:
-    assert(m_nesting->array == 0); // ### must rearrange, this is going to fail if we were just opening an array
-    assert(m_zeroLengthArrayNesting == 0);
     m_state = NeedMoreData;
+    if (m_nesting->array) {
+        // we only start an array when the data for it has fully arrived (possible due to the length
+        // prefix), so if we still run out of data in an array the input is inconsistent.
+        m_state = InvalidData;
+    }
     m_signaturePosition = savedSignaturePosition;
     m_dataPosition = savedDataPosition;
 }
@@ -690,7 +706,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict, bool *outIsZero
                 }
                 m_nesting->endArray();
                 if (!parseSingleCompleteType(&temp, m_nesting)) {
-                    // must have been a nesting problem (assuming no bugs)
+                    // must have been too deep nesting (assuming no bugs)
                     m_state = InvalidData;
                     return false;
                 }
