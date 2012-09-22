@@ -64,6 +64,14 @@ public:
         UnixFd
     };
 
+private:
+    struct podArray // can't put the array type into a union because it has a constructor :/
+    {
+        byte *begin;
+        uint32 length;
+    };
+
+public:
     // a cursor is similar to an iterator, but more tied to the underlying data structure
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
@@ -134,12 +142,6 @@ public:
         void beginArrayOrDict(bool isDict, bool *isEmpty);
         bool nextArrayOrDictEntry(bool isDict);
 
-        struct podArray // can't put the array type into a union because it has a constructor :/
-        {
-            byte *begin;
-            uint32 length;
-        };
-
         struct ArrayInfo
         {
             uint32 dataEndPosition; // one past the last data byte of the array
@@ -192,6 +194,7 @@ public:
         };
     };
 
+    // TODO: try to share code with ReadIterator
     class WriteCursor
     {
     public:
@@ -237,13 +240,35 @@ public:
         friend class ArgumentList;
         WriteCursor(ArgumentList *al);
 
+        CursorState doWritePrimitiveType();
+        CursorState doWriteString(int lengthPrefixSize);
+        void advanceState();
+        void advanceStateFrom(CursorState expectedState);
+        void beginArrayOrDict(bool isDict, bool *isEmpty);
+        bool nextArrayOrDictEntry(bool isDict);
+
         ArgumentList *m_argList;
         CursorState m_state;
+        array m_signature;
+        array m_data;
         int m_signaturePosition;
         int m_dataPosition;
         static const int maxNesting = 64; // this is in the standard
         // to go back to the beginning of e.g. an array signature before fetching the next element
         int m_signaturePositionStack[maxNesting];
+
+        union {
+            byte m_Byte;
+            bool m_Boolean;
+            int16 m_Int16;
+            uint16 m_Uint16;
+            int32 m_Int32;
+            uint32 m_Uint32;
+            int64 m_Int64;
+            uint64 m_Uint64;
+            double m_Double;
+            podArray m_String; // also for ObjectPath and Signature
+        };
     };
 
 private:

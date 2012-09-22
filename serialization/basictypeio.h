@@ -109,6 +109,41 @@ inline double readDouble(const byte *raw, bool swap)
     return *reinterpret_cast<const double *>(raw);
 }
 
+inline void writeInt16(byte *raw, int16 i)
+{
+    *reinterpret_cast<int16 *>(raw) = i;
+}
+
+inline void writeUint16(byte *raw, uint16 i)
+{
+    *reinterpret_cast<uint16 *>(raw) = i;
+}
+
+inline void writeInt32(byte *raw, int32 i)
+{
+    *reinterpret_cast<int32 *>(raw) = i;
+}
+
+inline void writeUint32(byte *raw, uint32 i)
+{
+    *reinterpret_cast<uint32 *>(raw) = i;
+}
+
+inline void writeInt64(byte *raw, int64 i)
+{
+    *reinterpret_cast<int64 *>(raw) = i;
+}
+
+inline void writeUint64(byte *raw, uint64 i)
+{
+    *reinterpret_cast<uint64 *>(raw) = i;
+}
+
+inline void writeDouble(byte *raw, double d)
+{
+    *reinterpret_cast<double *>(raw) = d;
+}
+
 } // namespace basic
 
 #endif // BASICTYPEIO_H

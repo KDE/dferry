@@ -3,6 +3,7 @@
 #include "basictypeio.h"
 
 #include <cassert>
+#include <cstring>
 
 static int align(uint32 index, uint32 alignment)
 {
@@ -818,6 +819,89 @@ ArgumentList::WriteCursor::~WriteCursor()
     if (m_argList) {
         assert(m_argList->m_writeCursor);
         m_argList->m_writeCursor = 0;
+    }
+}
+
+ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType()
+{
+    // TODO: like, just rewrite from reading to writing
+    switch(m_state) {
+    case Byte:
+        m_data.begin[m_dataPosition] = m_Byte;
+        break;
+    case Boolean: {
+        uint32 num = m_Boolean ? 1 : 0;
+        basic::writeUint32(m_data.begin + m_dataPosition, num);
+        break; }
+    case Int16:
+        basic::writeInt16(m_data.begin + m_dataPosition, m_Int16);
+        break;
+    case Uint16:
+        basic::writeUint16(m_data.begin + m_dataPosition, m_Uint16);
+        break;
+    case Int32:
+        basic::writeInt32(m_data.begin + m_dataPosition, m_Int32);
+        break;
+    case Uint32:
+        basic::writeUint32(m_data.begin + m_dataPosition, m_Uint32);
+        break;
+    case Int64:
+        basic::writeInt64(m_data.begin + m_dataPosition, m_Int64);
+        break;
+    case Uint64:
+        basic::writeUint64(m_data.begin + m_dataPosition, m_Uint64);
+        break;
+    case Double:
+        basic::writeDouble(m_data.begin + m_dataPosition, m_Double);
+        break;
+    case UnixFd: {
+        uint32 index; // TODO = index of the FD we actually want to send
+        basic::writeUint32(m_data.begin + m_dataPosition, index);
+        break; }
+    default:
+        assert(false);
+        return InvalidData;
+    }
+    return m_state;
+}
+
+ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPrefixSize)
+{
+    // TODO request more data when we'd overflow the output buffer
+
+    bool isValidString = false;
+    if (m_state == String) {
+        isValidString = true; // TODO
+    } else if (m_state == ObjectPath) {
+        isValidString = true; // TODO
+    } else if (m_state == Signature) {
+        isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
+    }
+    if (!isValidString) {
+        return InvalidData;
+    }
+
+    if (lengthPrefixSize == 1) {
+        m_data.begin[m_dataPosition] = m_String.length;
+    } else {
+        basic::writeUint32(m_data.begin + m_dataPosition, m_String.length);
+    }
+    m_dataPosition += lengthPrefixSize;
+    memcpy(m_data.begin + m_dataPosition, m_String.begin, m_String.length);
+    m_dataPosition += m_String.length;
+    return m_state;
+}
+
+void ArgumentList::WriteCursor::advanceState()
+{
+}
+
+void ArgumentList::WriteCursor::advanceStateFrom(CursorState expectedState)
+{
+    if (m_state == AnyData || m_state == expectedState) {
+        advanceState();
+    } else {
+        m_state = InvalidData;
     }
 }
 
