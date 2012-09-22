@@ -9,7 +9,7 @@ class ArgumentList
 public:
     ArgumentList(); // constructs an empty argument list
      // constructs an argument list to deserialize data in @p data with signature @p signature
-    ArgumentList(array signature, array data, bool isByteSwapped);
+    ArgumentList(array signature, array data, bool isByteSwapped = false);
 
     // valid when no write cursor is open on the instance
     int length() const;
@@ -83,19 +83,20 @@ public:
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
 
-        void beginArray();
+        // when @p isEmpty is not null and the array contains no elements, the array is
+        // iterated over once so you can get the type information. due to lack of data,
+        // all contained arrays, dicts and variants (but not structs) will be empty, and
+        // any values returned by read... will be garbage.
+        // in any case, *isEmpty will be set to indicate whether the array is empty.
+
+        void beginArray(bool *isEmpty = 0);
         // call this before reading each entry; when it returns false the array has ended.
-        // when @p iteratingEmptyArray is not null and the array contains no elements, the array is
-        // iterated over once so you can get the type information. in that case, *iteratingEmptyArray
-        // is set to true, false otherwise. any values returned by read... will be garbage when
-        // iterating over an empty array.
         // TODO implement & document that all values returned by read... are zero/null?
-        // all contained arrays, dicts and variants (but not structs) will be empty.
-        bool nextArrayEntry(bool *iteratingEmptyArray = 0);
+        bool nextArrayEntry();
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
-        bool beginDict();
-        bool nextDictEntry(bool *iteratingEmptyDict = 0); // like nextArrayEntry()
+        bool beginDict(bool *isEmpty = 0);
+        bool nextDictEntry(); // like nextArrayEntry()
         bool endDict(); // like endArray()
 
         bool beginStruct();
@@ -130,7 +131,8 @@ public:
         CursorState doReadString(int lengthPrefixSize);
         void advanceState();
         void advanceStateFrom(CursorState expectedState);
-        bool nextArrayOrDictEntry(bool isDict, bool *outIsZeroLength);
+        void beginArrayOrDict(bool isDict, bool *isEmpty);
+        bool nextArrayOrDictEntry(bool isDict);
 
         struct podArray // can't put the array type into a union because it has a constructor :/
         {
@@ -192,17 +194,18 @@ public:
 
     class WriteCursor
     {
+    public:
         ~WriteCursor();
 
         bool isValid() const { return m_argList; }
 
-        CursorState state() const;
+        CursorState state() const { return m_state; }
 
-        void beginArray();
+        void beginArray(bool isEmpty);
         void nextArrayEntry();
         void endArray();
 
-        void beginDict();
+        void beginDict(bool isEmpty);
         void nextDictEntry();
         void endDict();
 
@@ -211,6 +214,8 @@ public:
 
         void beginVariant();
         void endVariant();
+
+        void finish();
 
         std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
 
@@ -224,13 +229,16 @@ public:
         void writeUint64(uint64 i);
         void writeDouble(double d);
         void writeString(array a);
+        void writeObjectPath(array a);
         void writeSignature(array a);
+        void writeUnixFd(uint32 fd);
 
     private:
         friend class ArgumentList;
         WriteCursor(ArgumentList *al);
 
         ArgumentList *m_argList;
+        CursorState m_state;
         int m_signaturePosition;
         int m_dataPosition;
         static const int maxNesting = 64; // this is in the standard

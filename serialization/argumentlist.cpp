@@ -659,92 +659,88 @@ void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
     }
 }
 
+void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
+{
+    assert(!m_aggregateStack.empty());
+    AggregateInfo &aggregateInfo = m_aggregateStack.back();
+    assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
+
+    if (isEmpty) {
+        *isEmpty = aggregateInfo.arr.isZeroLength;
+    }
+
+    if (aggregateInfo.arr.isZeroLength) {
+        m_zeroLengthArrayNesting++; // undone immediately in nextArrayOrDictEntry() when skipping
+        if (!isEmpty) {
+            // need to move m_signaturePosition to the end of the array signature or it won't happen
+            array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
+            // fix up nesting before and after we re-parse the beginning of the array signature
+            if (isDict) {
+                m_nesting->endParen();
+                m_signaturePosition--; // it was moved ahead by one to skip the '{'
+            }
+            m_nesting->endArray();
+            if (!parseSingleCompleteType(&temp, m_nesting)) {
+                // must have been too deep nesting (assuming no bugs)
+                m_state = InvalidData;
+                return;
+            }
+            m_nesting->beginArray();
+            if (isDict) {
+                m_nesting->beginParen();
+            }
+            m_signaturePosition = m_signature.length - temp.length - 1; // TODO check/fix the indexing
+        }
+    }
+}
+
 // TODO introduce an error state different from InvalidData when the wrong method is called
-void ArgumentList::ReadCursor::beginArray()
+void ArgumentList::ReadCursor::beginArray(bool *isEmpty)
 {
     if (m_state == BeginArray) {
-        m_state = NextArrayEntry;
+        beginArrayOrDict(false, isEmpty);
     } else {
         m_state = InvalidData;
     }
 }
 
-bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict, bool *outIsZeroLength)
+bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
 {
-    // cases to handle:
-    // A zero-length array, first iteration, user does not want to look at types -> skip signature
-    //   and clean up aggregate stack
-    // B zero-length array, first iteration, user does want to look at types
-    //   -> set it up, increase zero-length array nesting level
-    // C zero-length array, second iteration -> clean up the aggregate stack and decrease zero-length
-    //   array nesting level, thus possible leaving zero-length array mode
-    // D nonzero-length array, not last iteration -> go back to start of signature
-    // E nonzero-length array, last iteration -> ensure that data and signature both end,
-    //   clean up aggregate stack
-
     assert(!m_aggregateStack.empty());
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
     assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
 
-    if (outIsZeroLength) {
-        *outIsZeroLength = aggregateInfo.arr.isZeroLength;
-    }
-    const bool isFirstIteration = m_signaturePosition <= aggregateInfo.arr.containedTypeBegin;
     if (aggregateInfo.arr.isZeroLength) {
-        if (isFirstIteration) {
-            if (outIsZeroLength) {
-                // B
-                m_zeroLengthArrayNesting++;
-                return true; // TODO anything else?
-            } else {
-                // A
-                // fix up nesting before we re-parse the beginning of the array signature
-                array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
-                if (isDict) {
-                    m_nesting->endParen();
-                    m_signaturePosition--; // it was moved ahead by one to skip the '{'
-                }
-                m_nesting->endArray();
-                if (!parseSingleCompleteType(&temp, m_nesting)) {
-                    // must have been too deep nesting (assuming no bugs)
-                    m_state = InvalidData;
-                    return false;
-                }
-                m_signaturePosition = m_signature.length - temp.length - 1; // TODO check the indexing
-            }
+        if (m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
+            // do one iteration to read the types
+            return true;
         } else {
-            // C
+            // second iteration or skipping an empty array
             m_zeroLengthArrayNesting--;
         }
-        // A and C
-        m_state = isDict ? EndDict : EndArray;
-        m_aggregateStack.pop_back();
-        return false;
     } else {
-        const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
-        if (isEndOfData) {
-            // E
-            m_state = isDict ? EndDict : EndArray;
-            if (isDict) {
-                m_nesting->endParen();
-                m_signaturePosition++; // skip '}'
-            }
-            m_nesting->endArray();
-            m_aggregateStack.pop_back();
-            return false;
+        if (m_dataPosition < aggregateInfo.arr.dataEndPosition) {
+            // rewind to start of contained type and read the data there
+            m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+            advanceState();
+            return m_state != InvalidData;
         }
-        // D
-        // rewind to start of contained type and read the data there
-        m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
-        advanceState();
-        return m_state != InvalidData;
     }
+    // no more iterations
+    m_state = isDict ? EndDict : EndArray;
+    if (isDict) {
+        m_nesting->endParen();
+        m_signaturePosition++; // skip '}'
+    }
+    m_nesting->endArray();
+    m_aggregateStack.pop_back();
+    return false;
 }
 
-bool ArgumentList::ReadCursor::nextArrayEntry(bool *outIsZeroLength)
+bool ArgumentList::ReadCursor::nextArrayEntry()
 {
     if (m_state == NextArrayEntry) {
-        return nextArrayOrDictEntry(false, outIsZeroLength);
+        return nextArrayOrDictEntry(false);
     } else {
         m_state = InvalidData;
         return false;
@@ -756,15 +752,19 @@ void ArgumentList::ReadCursor::endArray()
     advanceStateFrom(EndArray);
 }
 
-bool ArgumentList::ReadCursor::beginDict()
+bool ArgumentList::ReadCursor::beginDict(bool *isEmpty)
 {
-    advanceStateFrom(BeginDict);
+    if (m_state == BeginDict) {
+        beginArrayOrDict(true, isEmpty);
+    } else {
+        m_state = InvalidData;
+    }
 }
 
-bool ArgumentList::ReadCursor::nextDictEntry(bool *outIsZeroLength)
+bool ArgumentList::ReadCursor::nextDictEntry()
 {
-    if (m_state == NextArrayEntry) {
-        return nextArrayOrDictEntry(true, outIsZeroLength);
+    if (m_state == NextDictEntry) {
+        return nextArrayOrDictEntry(true);
     } else {
         m_state = InvalidData;
         return false;
@@ -819,4 +819,104 @@ ArgumentList::WriteCursor::~WriteCursor()
         assert(m_argList->m_writeCursor);
         m_argList->m_writeCursor = 0;
     }
+}
+
+void ArgumentList::WriteCursor::beginArray(bool isEmpty)
+{
+}
+
+void ArgumentList::WriteCursor::nextArrayEntry()
+{
+}
+
+void ArgumentList::WriteCursor::endArray()
+{
+}
+
+void ArgumentList::WriteCursor::beginDict(bool isEmpty)
+{
+}
+
+void ArgumentList::WriteCursor::nextDictEntry()
+{
+}
+
+void ArgumentList::WriteCursor::endDict()
+{
+}
+
+void ArgumentList::WriteCursor::beginStruct()
+{
+}
+
+void ArgumentList::WriteCursor::endStruct()
+{
+}
+
+void ArgumentList::WriteCursor::beginVariant()
+{
+}
+
+void ArgumentList::WriteCursor::endVariant()
+{
+}
+
+void ArgumentList::WriteCursor::finish()
+{
+}
+
+std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack() const
+{
+}
+
+void ArgumentList::WriteCursor::writeByte(byte b)
+{
+}
+
+void ArgumentList::WriteCursor::writeBoolean(bool b)
+{
+}
+
+void ArgumentList::WriteCursor::writeInt16(int16 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeUint16(uint16 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeInt32(int32 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeUint32(uint32 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeInt64(int64 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeUint64(uint64 i)
+{
+}
+
+void ArgumentList::WriteCursor::writeDouble(double d)
+{
+}
+
+void ArgumentList::WriteCursor::writeString(array a)
+{
+}
+
+void ArgumentList::WriteCursor::writeObjectPath(array a)
+{
+}
+
+void ArgumentList::WriteCursor::writeSignature(array a)
+{
+}
+
+void ArgumentList::WriteCursor::writeUnixFd(uint32 fd)
+{
 }

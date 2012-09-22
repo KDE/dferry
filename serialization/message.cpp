@@ -87,7 +87,7 @@ void Message::parseVariableHeaders()
     // TODO the isZeroLengthArray stuff is just an API demo(!), we don't actually want to do anything
     //      if the array is empty. remove it when we have tests / examples.
     bool isZeroLengthArray;
-    for (reader.beginArray(); reader.nextArrayEntry(&isZeroLengthArray); ) {
+    for (reader.beginArray(&isZeroLengthArray); reader.nextArrayEntry(); ) {
         reader.beginStruct();
         byte headerType = reader.readByte();
 
