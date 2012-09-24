@@ -24,6 +24,8 @@ public:
     ReadCursor beginRead() { return ReadCursor(m_writeCursor ? 0 : this); }
     WriteCursor beginWrite() { return WriteCursor((m_writeCursor || m_readCursorCount) ? 0 : this); }
 
+    static bool isStringValid(array string);
+    static bool isObjectPathValid(array string);
     static bool isSignatureValid(array signature, bool isVariantSignature = false);
 
     enum CursorState {

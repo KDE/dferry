@@ -54,6 +54,54 @@ static void chopFirst(array *a)
     a->length--;
 }
 
+// static
+bool ArgumentList::isStringValid(array string)
+{
+    if (!string.length || string.begin[string.length - 1] != 0) {
+        return false;
+    }
+    for (int i = 0; i < string.length - 1; i++) {
+        if (string.begin[i] == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool isObjectNameLetter(byte b)
+{
+    return (b >= 'a' && b <= 'z') || b == '_' || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9');
+}
+
+// static
+bool ArgumentList::isObjectPathValid(array string)
+{
+    if (string.length < 2 || string.begin[string.length - 1] != 0) {
+        return false;
+    }
+    byte lastLetter = string.begin[0];
+    if (lastLetter != '/') {
+        return false;
+    }
+    if (string.length == 2) {
+        return true; // "/\0" special case
+    }
+    for (int i = 1; i < string.length; i++) {
+        byte currentLetter = string.begin[i];
+        if (lastLetter == '/') {
+            if (!isObjectNameLetter(currentLetter)) {
+                return false;
+            }
+        } else {
+            if (currentLetter != '/' && !isObjectNameLetter(currentLetter)) {
+                return false;
+            }
+        }
+        lastLetter = currentLetter;
+    }
+    return lastLetter != '/';
+}
+
 static bool parseBasicType(array *a)
 {
     assert(a->length >= 0);
@@ -397,9 +445,9 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
     m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = true; // TODO
+        isValidString = ArgumentList::isStringValid(array(m_String.begin, m_String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = true; // TODO
+        isValidString = ArgumentList::isObjectPathValid(array(m_String.begin, m_String.length));
     } else if (m_state == Signature) {
         isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
     }
