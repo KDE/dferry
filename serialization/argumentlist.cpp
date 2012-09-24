@@ -273,7 +273,7 @@ void ArgumentList::ReadCursor::replaceData(array data)
     m_data = data;
 }
 
-static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, uint32 *alignment,
+static void getTypeInfo(byte letterCode, ArgumentList::CursorState *typeState, uint32 *alignment,
                         bool *isPrimitiveType, bool *isStringType)
 {
     ArgumentList::CursorState state = ArgumentList::InvalidData;
@@ -367,8 +367,8 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *beginState, 
         align = 1; // don't move the data read/write pointer by aligning it
         break;
     }
-    if (beginState) {
-        *beginState = state;
+    if (typeState) {
+        *typeState = state;
     }
     if (alignment) {
         *alignment = align;
