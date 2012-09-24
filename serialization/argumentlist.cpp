@@ -919,9 +919,9 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
 
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = true; // TODO
+        isValidString = ArgumentList::isStringValid(array(m_String.begin, m_String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = true; // TODO
+        isValidString = ArgumentList::isObjectPathValid(array(m_String.begin, m_String.length));
     } else if (m_state == Signature) {
         isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
     }
