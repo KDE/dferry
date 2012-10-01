@@ -148,7 +148,6 @@ public:
         {
             uint32 dataEndPosition; // one past the last data byte of the array
             uint32 containedTypeBegin; // to rewind when reading the next element
-            bool isZeroLength; // if we are iterating over a zero-length array (to extract the types)
         };
 
         struct VariantInfo

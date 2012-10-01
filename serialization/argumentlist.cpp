@@ -676,7 +676,9 @@ void ArgumentList::ReadCursor::advanceState()
 
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
         aggregateInfo.arr.containedTypeBegin = m_signaturePosition;
-        aggregateInfo.arr.isZeroLength = !arrayLength;
+        if (!arrayLength) {
+            m_zeroLengthArrayNesting++;
+        }
 
         m_aggregateStack.push_back(aggregateInfo);
         break; }
@@ -715,11 +717,10 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
     assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
 
     if (isEmpty) {
-        *isEmpty = aggregateInfo.arr.isZeroLength;
+        *isEmpty = m_zeroLengthArrayNesting;
     }
 
-    if (aggregateInfo.arr.isZeroLength) {
-        m_zeroLengthArrayNesting++; // undone immediately in nextArrayOrDictEntry() when skipping
+    if (m_zeroLengthArrayNesting) {
         if (!isEmpty) {
             // need to move m_signaturePosition to the end of the array signature or it won't happen
             array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
@@ -759,7 +760,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
     assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
 
-    if (aggregateInfo.arr.isZeroLength) {
+    if (m_zeroLengthArrayNesting) {
         if (m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
             // do one iteration to read the types
             return true;
