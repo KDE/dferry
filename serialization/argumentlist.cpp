@@ -213,7 +213,7 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
 bool ArgumentList::isSignatureValid(array signature, bool isVariantSignature)
 {
     Nesting nest;
-    if (signature.length < 1 || signature.length > 256) {
+    if (signature.length < 1 || signature.length > maxSignatureLength) {
         return false;
     }
     if (signature.begin[signature.length - 1] != 0) {

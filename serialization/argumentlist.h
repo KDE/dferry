@@ -28,6 +28,8 @@ public:
     static bool isObjectPathValid(array string);
     static bool isSignatureValid(array signature, bool isVariantSignature = false);
 
+    static const int maxSignatureLength = 256; //including trailing null
+
     enum CursorState {
         // "exceptional" states
         NotStarted = 0,
