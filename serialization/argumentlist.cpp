@@ -3,6 +3,7 @@
 #include "basictypeio.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 
 static int align(uint32 index, uint32 alignment)
@@ -603,7 +604,7 @@ void ArgumentList::ReadCursor::advanceState()
         array signature;
         if (m_zeroLengthArrayNesting) {
             static const char *emptyString = "";
-            signature = array(const_cast<char *>(emptyString), 1);
+            signature = array(emptyString, 1);
         } else {
             signature.length = m_data.begin[m_dataPosition++] + 1;
             signature.begin = m_data.begin + m_dataPosition;
@@ -858,8 +859,11 @@ std::vector<ArgumentList::CursorState> ArgumentList::ReadCursor::aggregateStack(
 
 ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
    : m_argList(al),
+     m_state(AnyData),
+     m_nesting(new Nesting),
      m_signaturePosition(0),
-     m_dataPosition(0)
+     m_dataPosition(0),
+     m_zeroLengthArrayNesting(0)
 {
 }
 
@@ -869,11 +873,12 @@ ArgumentList::WriteCursor::~WriteCursor()
         assert(m_argList->m_writeCursor);
         m_argList->m_writeCursor = 0;
     }
+    delete m_nesting;
+    m_nesting = 0;
 }
 
-ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType()
+ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32 alignAndSize)
 {
-    // TODO: like, just rewrite from reading to writing
     switch(m_state) {
     case Byte:
         m_data.begin[m_dataPosition] = m_Byte;
@@ -911,6 +916,8 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType()
         assert(false);
         return InvalidData;
     }
+
+    m_elements.push_back(ElementInfo(alignAndSize, alignAndSize));
     return m_state;
 }
 
@@ -938,64 +945,371 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
     m_dataPosition += lengthPrefixSize;
     memcpy(m_data.begin + m_dataPosition, m_String.begin, m_String.length);
     m_dataPosition += m_String.length;
+
+    m_elements.push_back(ElementInfo(lengthPrefixSize, lengthPrefixSize));
+    for (uint32 l = m_String.length; l; ) {
+        uint32 chunkSize = std::min(l, uint32(ElementInfo::LargestSize));
+        m_elements.push_back(ElementInfo(1, chunkSize));
+        l -= chunkSize;
+    }
+
     return m_state;
 }
 
-void ArgumentList::WriteCursor::advanceState()
+void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorState newState)
 {
+// Macros are really ugly, but here every use saves three lines...
+#define VALID_IF(cond) if (cond) {} else { m_state = InvalidData; return; } do {} while (0)
+
+    // what needs to happen here:
+    // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
+    //   check if the type to be written is the same as the one that's already in the signature
+    //   - otherwise we still need to check if the data we're adding conforms with the spec, e.g.
+    //     no empty structs, dict entries must have primitive key type and exactly one value type
+    // - check well-formedness of data: strings, maximum lengths in binary format
+    //   (due to variant length only being known after finishing it and the need to insert it into
+    //    the data stream, keeping track of length is more difficult than just using the current
+    //    write position in the output buffer)
+    // - increase size of data buffer when it gets too small
+    // - keep track of variants in some data structure, in order to:
+    //   - know what the final binary message size will be
+    //   - in finish(), create the final data stream with inline variant signatures
+
+    // TODO
+    // if the innermost aggregate is...
+    // - array: first iteration: write type and data, or if empty just write type
+    //   higher iterations: check type and write data
+    // - variant: write type (to special variant signature storage) and data; check type is single complete
+
+    if (m_state == InvalidData) {
+        return;
+    }
+
+    m_state = newState;
+    uint32 alignment = 1;
+    bool isPrimitiveType = false;
+    bool isStringType = false;
+
+    if (signatureFragment.length) {
+        getTypeInfo(signatureFragment.begin[0], 0, &alignment, &isPrimitiveType, &isStringType);
+    }
+
+    // TODO review all the signature indexing
+    bool isWritingSignature = m_signaturePosition == m_signature.length; // TODO correct?
+    if (isWritingSignature) {
+        // signature additions must conform to syntax
+        VALID_IF(m_signaturePosition + signatureFragment.length <= maxSignatureLength);
+
+        if (!m_aggregateStack.empty()) {
+            const AggregateInfo &aggregateInfo = m_aggregateStack.back();
+            switch (aggregateInfo.aggregateType) {
+            case BeginVariant:
+                // arrays and variants may contain just one single complete type (note that this will
+                // trigger only when not inside an aggregate inside the variant or array)
+                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
+                    VALID_IF(m_state == EndVariant);
+                }
+                break;
+            case BeginArray:
+                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
+                    VALID_IF(m_state == EndArray);
+                }
+                break;
+            case BeginDict:
+                if (m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
+                    VALID_IF(isPrimitiveType || isStringType);
+                }
+                // first type has been checked already, second must be present (checked in EndDict
+                //  state handler). no third type allowed.
+                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 2) { // TODO correct indexing
+                    VALID_IF(m_state == EndDict);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        // finally, extend the signature
+        for (int i = 0; i < signatureFragment.length; i++) {
+            m_signature.begin[m_signaturePosition++] = signatureFragment.begin[i];
+        }
+    } else {
+        // signature must match first iteration (of an array/dict)
+        VALID_IF(m_signaturePosition + signatureFragment.length <= m_signature.length);
+        // TODO need to apply special checks for state changes with no explicit signature char?
+        // (end of array, end of variant and such)
+        for (int i = 0; i < signatureFragment.length; i++) {
+            VALID_IF(m_signature.begin[m_signaturePosition++] == signatureFragment.begin[i]);
+        }
+    }
+
+    if (isPrimitiveType) {
+        m_state = doWritePrimitiveType(alignment);
+        return;
+    }
+    if (isStringType) {
+        m_state = doWriteString(alignment);
+        return;
+    }
+
+    AggregateInfo aggregateInfo;
+
+    switch (m_state) {
+    case BeginStruct:
+        VALID_IF(m_nesting->beginParen());
+        aggregateInfo.aggregateType = BeginStruct;
+        aggregateInfo.sct.containedTypeBegin = m_signaturePosition;
+        m_aggregateStack.push_back(aggregateInfo);
+        m_elements.push_back(ElementInfo(8, 0)); // align only
+        break;
+    case EndStruct:
+        m_nesting->endParen();
+        VALID_IF(!m_aggregateStack.empty());
+        aggregateInfo = m_aggregateStack.back();
+        VALID_IF(aggregateInfo.aggregateType == BeginStruct &&
+                 m_signaturePosition > aggregateInfo.sct.containedTypeBegin + 1); // no empty structs
+        m_aggregateStack.pop_back();
+        break;
+
+    case BeginVariant: {
+        VALID_IF(m_nesting->beginVariant());
+        aggregateInfo.aggregateType = BeginVariant;
+        aggregateInfo.var.prevSignature.begin = m_signature.begin;
+        aggregateInfo.var.prevSignature.length = m_signature.length;
+        aggregateInfo.var.prevSignaturePosition = m_signaturePosition;
+        aggregateInfo.var.signatureIndex = m_variantSignatures.size();
+        m_aggregateStack.push_back(aggregateInfo);
+
+        // arrange for finish() to take a signature from m_variantSignatures
+        m_elements.push_back(ElementInfo(1, ElementInfo::VariantSignature));
+        array ar(reinterpret_cast<byte *>(malloc(maxSignatureLength)), 0);
+        m_variantSignatures.push_back(ar);
+        m_signature = ar;
+        m_signaturePosition = 0;
+        break; }
+    case EndVariant: {
+        m_nesting->endVariant();
+        VALID_IF(!m_aggregateStack.empty());
+        aggregateInfo = m_aggregateStack.back();
+        VALID_IF(aggregateInfo.aggregateType == BeginVariant);
+        m_signature.begin[m_signaturePosition++] = '\0';
+        assert(aggregateInfo.var.signatureIndex < m_variantSignatures.size());
+        m_variantSignatures[aggregateInfo.var.signatureIndex].length = m_signaturePosition;
+        assert(m_variantSignatures[aggregateInfo.var.signatureIndex].begin = m_signature.begin);
+
+        m_signature.begin = aggregateInfo.var.prevSignature.begin;
+        m_signature.length = aggregateInfo.var.prevSignature.length;
+        m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+        m_aggregateStack.pop_back();
+        break; }
+
+    case BeginDict:
+    case BeginArray: {
+        VALID_IF(m_nesting->beginVariant());
+        if (m_state == BeginDict) {
+            VALID_IF(m_nesting->beginParen());
+        }
+        aggregateInfo.aggregateType = m_state;
+        aggregateInfo.arr.dataBegin = m_dataPosition;
+        aggregateInfo.arr.containedTypeBegin = m_signaturePosition;
+        m_aggregateStack.push_back(aggregateInfo);
+
+        m_elements.push_back(ElementInfo(4, ElementInfo::ArrayLengthField));
+        if (m_state == BeginDict) {
+            m_elements.push_back(ElementInfo(8, 0)); // align only
+            m_state = DictKey;
+            return;
+        }
+        break; }
+
+    case EndDict:
+    case EndArray: {
+        // TODO check that there is at least one type inside the array and that we're at the end of
+        //      the current array iteration
+        const bool isDict = m_state == BeginDict;
+        if (isDict) {
+            m_nesting->endParen();
+        }
+        m_nesting->endArray();
+        VALID_IF(!m_aggregateStack.empty());
+        aggregateInfo = m_aggregateStack.back();
+        VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+        m_aggregateStack.pop_back();
+        if (m_zeroLengthArrayNesting) {
+            m_zeroLengthArrayNesting--;
+        }
+
+        // ### not checking array size here, it may change by a few bytes in the final data stream
+        //     due to alignment changes from a different start address
+        m_elements.push_back(ElementInfo(1, ElementInfo::ArrayLengthEndMark));
+        break; }
+    }
+
+    m_state = AnyData;
 }
 
-void ArgumentList::WriteCursor::advanceStateFrom(CursorState expectedState)
+void ArgumentList::WriteCursor::beginArrayOrDict(bool isDict, bool isEmpty)
 {
-    if (m_state == AnyData || m_state == expectedState) {
-        advanceState();
+    // can't create an array with contents during type-only iteration
+    VALID_IF(!m_zeroLengthArrayNesting || isEmpty);
+    if (isEmpty) {
+        m_zeroLengthArrayNesting++;
     } else {
-        m_state = InvalidData;
+        VALID_IF(!m_zeroLengthArrayNesting);
+    }
+    if (isDict) {
+        advanceState(array("a{", strlen("a{")),  BeginDict);
+    } else {
+        advanceState(array("a", strlen("a")),  BeginArray);
     }
 }
 
 void ArgumentList::WriteCursor::beginArray(bool isEmpty)
 {
+    beginArrayOrDict(false, isEmpty);
+}
+
+void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
+{
+    // TODO sanity / syntax checks, data length check too?
+
+    VALID_IF(!m_aggregateStack.empty());
+    AggregateInfo &aggregateInfo = m_aggregateStack.back();
+    VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+
+    if (m_zeroLengthArrayNesting) {
+        // allow one iteration to write the types
+        VALID_IF(m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
+    } else {
+        if (m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
+            // TODO first iteration, anything to do?
+        } else if (isDict) {
+            // a dict must have a key and value
+            VALID_IF(m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
+        }
+        // array case: we are not at start of contained type's signature, the array is at top of stack
+        // -> we *are* at the end of a single complete type inside the array, syntax check passed
+        m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+    }
+
+    // TODO need to touch the data? apply alignment?
+
+#undef VALID_IF
 }
 
 void ArgumentList::WriteCursor::nextArrayEntry()
 {
+    nextArrayOrDictEntry(false);
 }
 
 void ArgumentList::WriteCursor::endArray()
 {
+    advanceState(array(), EndArray);
 }
 
 void ArgumentList::WriteCursor::beginDict(bool isEmpty)
 {
+    beginArrayOrDict(true, isEmpty);
 }
 
 void ArgumentList::WriteCursor::nextDictEntry()
 {
+    nextArrayOrDictEntry(true);
 }
 
 void ArgumentList::WriteCursor::endDict()
 {
+    advanceState(array("}", strlen("}")), EndDict);
 }
 
 void ArgumentList::WriteCursor::beginStruct()
 {
+    advanceState(array("(", strlen("(")), BeginStruct);
 }
 
 void ArgumentList::WriteCursor::endStruct()
 {
+    advanceState(array(")", strlen(")")), EndStruct);
 }
 
 void ArgumentList::WriteCursor::beginVariant()
 {
+    advanceState(array("v", strlen("v")), BeginVariant);
 }
 
 void ArgumentList::WriteCursor::endVariant()
 {
+    advanceState(array(), EndVariant);
 }
+
+struct ArrayLengthField
+{
+    uint32 lengthFieldPosition;
+    uint32 dataStartPosition;
+};
 
 void ArgumentList::WriteCursor::finish()
 {
+    // what needs to happen here:
+    // - check if the message can be closed - basically the aggregate stack must be empty
+    // - "pack" or expand the message, depending on how variant support is done
+    //   (and resize the data buffer to the minimum required size)
+    // - resize the signature to the minimum required size
+    m_dataPosition = 0;
+
+    // TODO add trailing null to signature
+
+    byte *buffer = reinterpret_cast<byte *>(malloc(16384)); // TODO dynamic resize
+    int bufferPos = 0;
+    int count = m_elements.size();
+    int variantSignatureIndex = 0;
+
+    std::vector<ArrayLengthField> lengthFieldStack;
+
+    // TODO zero out alignment padding (maybe just zero out the whole allocated buffer beforehand)
+
+    for (int i = 0; i < count; i++) {
+        ElementInfo ei = m_elements[i];
+        if (ei.size <= ElementInfo::LargestSize) {
+            // copy data chunks while applying the proper alignment
+            bufferPos = align(bufferPos, ei.alignment());
+            m_dataPosition = align(m_dataPosition, ei.alignment());
+            memcpy(buffer + bufferPos, m_data.begin + m_dataPosition, ei.size);
+            bufferPos += ei.size;
+            m_dataPosition += ei.size;
+        } else {
+            ArrayLengthField al;
+            if (ei.size == ElementInfo::ArrayLengthField) {
+                // start of an array
+                // reserve space for the array length prefix
+                bufferPos = align(bufferPos, 4);
+                al.lengthFieldPosition = bufferPos;
+                bufferPos += 4;
+                // array data starts aligned to the first array element
+                bufferPos = align(bufferPos, m_elements[i + 1].alignment());
+                al.dataStartPosition = bufferPos;
+                lengthFieldStack.push_back(al);
+            } else if (ei.size == ElementInfo::ArrayLengthEndMark) {
+                // end of an array - just put the now known array length in front of the array
+                al = lengthFieldStack.back();
+                basic::writeUint32(buffer + al.lengthFieldPosition, bufferPos - al.dataStartPosition);
+                lengthFieldStack.pop_back();
+            } else { // ei.size == ElementInfo::VariantSignature
+                // fill in signature (should already include length prefix and trailing null)
+                array ar = m_variantSignatures[variantSignatureIndex++];
+                bufferPos = align(bufferPos, ei.alignment());
+                m_dataPosition = align(m_dataPosition, ei.alignment());
+                memcpy(buffer + bufferPos, ar.begin, ar.length);
+                bufferPos += ar.length;
+                free(ar.begin);
+            }
+        }
+    }
+    assert(variantSignatureIndex == m_variantSignatures.size());
+    assert(lengthFieldStack.empty());
+    m_elements.clear();
+    m_variantSignatures.clear();
 }
 
 std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack() const
@@ -1010,52 +1324,81 @@ std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack
 
 void ArgumentList::WriteCursor::writeByte(byte b)
 {
+    m_Byte = b;
+    advanceState(array("y", strlen("y")), Byte);
 }
 
 void ArgumentList::WriteCursor::writeBoolean(bool b)
 {
+    m_Boolean = b;
+    advanceState(array("b", strlen("b")), Boolean);
 }
 
 void ArgumentList::WriteCursor::writeInt16(int16 i)
 {
+    m_Int16 = i;
+    advanceState(array("n", strlen("n")), Int16);
 }
 
 void ArgumentList::WriteCursor::writeUint16(uint16 i)
 {
+    m_Uint16 = i;
+    advanceState(array("q", strlen("q")), Uint16);
 }
 
 void ArgumentList::WriteCursor::writeInt32(int32 i)
 {
+    m_Int32 = i;
+    advanceState(array("i", strlen("i")), Int32);
 }
 
 void ArgumentList::WriteCursor::writeUint32(uint32 i)
 {
+    m_Uint32 = i;
+    advanceState(array("u", strlen("u")), Uint32);
 }
 
 void ArgumentList::WriteCursor::writeInt64(int64 i)
 {
+    m_Int64 = i;
+    advanceState(array("x", strlen("x")), Int64);
 }
 
 void ArgumentList::WriteCursor::writeUint64(uint64 i)
 {
+    m_Uint64 = i;
+    advanceState(array("t", strlen("t")), Uint64);
 }
 
 void ArgumentList::WriteCursor::writeDouble(double d)
 {
+    m_Double = d;
+    advanceState(array("d", strlen("d")), Double);
 }
 
 void ArgumentList::WriteCursor::writeString(array a)
 {
+    m_String.begin = a.begin;
+    m_String.length = a.length;
+    advanceState(array("s", strlen("s")), String);
 }
 
 void ArgumentList::WriteCursor::writeObjectPath(array a)
 {
+    m_String.begin = a.begin;
+    m_String.length = a.length;
+    advanceState(array("o", strlen("o")), ObjectPath);
 }
 
 void ArgumentList::WriteCursor::writeSignature(array a)
 {
+    m_String.begin = a.begin;
+    m_String.length = a.length;
+    advanceState(array("g", strlen("g")), Signature);
 }
 
 void ArgumentList::WriteCursor::writeUnixFd(uint32 fd)
 {
+    m_Uint32 = fd;
+    advanceState(array("h", strlen("h")), UnixFd);
 }

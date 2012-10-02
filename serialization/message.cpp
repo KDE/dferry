@@ -67,7 +67,7 @@ Message::Message(array a)
 
     // prepare and begin variable header parsing
     static const char *sig = "a(yv)";
-    array varHeadersSig(const_cast<char *>(sig), strlen(sig));
+    array varHeadersSig(sig, strlen(sig));
     array headerData(a.begin + fixedHeaderLength, a.length - fixedHeaderLength);
     m_headerParser = new ArgumentList(varHeadersSig, headerData, m_isByteSwapped);
 
@@ -109,6 +109,7 @@ void Message::parseVariableHeaders()
                 break;
             }
             case REPLY_SERIAL:
+                // fallthrough, also read uint32
             case UNIX_FDS: {
                 assert(reader.state() == ArgumentList::UnixFd);
                 m_intHeaders[headerType] = reader.readUint32();

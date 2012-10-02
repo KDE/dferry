@@ -1,5 +1,7 @@
 #include "types.h"
 
+#include <cassert>
+
 #include <vector>
 
 class Nesting; // TODO remove this when we've d-pointerized everything
@@ -12,6 +14,8 @@ public:
     ArgumentList(array signature, array data, bool isByteSwapped = false);
 
     // valid when no write cursor is open on the instance
+
+    // TODO rethink how to find out final message size
     int length() const;
 
      // returns true when at least one read cursor is open, false otherwise
@@ -36,7 +40,10 @@ public:
         Finished,
         NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
         InvalidData, // non-recoverable
+        // WriteCursor states when the next type is still open (not iterating in an array or dict)
         AnyData, // occurs in WriteCursor when you are free to add any type
+        DictKey, // occurs in WriteCursor when the next type must be suitable for a dict key -
+                 // a simple string or numeric type.
 
         // the following occur in ReadCursor, and in WriteCursor when in the second or higher iteration
         // of an array or dict where the types must match the first iteration (except inside variants).
@@ -244,22 +251,83 @@ public:
         friend class ArgumentList;
         WriteCursor(ArgumentList *al);
 
-        CursorState doWritePrimitiveType();
+        CursorState doWritePrimitiveType(uint32 alignAndSize);
         CursorState doWriteString(int lengthPrefixSize);
-        void advanceState();
-        void advanceStateFrom(CursorState expectedState);
-        void beginArrayOrDict(bool isDict, bool *isEmpty);
-        bool nextArrayOrDictEntry(bool isDict);
+        void advanceState(array signatureFragment, CursorState newState);
+        void beginArrayOrDict(bool isDict, bool isEmpty);
+        void nextArrayOrDictEntry(bool isDict);
+
+        struct ArrayInfo
+        {
+            uint32 dataBegin; // one past the last data byte of the array
+            uint32 containedTypeBegin; // to rewind when reading the next element
+        };
+
+        struct VariantInfo
+        {
+            podArray prevSignature;       // a variant switches the currently parsed signature, so we
+            uint32 prevSignaturePosition; // need to store the old signature and parse position.
+            uint32 signatureIndex; // index in m_variantSignatures
+        };
+
+        struct StructInfo
+        {
+            uint32 containedTypeBegin;
+        };
+
+        struct AggregateInfo
+        {
+            CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+            union {
+                ArrayInfo arr;
+                VariantInfo var;
+                StructInfo sct;
+            };
+        };
+
+        // we don't know how long a variant signature is when starting the variant, but we have to
+        // insert the signature into the datastream before the data. for that reason, we need a
+        // postprocessing pass to insert the signatures when the stream is otherwise finished.
+
+        // - need to split up long string data: all unaligned, arbitrary length
+        // - need to fix up array length because even the length excluding the padding before and
+        //   after varies with alignment of the first byte - for that the alignment parameters as
+        //   described in plan.txt need to be solved (we can use a worst-case estimate at first)
+        struct ElementInfo
+        {
+            ElementInfo(byte alignment, byte size_)
+               : size(size_)
+            {
+                assert(alignment <= 8);
+                static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
+                alignmentExponent = alignLog[alignment];
+                assert(alignment < 2 || alignLog != 0);
+            }
+            byte alignment() { return 1 << alignmentExponent; }
+
+            uint32 alignmentExponent : 2; // powers of 2, so 1. 2. 4. 8
+            uint32 size : 6; // that's up to 63
+            enum SizeCode {
+                LargestSize = 60,
+                ArrayLengthField,
+                ArrayLengthEndMark,
+                VariantSignature
+            };
+        };
+
+        std::vector<ElementInfo> m_elements;
+        std::vector<array> m_variantSignatures; // TODO; array might not work when reallocating data
 
         ArgumentList *m_argList;
         CursorState m_state;
+        Nesting *m_nesting;
         array m_signature;
         array m_data;
         int m_signaturePosition;
         int m_dataPosition;
-        static const int maxNesting = 64; // this is in the standard
-        // to go back to the beginning of e.g. an array signature before fetching the next element
-        int m_signaturePositionStack[maxNesting];
+        int m_zeroLengthArrayNesting;
+        // this keeps track of which aggregates we are currently in
+        std::vector<AggregateInfo> m_aggregateStack;
 
         union {
             byte m_Byte;
