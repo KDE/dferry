@@ -1000,6 +1000,12 @@ void ArgumentList::WriteCursor::finish()
 
 std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack() const
 {
+    const int count = m_aggregateStack.size();
+    std::vector<CursorState> ret;
+    for (int i = 0; i < count; i++) {
+        ret.push_back(m_aggregateStack[i].aggregateType);
+    }
+    return ret;
 }
 
 void ArgumentList::WriteCursor::writeByte(byte b)
