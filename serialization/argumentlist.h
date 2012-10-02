@@ -44,7 +44,7 @@ public:
         // states pertaining to aggregates
         BeginArray,
         NextArrayEntry,
-        EndArray, // TODO do we really need this and ReadCursor::endArray()? same for EndDict.
+        EndArray,
         BeginDict,
         NextDictEntry,
         EndDict,
@@ -69,7 +69,8 @@ public:
     };
 
 private:
-    struct podArray // can't put the array type into a union because it has a constructor :/
+    struct podArray // Same as array but without ctor.
+                    // Can't put the array type into a union because it has a constructor :/
     {
         byte *begin;
         uint32 length;
@@ -148,7 +149,7 @@ public:
 
         struct ArrayInfo
         {
-            uint32 dataEndPosition; // one past the last data byte of the array
+            uint32 dataEnd; // one past the last data byte of the array
             uint32 containedTypeBegin; // to rewind when reading the next element
         };
 
@@ -178,7 +179,7 @@ public:
         int m_dataPosition;
         int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
 
-        // to go back to the beginning of e.g. an array signature before fetching the next element
+        // this keeps track of which aggregates we are currently in
         std::vector<AggregateInfo> m_aggregateStack;
 
         // it is more efficient, in code size and performance, to read the data in advanceState()
@@ -275,8 +276,6 @@ public:
     };
 
 private:
-    // friend class ReadCursor; // TODO required?
-    // friend class WriteCursor;
     int m_isByteSwapped;
     int m_readCursorCount;
     WriteCursor *m_writeCursor;

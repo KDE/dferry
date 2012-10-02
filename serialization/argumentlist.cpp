@@ -121,7 +121,7 @@ static bool parseBasicType(array *a)
     case 's':
     case 'o':
     case 'g':
-    case 'h': // this doesn't seem to make sense, though...
+    case 'h':
         chopFirst(a);
         return true;
     default:
@@ -521,7 +521,7 @@ void ArgumentList::ReadCursor::advanceState()
                 m_state = isDict ? NextDictEntry : NextArrayEntry;
                 return; // the rest is handled in nextArrayOrDictEntry()
             } else {
-                const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEndPosition;
+                const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEnd;
                 if (isEndOfData) {
                     m_state = InvalidData;
                     return;
@@ -534,13 +534,13 @@ void ArgumentList::ReadCursor::advanceState()
     }
 
     // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
-    uint32 requiredDataSize = 1;
+    uint32 alignment = 1;
     bool isPrimitiveType = false;
     bool isStringType = false;
 
     m_signaturePosition++;
     getTypeInfo(m_signature.begin[m_signaturePosition],
-                &m_state, &requiredDataSize, &isPrimitiveType, &isStringType);
+                &m_state, &alignment, &isPrimitiveType, &isStringType);
 
     if (m_state == InvalidData) {
         return;
@@ -554,21 +554,21 @@ void ArgumentList::ReadCursor::advanceState()
         return; // nothing to do
     }
 
-    m_dataPosition = align(m_dataPosition, requiredDataSize);
+    m_dataPosition = align(m_dataPosition, alignment);
 
-    if (((isPrimitiveType || isStringType) && m_dataPosition + requiredDataSize > m_data.length)
+    if (((isPrimitiveType || isStringType) && m_dataPosition + alignment > m_data.length)
         || m_dataPosition > m_data.length) {
         goto out_needMoreData;
     }
 
     if (isPrimitiveType) {
         m_state = doReadPrimitiveType();
-        m_dataPosition += requiredDataSize;
+        m_dataPosition += alignment;
         return;
     }
 
     if (isStringType) {
-        m_state = doReadString(requiredDataSize);
+        m_state = doReadString(alignment);
         if (m_state == NeedMoreData) {
             goto out_needMoreData;
         }
@@ -659,8 +659,8 @@ void ArgumentList::ReadCursor::advanceState()
         if (!m_zeroLengthArrayNesting) {
             m_dataPosition = align(m_dataPosition, firstElementAlignment);
         }
-        aggregateInfo.arr.dataEndPosition = m_dataPosition + arrayLength;
-        if (aggregateInfo.arr.dataEndPosition > m_data.length) {
+        aggregateInfo.arr.dataEnd = m_dataPosition + arrayLength;
+        if (aggregateInfo.arr.dataEnd > m_data.length) {
             // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
             goto out_needMoreData;
         }
@@ -769,7 +769,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
             m_zeroLengthArrayNesting--;
         }
     } else {
-        if (m_dataPosition < aggregateInfo.arr.dataEndPosition) {
+        if (m_dataPosition < aggregateInfo.arr.dataEnd) {
             // rewind to start of contained type and read the data there
             m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
             advanceState();
