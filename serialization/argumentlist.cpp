@@ -714,7 +714,7 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
 {
     assert(!m_aggregateStack.empty());
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
-    assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
+    assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
     if (isEmpty) {
         *isEmpty = m_zeroLengthArrayNesting;
@@ -758,7 +758,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
 {
     assert(!m_aggregateStack.empty());
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
-    assert(aggregateInfo.aggregateType == BeginArray || aggregateInfo.aggregateType == BeginDict);
+    assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
     if (m_zeroLengthArrayNesting) {
         if (m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
