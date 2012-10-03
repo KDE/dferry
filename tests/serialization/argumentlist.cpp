@@ -3,6 +3,9 @@
 #include "../testutil.h"
 
 #include <cstring>
+#include <iostream>
+
+using namespace std;
 
 void test_roundtrip()
 {
@@ -34,6 +37,7 @@ void test_roundtrip()
     bool isDone = false;
     while (!isDone) {
         TEST(writer.state() != ArgumentList::InvalidData);
+        cerr << "Reader state: " << reader.state() << endl;
 
         switch(reader.state()) {
         case ArgumentList::Finished:
