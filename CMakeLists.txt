@@ -7,7 +7,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 set(DSEL_SOURCES
     serialization/argumentlist.cpp
-    serialization/message.cpp)
+    serialization/message.cpp
+    serialization/types.cpp)
 
 set(DSEL_HEADERS
     serialization/argumentlist.h

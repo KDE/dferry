@@ -15,6 +15,7 @@ struct array
     array(byte *b, int l) : begin(b), length(l) {}
     array(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
     array(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
+    array(const char *b);
     byte *begin;
     int length;
 };
