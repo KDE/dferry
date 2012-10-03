@@ -56,14 +56,10 @@ void test_stringValidation()
 
 void test_roundtrip()
 {
-    static const char *signature = ""; // TODO
-    array signatureArray(const_cast<char *>(signature), strlen(signature) + 1); // TODO get rid of the +1?
+    array signature(""); // TODO
+    array data; // TODO
 
-    static const char *contents = ""; // TODO
-    static const int contentsLen = 1; // TODO
-    array contentsArray(const_cast<char *>(contents), contentsLen);
-
-    ArgumentList arg(signatureArray, contentsArray);
+    ArgumentList arg(signature, data);
     ArgumentList::ReadCursor reader = arg.beginRead();
     {
         ArgumentList::ReadCursor reader2 = arg.beginRead();
