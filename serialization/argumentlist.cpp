@@ -267,17 +267,19 @@ ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
    : m_argList(al),
      m_state(NotStarted),
      m_nesting(new Nesting),
-     m_signature(al->m_signature),
-     m_data(al->m_data),
      m_signaturePosition(-1),
      m_dataPosition(0),
      m_zeroLengthArrayNesting(0)
 {
     if (m_argList) {
+        m_signature = m_argList->m_signature;
+        m_data = m_argList->m_data;
         if (!ArgumentList::isSignatureValid(m_signature)) {
             m_state = InvalidData;
         }
         advanceState();
+    } else {
+        m_state = InvalidData;
     }
 }
 
