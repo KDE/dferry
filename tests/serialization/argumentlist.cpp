@@ -7,6 +7,53 @@
 
 using namespace std;
 
+void test_stringValidation()
+{
+    {
+        array emptyWithNull("");
+        array emptyWithoutNull;
+
+        TEST(!ArgumentList::isStringValid(emptyWithoutNull));
+        TEST(ArgumentList::isStringValid(emptyWithNull));
+
+        TEST(!ArgumentList::isObjectPathValid(emptyWithoutNull));
+        TEST(!ArgumentList::isObjectPathValid(emptyWithNull));
+
+        TEST(ArgumentList::isSignatureValid(emptyWithNull));
+        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull));
+        TEST(ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
+        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
+    }
+    {
+        array trivial("i");
+        TEST(ArgumentList::isSignatureValid(trivial));
+        TEST(ArgumentList::isSignatureValid(trivial, ArgumentList::VariantSignature));
+    }
+    {
+        array list("iqb");
+        TEST(ArgumentList::isSignatureValid(list));
+        TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
+    }
+    {
+        array simpleArray("ai");
+        TEST(ArgumentList::isSignatureValid(simpleArray));
+        TEST(ArgumentList::isSignatureValid(simpleArray, ArgumentList::VariantSignature));
+    }
+    {
+        array messyArray("a(iaia{ia{iv}})");
+        TEST(ArgumentList::isSignatureValid(messyArray));
+        TEST(ArgumentList::isSignatureValid(messyArray, ArgumentList::VariantSignature));
+    }
+    {
+        array dictFail("a{vi}");
+        TEST(!ArgumentList::isSignatureValid(dictFail));
+        TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
+    }
+    // TODO test nesting limits in signatures (might be best to generate strings)
+
+    // TODO: object path tests
+}
+
 void test_roundtrip()
 {
     static const char *signature = ""; // TODO
@@ -145,5 +192,6 @@ void test_roundtrip()
 
 int main(int argc, char *argv[])
 {
+    test_stringValidation();
     test_roundtrip();
 }
