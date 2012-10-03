@@ -21,12 +21,12 @@ public:
      // returns true when at least one read cursor is open, false otherwise
     bool isReading() const { return m_readCursorCount; }
     // returns true when a write cursor is open, false otherwise
-    bool isWriting() const { return m_writeCursor; }
+    bool isWriting() const { return m_hasWriteCursor; }
 
     class ReadCursor;
     class WriteCursor;
-    ReadCursor beginRead() { return ReadCursor(m_writeCursor ? 0 : this); }
-    WriteCursor beginWrite() { return WriteCursor((m_writeCursor || m_readCursorCount) ? 0 : this); }
+    ReadCursor beginRead();
+    WriteCursor beginWrite();
 
     static bool isStringValid(array string);
     static bool isObjectPathValid(array string);
@@ -146,7 +146,7 @@ public:
 
     private:
         friend class ArgumentList;
-        ReadCursor(ArgumentList *al);
+        explicit ReadCursor(ArgumentList *al);
         CursorState doReadPrimitiveType();
         CursorState doReadString(int lengthPrefixSize);
         void advanceState();
@@ -249,7 +249,7 @@ public:
 
     private:
         friend class ArgumentList;
-        WriteCursor(ArgumentList *al);
+        explicit WriteCursor(ArgumentList *al);
 
         CursorState doWritePrimitiveType(uint32 alignAndSize);
         CursorState doWriteString(int lengthPrefixSize);
@@ -346,7 +346,7 @@ public:
 private:
     int m_isByteSwapped;
     int m_readCursorCount;
-    WriteCursor *m_writeCursor;
+    bool m_hasWriteCursor;
     array m_signature;
     array m_data;
 };

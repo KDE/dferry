@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 
 static int align(uint32 index, uint32 alignment)
@@ -36,17 +37,37 @@ struct Nesting
 ArgumentList::ArgumentList()
    : m_isByteSwapped(false),
      m_readCursorCount(0),
-     m_writeCursor(0)
+     m_hasWriteCursor(false)
 {
 }
 
 ArgumentList::ArgumentList(array signature, array data, bool isByteSwapped)
    : m_isByteSwapped(isByteSwapped),
      m_readCursorCount(0),
-     m_writeCursor(0),
+     m_hasWriteCursor(false),
      m_signature(signature),
      m_data(data)
 {
+}
+
+ArgumentList::ReadCursor ArgumentList::beginRead()
+{
+    ArgumentList *thisInstance = 0;
+    if (!m_hasWriteCursor) {
+        m_readCursorCount++;
+        thisInstance = this;
+    }
+    return ReadCursor(thisInstance);
+}
+
+ArgumentList::WriteCursor ArgumentList::beginWrite()
+{
+    ArgumentList *thisInstance = 0;
+    if (!m_readCursorCount && !m_hasWriteCursor) {
+        m_hasWriteCursor = true;
+        thisInstance = this;
+    }
+    return WriteCursor(thisInstance);
 }
 
 static void chopFirst(array *a)
@@ -870,8 +891,8 @@ ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
 ArgumentList::WriteCursor::~WriteCursor()
 {
     if (m_argList) {
-        assert(m_argList->m_writeCursor);
-        m_argList->m_writeCursor = 0;
+        assert(m_argList->m_hasWriteCursor);
+        m_argList->m_hasWriteCursor = false;
     }
     delete m_nesting;
     m_nesting = 0;

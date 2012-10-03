@@ -1,6 +1,7 @@
 #include "argumentlist.h"
 
-#include <cassert>
+#include "../testutil.h"
+
 #include <cstring>
 
 void test_roundtrip()
@@ -16,23 +17,23 @@ void test_roundtrip()
     ArgumentList::ReadCursor reader = arg.beginRead();
     {
         ArgumentList::ReadCursor reader2 = arg.beginRead();
-        assert(reader2.isValid());
+        TEST(reader2.isValid());
     }
 
     ArgumentList copy;
     ArgumentList::WriteCursor writer = copy.beginWrite();
     {
         ArgumentList::WriteCursor writer2 = copy.beginWrite();
-        assert(!writer2.isValid());
+        TEST(!writer2.isValid());
     }
     {
         ArgumentList::ReadCursor reader3 = copy.beginRead();
-        assert(!reader3.isValid());
+        TEST(!reader3.isValid());
     }
 
     bool isDone = false;
     while (!isDone) {
-        assert(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != ArgumentList::InvalidData);
 
         switch(reader.state()) {
         case ArgumentList::Finished:
@@ -40,7 +41,7 @@ void test_roundtrip()
             isDone = true;
             break;
         case ArgumentList::NeedMoreData:
-            assert(false);
+            TEST(false);
             break;
         case ArgumentList::BeginStruct:
             reader.beginStruct();
@@ -130,7 +131,7 @@ void test_roundtrip()
             writer.writeUnixFd(reader.readUnixFd());
             break;
         default:
-            assert(false);
+            TEST(false);
             break;
         }
     }
@@ -140,4 +141,5 @@ void test_roundtrip()
 
 int main(int argc, char *argv[])
 {
+    test_roundtrip();
 }
