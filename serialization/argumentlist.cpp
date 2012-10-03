@@ -232,7 +232,7 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
 }
 
 //static
-bool ArgumentList::isSignatureValid(array signature, bool isVariantSignature)
+bool ArgumentList::isSignatureValid(array signature, SignatureType type)
 {
     Nesting nest;
     if (signature.length < 1 || signature.length > maxSignatureLength) {
@@ -242,7 +242,7 @@ bool ArgumentList::isSignatureValid(array signature, bool isVariantSignature)
         return false; // not null-terminated
     }
     signature.length -= 1; // ignore the null-termination
-    if (isVariantSignature) {
+    if (type == VariantSignature) {
         if (signature.length && !parseSingleCompleteType(&signature, &nest)) {
             return false;
         }
@@ -642,7 +642,7 @@ void ArgumentList::ReadCursor::advanceState()
             return;
         }
 
-        if (!ArgumentList::isSignatureValid(signature, /* isVariantSignature = */ true)) {
+        if (!ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature)) {
             m_state = InvalidData;
             return;
         }

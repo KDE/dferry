@@ -28,9 +28,14 @@ public:
     ReadCursor beginRead();
     WriteCursor beginWrite();
 
+    enum SignatureType {
+        MethodSignature = 0,
+        VariantSignature
+    };
+
     static bool isStringValid(array string);
     static bool isObjectPathValid(array string);
-    static bool isSignatureValid(array signature, bool isVariantSignature = false);
+    static bool isSignatureValid(array signature, SignatureType type = MethodSignature);
 
     static const int maxSignatureLength = 256; //including trailing null
 
