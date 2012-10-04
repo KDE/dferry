@@ -255,7 +255,6 @@ static void doRoundtrip(ArgumentList arg)
 
 void test_roundtrip()
 {
-    // TODO compare the binary output of writer with the binary input of reader (or something)
     doRoundtrip(ArgumentList(cstring(""), array()));
 }
 
