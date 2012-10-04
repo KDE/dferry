@@ -50,6 +50,17 @@ void test_stringValidation()
         TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
     }
     {
+        cstring emptyStruct("()");
+        TEST(!ArgumentList::isSignatureValid(emptyStruct));
+        TEST(!ArgumentList::isSignatureValid(emptyStruct, ArgumentList::VariantSignature));
+        cstring emptyStruct2("(())");
+        TEST(!ArgumentList::isSignatureValid(emptyStruct2));
+        TEST(!ArgumentList::isSignatureValid(emptyStruct2, ArgumentList::VariantSignature));
+        cstring miniStruct("(t)");
+        TEST(ArgumentList::isSignatureValid(miniStruct));
+        TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
+    }
+    {
         cstring nullStr;
         cstring emptyStr("");
         TEST(!ArgumentList::isObjectPathValid(nullStr));
