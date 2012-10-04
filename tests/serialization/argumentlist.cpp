@@ -33,6 +33,9 @@ void test_stringValidation()
         cstring list("iqb");
         TEST(ArgumentList::isSignatureValid(list));
         TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
+        cstring list2("aii");
+        TEST(ArgumentList::isSignatureValid(list2));
+        TEST(!ArgumentList::isSignatureValid(list2, ArgumentList::VariantSignature));
     }
     {
         cstring simpleArray("ai");
