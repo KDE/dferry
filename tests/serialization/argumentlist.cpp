@@ -256,6 +256,10 @@ static void doRoundtrip(ArgumentList arg)
 void test_roundtrip()
 {
     doRoundtrip(ArgumentList(cstring(""), array()));
+    {
+        byte data[4] = { 1, 2, 3, 4 }; // no idea which integer that works out to :)
+        doRoundtrip(ArgumentList(cstring("i"), array(data, 4)));
+    }
 }
 
 int main(int argc, char *argv[])
