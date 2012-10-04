@@ -488,9 +488,6 @@ void ArgumentList::ReadCursor::advanceState()
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
 
-    std::cerr << "m_signaturePosition:" << m_signaturePosition
-              << " m_signature.length:" << m_signature.length << '\n';
-
     if (m_state == InvalidData) { // nonrecoverable...
         return;
     }
