@@ -183,6 +183,8 @@ void test_roundtrip()
         }
     }
 
+    writer.finish();
+
     // TODO compare the binary output of writer with the binary input of reader
 }
 
