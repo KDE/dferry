@@ -10,8 +10,8 @@ using namespace std;
 void test_stringValidation()
 {
     {
-        array emptyWithNull("");
-        array emptyWithoutNull;
+        cstring emptyWithNull("");
+        cstring emptyWithoutNull;
 
         TEST(!ArgumentList::isStringValid(emptyWithoutNull));
         TEST(ArgumentList::isStringValid(emptyWithNull));
@@ -25,27 +25,27 @@ void test_stringValidation()
         TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
     }
     {
-        array trivial("i");
+        cstring trivial("i");
         TEST(ArgumentList::isSignatureValid(trivial));
         TEST(ArgumentList::isSignatureValid(trivial, ArgumentList::VariantSignature));
     }
     {
-        array list("iqb");
+        cstring list("iqb");
         TEST(ArgumentList::isSignatureValid(list));
         TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
     }
     {
-        array simpleArray("ai");
+        cstring simpleArray("ai");
         TEST(ArgumentList::isSignatureValid(simpleArray));
         TEST(ArgumentList::isSignatureValid(simpleArray, ArgumentList::VariantSignature));
     }
     {
-        array messyArray("a(iaia{ia{iv}})");
+        cstring messyArray("a(iaia{ia{iv}})");
         TEST(ArgumentList::isSignatureValid(messyArray));
         TEST(ArgumentList::isSignatureValid(messyArray, ArgumentList::VariantSignature));
     }
     {
-        array dictFail("a{vi}");
+        cstring dictFail("a{vi}");
         TEST(!ArgumentList::isSignatureValid(dictFail));
         TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
     }
@@ -56,7 +56,7 @@ void test_stringValidation()
 
 void test_roundtrip()
 {
-    array signature(""); // TODO
+    cstring signature(""); // TODO
     array data; // TODO
 
     ArgumentList arg(signature, data);

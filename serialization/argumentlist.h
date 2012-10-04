@@ -11,7 +11,7 @@ class ArgumentList
 public:
     ArgumentList(); // constructs an empty argument list
      // constructs an argument list to deserialize data in @p data with signature @p signature
-    ArgumentList(array signature, array data, bool isByteSwapped = false);
+    ArgumentList(cstring signature, array data, bool isByteSwapped = false);
 
     // valid when no write cursor is open on the instance
 
@@ -33,11 +33,11 @@ public:
         VariantSignature
     };
 
-    static bool isStringValid(array string);
-    static bool isObjectPathValid(array string);
-    static bool isSignatureValid(array signature, SignatureType type = MethodSignature);
+    static bool isStringValid(cstring string);
+    static bool isObjectPathValid(cstring objectPath);
+    static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
 
-    static const int maxSignatureLength = 256; //including trailing null
+    static const int maxSignatureLength = 255;
 
     enum CursorState {
         // "exceptional" states
@@ -81,8 +81,8 @@ public:
     };
 
 private:
-    struct podArray // Same as array but without ctor.
-                    // Can't put the array type into a union because it has a constructor :/
+    struct podCstring // Same as cstring but without ctor.
+                       // Can't put the cstring type into a union because it has a constructor :/
     {
         byte *begin;
         uint32 length;
@@ -143,10 +143,9 @@ public:
         int64 readInt64() { int64 ret = m_Int64; advanceState(); return ret; }
         uint64 readUint64() { uint64 ret = m_Uint64; advanceState(); return ret; }
         double readDouble() { byte ret = m_Double; advanceState(); return ret; }
-        // ### note that the terminating nul is counted in array.length!
-        array readString() { array ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        array readObjectPath() { array ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        array readSignature() { array ret(m_String.begin, m_String.length); return ret; }
+        cstring readString() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
+        cstring readObjectPath() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
+        cstring readSignature() { cstring ret(m_String.begin, m_String.length); return ret; }
         uint32 readUnixFd() { uint32 ret = m_Uint32; advanceState(); return ret; }
 
     private:
@@ -167,7 +166,7 @@ public:
 
         struct VariantInfo
         {
-            podArray prevSignature;       // a variant switches the currently parsed signature, so we
+            podCstring prevSignature;       // a variant switches the currently parsed signature, so we
             uint32 prevSignaturePosition; // need to store the old signature and parse position.
         };
 
@@ -185,7 +184,7 @@ public:
         ArgumentList *m_argList;
         CursorState m_state;
         Nesting *m_nesting;
-        array m_signature;
+        cstring m_signature;
         array m_data;
         int m_signaturePosition;
         int m_dataPosition;
@@ -206,7 +205,7 @@ public:
             int64 m_Int64;
             uint64 m_Uint64;
             double m_Double;
-            podArray m_String; // also for ObjectPath and Signature
+            podCstring m_String; // also for ObjectPath and Signature
         };
     };
 
@@ -247,9 +246,9 @@ public:
         void writeInt64(int64 i);
         void writeUint64(uint64 i);
         void writeDouble(double d);
-        void writeString(array a);
-        void writeObjectPath(array a);
-        void writeSignature(array a);
+        void writeString(cstring string);
+        void writeObjectPath(cstring objectPath);
+        void writeSignature(cstring signature);
         void writeUnixFd(uint32 fd);
 
     private:
@@ -270,7 +269,7 @@ public:
 
         struct VariantInfo
         {
-            podArray prevSignature;       // a variant switches the currently parsed signature, so we
+            podCstring prevSignature;       // a variant switches the currently parsed signature, so we
             uint32 prevSignaturePosition; // need to store the old signature and parse position.
             uint32 signatureIndex; // index in m_variantSignatures
         };
@@ -321,12 +320,12 @@ public:
         };
 
         std::vector<ElementInfo> m_elements;
-        std::vector<array> m_variantSignatures; // TODO; array might not work when reallocating data
+        std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
 
         ArgumentList *m_argList;
         CursorState m_state;
         Nesting *m_nesting;
-        array m_signature;
+        cstring m_signature;
         array m_data;
         int m_signaturePosition;
         int m_dataPosition;
@@ -344,7 +343,7 @@ public:
             int64 m_Int64;
             uint64 m_Uint64;
             double m_Double;
-            podArray m_String; // also for ObjectPath and Signature
+            podCstring m_String; // also for ObjectPath and Signature
         };
     };
 
@@ -352,6 +351,6 @@ private:
     int m_isByteSwapped;
     int m_readCursorCount;
     bool m_hasWriteCursor;
-    array m_signature;
+    cstring m_signature;
     array m_data;
 };

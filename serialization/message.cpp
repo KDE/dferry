@@ -66,8 +66,7 @@ Message::Message(array a)
     m_serial = basic::readUint32(p + sizeof(uint32), m_isByteSwapped);
 
     // prepare and begin variable header parsing
-    static const char *sig = "a(yv)";
-    array varHeadersSig(sig, strlen(sig));
+    cstring varHeadersSig("a(yv)");
     array headerData(a.begin + fixedHeaderLength, a.length - fixedHeaderLength);
     m_headerParser = new ArgumentList(varHeadersSig, headerData, m_isByteSwapped);
 

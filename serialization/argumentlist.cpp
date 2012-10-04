@@ -4,8 +4,8 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <cstdio>
 #include <cstring>
+#include <iostream>
 
 static int align(uint32 index, uint32 alignment)
 {
@@ -41,7 +41,7 @@ ArgumentList::ArgumentList()
 {
 }
 
-ArgumentList::ArgumentList(array signature, array data, bool isByteSwapped)
+ArgumentList::ArgumentList(cstring signature, array data, bool isByteSwapped)
    : m_isByteSwapped(isByteSwapped),
      m_readCursorCount(0),
      m_hasWriteCursor(false),
@@ -70,19 +70,19 @@ ArgumentList::WriteCursor ArgumentList::beginWrite()
     return WriteCursor(thisInstance);
 }
 
-static void chopFirst(array *a)
+static void chopFirst(cstring *s)
 {
-    a->begin++;
-    a->length--;
+    s->begin++;
+    s->length--;
 }
 
 // static
-bool ArgumentList::isStringValid(array string)
+bool ArgumentList::isStringValid(cstring string)
 {
-    if (!string.length || string.begin[string.length - 1] != 0) {
+    if (!string.begin || string.begin[string.length] != 0) {
         return false;
     }
-    for (int i = 0; i < string.length - 1; i++) {
+    for (int i = 0; i < string.length; i++) {
         if (string.begin[i] == 0) {
             return false;
         }
@@ -96,7 +96,7 @@ static bool isObjectNameLetter(byte b)
 }
 
 // static
-bool ArgumentList::isObjectPathValid(array string)
+bool ArgumentList::isObjectPathValid(cstring string)
 {
     if (string.length < 2 || string.begin[string.length - 1] != 0) {
         return false;
@@ -124,13 +124,14 @@ bool ArgumentList::isObjectPathValid(array string)
     return lastLetter != '/';
 }
 
-static bool parseBasicType(array *a)
+static bool parseBasicType(cstring *s)
 {
-    assert(a->length >= 0);
-    if (a->length < 1) {
+    // ### not checking if zero-terminated
+    assert(s->begin);
+    if (s->length < 0) {
         return false;
     }
-    switch (*a->begin) {
+    switch (*s->begin) {
     case 'y':
     case 'b':
     case 'n':
@@ -144,21 +145,19 @@ static bool parseBasicType(array *a)
     case 'o':
     case 'g':
     case 'h':
-        chopFirst(a);
+        chopFirst(s);
         return true;
     default:
         return false;
     }
 }
 
-static bool parseSingleCompleteType(array *a, Nesting *nest)
+static bool parseSingleCompleteType(cstring *s, Nesting *nest)
 {
-    assert(a->length >= 0);
-    if (a->length < 1) {
-        return false;
-    }
+    assert(s->begin);
+    // ### not cheching if zero-terminated
 
-    switch (*a->begin) {
+    switch (*s->begin) {
     case 'y':
     case 'b':
     case 'n':
@@ -172,55 +171,55 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
     case 'o':
     case 'g':
     case 'h':
-        chopFirst(a);
+        chopFirst(s);
         return true;
     case 'v':
         if (!nest->beginVariant()) {
             return false;
         }
-        chopFirst(a);
+        chopFirst(s);
         nest->endVariant();
         return true;
     case '(': {
         if (!nest->beginParen()) {
             return false;
         }
-        chopFirst(a);
+        chopFirst(s);
         bool isEmptyStruct = true;
-        while (parseSingleCompleteType(a, nest)) {
+        while (parseSingleCompleteType(s, nest)) {
             isEmptyStruct = false;
         }
-        if (!a->length || *a->begin != ')' || isEmptyStruct) {
+        if (!s->length || *s->begin != ')' || isEmptyStruct) {
             return false;
         }
-        chopFirst(a);
+        chopFirst(s);
         nest->endParen();
         return true; }
     case 'a':
         if (!nest->beginArray()) {
             return false;
         }
-        chopFirst(a);
-        if (*a->begin == '{') { // an "array of dict entries", i.e. a dict
-            if (!nest->beginParen() || a->length < 4) {
+        chopFirst(s);
+        if (*s->begin == '{') { // an "array of dict entries", i.e. a dict
+            if (!nest->beginParen() || s->length < 4) {
                 return false;
             }
-            chopFirst(a);
+            chopFirst(s);
             // key must be a basic type
-            if (!parseBasicType(a)) {
+            if (!parseBasicType(s)) {
                 return false;
             }
             // value can be any type
-            if (!parseSingleCompleteType(a, nest)) {
+            if (!parseSingleCompleteType(s, nest)) {
                 return false;
             }
-            if (!a->length || *a->begin != '}') {
+            if (!s->length || *s->begin != '}') {
                 return false;
             }
-            chopFirst(a);
+            chopFirst(s);
             nest->endParen();
         } else { // regular array
-            if (!parseSingleCompleteType(a, nest)) {
+            if (!parseSingleCompleteType(s, nest)) {
                 return false;
             }
         }
@@ -232,16 +231,12 @@ static bool parseSingleCompleteType(array *a, Nesting *nest)
 }
 
 //static
-bool ArgumentList::isSignatureValid(array signature, SignatureType type)
+bool ArgumentList::isSignatureValid(cstring signature, SignatureType type)
 {
     Nesting nest;
-    if (signature.length < 1 || signature.length > maxSignatureLength) {
+    if (!signature.begin || signature.begin[signature.length] != 0) {
         return false;
     }
-    if (signature.begin[signature.length - 1] != 0) {
-        return false; // not null-terminated
-    }
-    signature.length -= 1; // ignore the null-termination
     if (type == VariantSignature) {
         if (signature.length && !parseSingleCompleteType(&signature, &nest)) {
             return false;
@@ -469,11 +464,11 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
     m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = ArgumentList::isStringValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isStringValid(cstring(m_String.begin, m_String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = ArgumentList::isObjectPathValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isObjectPathValid(cstring(m_String.begin, m_String.length));
     } else if (m_state == Signature) {
-        isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isSignatureValid(cstring(m_String.begin, m_String.length));
     }
     if (!isValidString) {
         return InvalidData;
@@ -492,6 +487,9 @@ void ArgumentList::ReadCursor::advanceState()
     // for aggregate nesting which cannot be checked using only one signature, due to variants.
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
+
+    std::cerr << "m_signaturePosition:" << m_signaturePosition
+              << " m_signature.length:" << m_signature.length << '\n';
 
     if (m_state == InvalidData) { // nonrecoverable...
         return;
@@ -513,6 +511,7 @@ void ArgumentList::ReadCursor::advanceState()
     // - argument list: aggregate stack is empty and at end of type signature
 
     // check if we are about to close any aggregate or even the whole argument list
+
 
     if (m_aggregateStack.empty()) {
         if (m_signaturePosition + 1 >= m_signature.length) {
@@ -562,7 +561,6 @@ void ArgumentList::ReadCursor::advanceState()
     bool isPrimitiveType = false;
     bool isStringType = false;
 
-    m_signaturePosition++;
     getTypeInfo(m_signature.begin[m_signaturePosition],
                 &m_state, &alignment, &isPrimitiveType, &isStringType);
 
@@ -624,10 +622,10 @@ void ArgumentList::ReadCursor::advanceState()
         if (m_dataPosition >= m_data.length) {
             goto out_needMoreData;
         }
-        array signature;
+        cstring signature;
         if (m_zeroLengthArrayNesting) {
             static const char *emptyString = "";
-            signature = array(emptyString, 1);
+            signature = cstring(emptyString, 1);
         } else {
             signature.length = m_data.begin[m_dataPosition++] + 1;
             signature.begin = m_data.begin + m_dataPosition;
@@ -747,7 +745,7 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
     if (m_zeroLengthArrayNesting) {
         if (!isEmpty) {
             // need to move m_signaturePosition to the end of the array signature or it won't happen
-            array temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
+            cstring temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
             // fix up nesting before and after we re-parse the beginning of the array signature
             if (isDict) {
                 m_nesting->endParen();
@@ -950,11 +948,11 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
 
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = ArgumentList::isStringValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isStringValid(cstring(m_String.begin, m_String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = ArgumentList::isObjectPathValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isObjectPathValid(cstring(m_String.begin, m_String.length));
     } else if (m_state == Signature) {
-        isValidString = ArgumentList::isSignatureValid(array(m_String.begin, m_String.length));
+        isValidString = ArgumentList::isSignatureValid(cstring(m_String.begin, m_String.length));
     }
     if (!isValidString) {
         return InvalidData;
@@ -1106,9 +1104,9 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
         // arrange for finish() to take a signature from m_variantSignatures
         m_elements.push_back(ElementInfo(1, ElementInfo::VariantSignature));
-        array ar(reinterpret_cast<byte *>(malloc(maxSignatureLength)), 0);
-        m_variantSignatures.push_back(ar);
-        m_signature = ar;
+        cstring str(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0);
+        m_variantSignatures.push_back(str);
+        m_signature = str;
         m_signaturePosition = 0;
         break; }
     case EndVariant: {
@@ -1320,12 +1318,12 @@ void ArgumentList::WriteCursor::finish()
                 lengthFieldStack.pop_back();
             } else { // ei.size == ElementInfo::VariantSignature
                 // fill in signature (should already include length prefix and trailing null)
-                array ar = m_variantSignatures[variantSignatureIndex++];
+                cstring signature = m_variantSignatures[variantSignatureIndex++];
                 bufferPos = align(bufferPos, ei.alignment());
                 m_dataPosition = align(m_dataPosition, ei.alignment());
-                memcpy(buffer + bufferPos, ar.begin, ar.length);
-                bufferPos += ar.length;
-                free(ar.begin);
+                memcpy(buffer + bufferPos, signature.begin, signature.length + 1);
+                bufferPos += signature.length + 1;
+                free(signature.begin);
             }
         }
     }
@@ -1399,24 +1397,24 @@ void ArgumentList::WriteCursor::writeDouble(double d)
     advanceState(array("d", strlen("d")), Double);
 }
 
-void ArgumentList::WriteCursor::writeString(array a)
+void ArgumentList::WriteCursor::writeString(cstring string)
 {
-    m_String.begin = a.begin;
-    m_String.length = a.length;
+    m_String.begin = string.begin;
+    m_String.length = string.length;
     advanceState(array("s", strlen("s")), String);
 }
 
-void ArgumentList::WriteCursor::writeObjectPath(array a)
+void ArgumentList::WriteCursor::writeObjectPath(cstring objectPath)
 {
-    m_String.begin = a.begin;
-    m_String.length = a.length;
+    m_String.begin = objectPath.begin;
+    m_String.length = objectPath.length;
     advanceState(array("o", strlen("o")), ObjectPath);
 }
 
-void ArgumentList::WriteCursor::writeSignature(array a)
+void ArgumentList::WriteCursor::writeSignature(cstring signature)
 {
-    m_String.begin = a.begin;
-    m_String.length = a.length;
+    m_String.begin = signature.begin;
+    m_String.length = signature.length;
     advanceState(array("g", strlen("g")), Signature);
 }
 

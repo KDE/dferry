@@ -47,7 +47,7 @@ private:
     uint32 m_serial;
 
     ArgumentList *m_headerParser;
-    std::map<byte, array> m_stringHeaders;
+    std::map<byte, cstring> m_stringHeaders;
     std::map<byte, uint32> m_intHeaders;
 };
 
