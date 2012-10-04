@@ -62,6 +62,12 @@ void test_stringValidation()
         cstring miniStruct("(t)");
         TEST(ArgumentList::isSignatureValid(miniStruct));
         TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
+        cstring badStruct("(()");
+        TEST(!ArgumentList::isSignatureValid(badStruct));
+        TEST(!ArgumentList::isSignatureValid(badStruct, ArgumentList::VariantSignature));
+        cstring badStruct2("())");
+        TEST(!ArgumentList::isSignatureValid(badStruct2));
+        TEST(!ArgumentList::isSignatureValid(badStruct2, ArgumentList::VariantSignature));
     }
     {
         cstring nullStr;
@@ -76,8 +82,21 @@ void test_stringValidation()
         TEST(!ArgumentList::isObjectPathValid(cstring("/abc//def")));
         TEST(ArgumentList::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
     }
+    {
+        cstring maxStruct("((((((((((((((((((((((((((((((((i"
+                          "))))))))))))))))))))))))))))))))");
+        TEST(ArgumentList::isSignatureValid(maxStruct));
+        TEST(ArgumentList::isSignatureValid(maxStruct, ArgumentList::VariantSignature));
+        cstring struct33("(((((((((((((((((((((((((((((((((i" // too much nesting by one
+                         ")))))))))))))))))))))))))))))))))");
 
-    // TODO test nesting limits in signatures (might be best to generate strings)
+        cstring maxArray("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
+        TEST(ArgumentList::isSignatureValid(maxArray));
+        TEST(ArgumentList::isSignatureValid(maxArray, ArgumentList::VariantSignature));
+        cstring array33("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
+        TEST(!ArgumentList::isSignatureValid(array33));
+        TEST(!ArgumentList::isSignatureValid(array33, ArgumentList::VariantSignature));
+    }
 }
 
 void test_roundtrip()
