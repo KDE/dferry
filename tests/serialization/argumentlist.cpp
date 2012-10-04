@@ -49,9 +49,21 @@ void test_stringValidation()
         TEST(!ArgumentList::isSignatureValid(dictFail));
         TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
     }
-    // TODO test nesting limits in signatures (might be best to generate strings)
+    {
+        cstring nullStr;
+        cstring emptyStr("");
+        TEST(!ArgumentList::isObjectPathValid(nullStr));
+        TEST(!ArgumentList::isObjectPathValid(emptyStr));
+        TEST(ArgumentList::isObjectPathValid(cstring("/")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc/")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/abc")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/abc/def")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc&def")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc//def")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
+    }
 
-    // TODO: object path tests
+    // TODO test nesting limits in signatures (might be best to generate strings)
 }
 
 void test_roundtrip()

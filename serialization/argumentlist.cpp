@@ -96,20 +96,20 @@ static bool isObjectNameLetter(byte b)
 }
 
 // static
-bool ArgumentList::isObjectPathValid(cstring string)
+bool ArgumentList::isObjectPathValid(cstring path)
 {
-    if (string.length < 2 || string.begin[string.length - 1] != 0) {
+    if (!path.begin || path.begin[path.length] != 0) {
         return false;
     }
-    byte lastLetter = string.begin[0];
+    byte lastLetter = path.begin[0];
     if (lastLetter != '/') {
         return false;
     }
-    if (string.length == 2) {
-        return true; // "/\0" special case
+    if (path.length == 1) {
+        return true; // "/" special case
     }
-    for (int i = 1; i < string.length; i++) {
-        byte currentLetter = string.begin[i];
+    for (int i = 1; i < path.length; i++) {
+        byte currentLetter = path.begin[i];
         if (lastLetter == '/') {
             if (!isObjectNameLetter(currentLetter)) {
                 return false;
