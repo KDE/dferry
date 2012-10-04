@@ -879,7 +879,9 @@ ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
    : m_argList(al),
      m_state(AnyData),
      m_nesting(new Nesting),
+     m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
      m_signaturePosition(0),
+     m_data(reinterpret_cast<byte *>(malloc(16384)), 0),
      m_dataPosition(0),
      m_zeroLengthArrayNesting(0)
 {
@@ -998,6 +1000,8 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     // - array: first iteration: write type and data, or if empty just write type
     //   higher iterations: check type and write data
     // - variant: write type (to special variant signature storage) and data; check type is single complete
+
+    // TODO extend m_data before it overflows!
 
     if (m_state == InvalidData) {
         return;
@@ -1274,9 +1278,10 @@ void ArgumentList::WriteCursor::finish()
     // - "pack" or expand the message, depending on how variant support is done
     //   (and resize the data buffer to the minimum required size)
     // - resize the signature to the minimum required size
-    m_dataPosition = 0;
+    assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
+    m_signature.begin[m_signaturePosition] = '\0';
 
-    // TODO add trailing null to signature
+    m_dataPosition = 0;
 
     byte *buffer = reinterpret_cast<byte *>(malloc(16384)); // TODO dynamic resize
     int bufferPos = 0;
@@ -1328,6 +1333,9 @@ void ArgumentList::WriteCursor::finish()
     assert(lengthFieldStack.empty());
     m_elements.clear();
     m_variantSignatures.clear();
+
+    m_argList->m_signature = m_signature;
+    m_argList->m_data = array(buffer, bufferPos);
 }
 
 std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack() const

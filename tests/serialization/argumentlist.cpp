@@ -7,7 +7,7 @@
 
 using namespace std;
 
-void test_stringValidation()
+static void test_stringValidation()
 {
     {
         cstring emptyWithNull("");
@@ -99,12 +99,26 @@ void test_stringValidation()
     }
 }
 
-void test_roundtrip()
+static bool arraysEqual(array a1, array a2)
 {
-    cstring signature(""); // TODO
-    array data; // TODO
+    if (a1.length != a2.length) {
+        return false;
+    }
+    for (int i = 0; i < a1.length; i++) {
+        if (a1.begin[i] != a2.begin[i]) {
+            return false;
+        }
+    }
+    return true;
+}
 
-    ArgumentList arg(signature, data);
+static bool stringsEqual(cstring s1, cstring s2)
+{
+    return arraysEqual(array(s1.begin, s1.length), array(s2.begin, s2.length));
+}
+
+static void doRoundtrip(ArgumentList arg)
+{
     ArgumentList::ReadCursor reader = arg.beginRead();
     {
         ArgumentList::ReadCursor reader2 = arg.beginRead();
@@ -227,8 +241,20 @@ void test_roundtrip()
             break;
         }
     }
+    cstring argSignature = arg.signature();
+    cstring copySignature = copy.signature();
+    TEST(ArgumentList::isSignatureValid(copySignature));
+    TEST(stringsEqual(argSignature, copySignature));
 
-    // TODO compare the binary output of writer with the binary input of reader
+    array argData = arg.data();
+    array copyData = copy.data();
+    TEST(arraysEqual(argData, copyData));
+}
+
+void test_roundtrip()
+{
+    // TODO compare the binary output of writer with the binary input of reader (or something)
+    doRoundtrip(ArgumentList(cstring(""), array()));
 }
 
 int main(int argc, char *argv[])

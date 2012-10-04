@@ -23,6 +23,9 @@ public:
     // returns true when a write cursor is open, false otherwise
     bool isWriting() const { return m_hasWriteCursor; }
 
+    cstring signature() const { return m_signature; }
+    array data() const { return m_data; }
+
     class ReadCursor;
     class WriteCursor;
     ReadCursor beginRead();
