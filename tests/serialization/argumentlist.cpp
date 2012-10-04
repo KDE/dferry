@@ -89,6 +89,8 @@ static void test_stringValidation()
         TEST(ArgumentList::isSignatureValid(maxStruct, ArgumentList::VariantSignature));
         cstring struct33("(((((((((((((((((((((((((((((((((i" // too much nesting by one
                          ")))))))))))))))))))))))))))))))))");
+        TEST(!ArgumentList::isSignatureValid(struct33));
+        TEST(!ArgumentList::isSignatureValid(struct33, ArgumentList::VariantSignature));
 
         cstring maxArray("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
         TEST(ArgumentList::isSignatureValid(maxArray));
