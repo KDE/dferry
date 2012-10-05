@@ -308,6 +308,12 @@ void test_nesting()
     }
 }
 
+struct LengthPrefixedData
+{
+    uint32 length;
+    byte data[256];
+};
+
 void test_roundtrip()
 {
     doRoundtrip(ArgumentList(cstring(""), array()));
@@ -331,12 +337,7 @@ void test_roundtrip()
         doRoundtrip(ArgumentList(cstring("ty"), array(data, 9)));
     }
     {
-        struct arrayData
-        {
-            uint32 length;
-            byte data[64];
-        };
-        arrayData testArray = {0};
+        LengthPrefixedData testArray = {0};
         for (int i = 0; i < 64; i++) {
             testArray.data[i] = i;
         }
@@ -356,6 +357,16 @@ void test_roundtrip()
         testArray.data[2] = 0; testArray.data[3] = 0;
         testArray.length = 56;
         doRoundtrip(ArgumentList(cstring("ad"), array(testData, 64)));
+    }
+    {
+        LengthPrefixedData testString;
+        for (int i = 0; i < 200; i++) {
+            testString.data[i] = 'A' + i % 53; // stay in the 7-bit ASCII range
+        }
+        testString.data[200] = '\0';
+        testString.length = 200;
+        byte *testData = reinterpret_cast<byte *>(&testString);
+        doRoundtrip(ArgumentList(cstring("s"), array(testData, 205)));
     }
 }
 

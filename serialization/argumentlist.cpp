@@ -493,7 +493,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadPrimitiveType()
 
 ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefixSize)
 {
-    uint32 stringLength = 1; // terminating nul
+    uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
         stringLength += m_data.begin[m_dataPosition];
     } else {
@@ -505,7 +505,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
         return NeedMoreData;
     }
     m_String.begin = m_data.begin + m_dataPosition;
-    m_String.length = stringLength;
+    m_String.length = stringLength - 1; // terminating null is not counted
     m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == String) {
@@ -1017,11 +1017,11 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
         basic::writeUint32(m_data.begin + m_dataPosition, m_String.length);
     }
     m_dataPosition += lengthPrefixSize;
-    memcpy(m_data.begin + m_dataPosition, m_String.begin, m_String.length);
-    m_dataPosition += m_String.length;
+    memcpy(m_data.begin + m_dataPosition, m_String.begin, m_String.length + 1);
+    m_dataPosition += m_String.length + 1;
 
     m_elements.push_back(ElementInfo(lengthPrefixSize, lengthPrefixSize));
-    for (uint32 l = m_String.length; l; ) {
+    for (uint32 l = m_String.length + 1; l; ) {
         uint32 chunkSize = std::min(l, uint32(ElementInfo::LargestSize));
         m_elements.push_back(ElementInfo(1, chunkSize));
         l -= chunkSize;
