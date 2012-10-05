@@ -273,9 +273,23 @@ void test_roundtrip()
 {
     doRoundtrip(ArgumentList(cstring(""), array()));
     {
-        byte data[4] = { 1, 2, 3, 4 }; // no idea which integer that works out to :)
+        byte data[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
         doRoundtrip(ArgumentList(cstring("i"), array(data, 4)));
         doRoundtrip(ArgumentList(cstring("yyyy"), array(data, 4)));
+        doRoundtrip(ArgumentList(cstring("iy"), array(data, 5)));
+        doRoundtrip(ArgumentList(cstring("iiy"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("nquy"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("unqy"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("nqy"), array(data, 5)));
+        doRoundtrip(ArgumentList(cstring("qny"), array(data, 5)));
+        doRoundtrip(ArgumentList(cstring("yyny"), array(data, 5)));
+        doRoundtrip(ArgumentList(cstring("qyyy"), array(data, 5)));
+        doRoundtrip(ArgumentList(cstring("d"), array(data, 8)));
+        doRoundtrip(ArgumentList(cstring("dy"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("x"), array(data, 8)));
+        doRoundtrip(ArgumentList(cstring("xy"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("t"), array(data, 8)));
+        doRoundtrip(ArgumentList(cstring("ty"), array(data, 9)));
     }
 }
 

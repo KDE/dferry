@@ -146,7 +146,7 @@ public:
         uint32 readUint32() { uint32 ret = m_Uint32; advanceState(); return ret; }
         int64 readInt64() { int64 ret = m_Int64; advanceState(); return ret; }
         uint64 readUint64() { uint64 ret = m_Uint64; advanceState(); return ret; }
-        double readDouble() { byte ret = m_Double; advanceState(); return ret; }
+        double readDouble() { double ret = m_Double; advanceState(); return ret; }
         cstring readString() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
         cstring readObjectPath() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
         cstring readSignature() { cstring ret(m_String.begin, m_String.length); return ret; }
