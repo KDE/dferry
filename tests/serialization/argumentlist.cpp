@@ -119,7 +119,16 @@ static bool stringsEqual(cstring s1, cstring s2)
     return arraysEqual(array(s1.begin, s1.length), array(s2.begin, s2.length));
 }
 
-static void doRoundtrip(ArgumentList arg)
+static void printArray(array a)
+{
+    cout << "Array: ";
+    for (int i = 0; i < a.length; i++) {
+        cout << int(a.begin[i]);
+    }
+    cout << '\n';
+}
+
+static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
 {
     ArgumentList::ReadCursor reader = arg.beginRead();
     {
@@ -141,7 +150,9 @@ static void doRoundtrip(ArgumentList arg)
     bool isDone = false;
     while (!isDone) {
         TEST(writer.state() != ArgumentList::InvalidData);
-        cerr << "Reader state: " << reader.state() << endl;
+        if (debugPrint) {
+            cerr << "Reader state: " << reader.stateString().begin << endl;
+        }
 
         switch(reader.state()) {
         case ArgumentList::Finished:
@@ -250,6 +261,11 @@ static void doRoundtrip(ArgumentList arg)
 
     array argData = arg.data();
     array copyData = copy.data();
+    TEST(argData.length == copyData.length);
+    if (debugPrint && !arraysEqual(argData, copyData)) {
+        printArray(argData);
+        printArray(copyData);
+    }
     TEST(arraysEqual(argData, copyData));
 }
 
@@ -259,6 +275,7 @@ void test_roundtrip()
     {
         byte data[4] = { 1, 2, 3, 4 }; // no idea which integer that works out to :)
         doRoundtrip(ArgumentList(cstring("i"), array(data, 4)));
+        doRoundtrip(ArgumentList(cstring("yyyy"), array(data, 4)));
     }
 }
 

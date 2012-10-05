@@ -987,6 +987,7 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32
         return InvalidData;
     }
 
+    m_dataPosition += alignAndSize;
     m_elements.push_back(ElementInfo(alignAndSize, alignAndSize));
     return m_state;
 }
@@ -1106,6 +1107,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         for (int i = 0; i < signatureFragment.length; i++) {
             m_signature.begin[m_signaturePosition++] = signatureFragment.begin[i];
         }
+        m_signature.length += signatureFragment.length;
     } else {
         // signature must match first iteration (of an array/dict)
         VALID_IF(m_signaturePosition + signatureFragment.length <= m_signature.length);
