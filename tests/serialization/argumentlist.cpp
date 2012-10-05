@@ -368,6 +368,17 @@ void test_roundtrip()
         byte *testData = reinterpret_cast<byte *>(&testString);
         doRoundtrip(ArgumentList(cstring("s"), array(testData, 205)));
     }
+    {
+        LengthPrefixedData testDict;
+        testDict.length = 2;
+        testDict.data[0] = 0; testDict.data[1] = 0; // zero padding; dict entries are always 8-aligned.
+        testDict.data[2] = 0; testDict.data[3] = 0;
+
+        testDict.data[4] = 23;
+        testDict.data[6] = 42;
+        byte *testData = reinterpret_cast<byte *>(&testDict);
+        doRoundtrip(ArgumentList(cstring("a{yy}"), array(testData, 10)));
+    }
 }
 
 int main(int argc, char *argv[])

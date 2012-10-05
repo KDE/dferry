@@ -1204,7 +1204,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     case EndArray: {
         // TODO check that there is at least one type inside the array and that we're at the end of
         //      the current array iteration
-        const bool isDict = m_state == BeginDict;
+        const bool isDict = m_state == EndDict;
         if (isDict) {
             m_nesting->endParen();
         }
