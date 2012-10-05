@@ -509,9 +509,10 @@ void ArgumentList::ReadCursor::advanceState()
 
     // check if we are about to close any aggregate or even the whole argument list
 
+    m_signaturePosition++;
 
     if (m_aggregateStack.empty()) {
-        if (m_signaturePosition + 1 >= m_signature.length) {
+        if (m_signaturePosition >= m_signature.length) {
             m_state = Finished;
             return;
         }
@@ -521,12 +522,12 @@ void ArgumentList::ReadCursor::advanceState()
         case BeginStruct:
             break; // handled later by getTypeInfo recognizing ')' -> EndStruct
         case BeginVariant:
-            if (m_signaturePosition + 1 >= m_signature.length) {
+            if (m_signaturePosition >= m_signature.length) {
                 m_state = EndVariant;
                 m_nesting->endVariant();
                 m_signature.begin = aggregateInfo.var.prevSignature.begin;
                 m_signature.length = aggregateInfo.var.prevSignature.length;
-                m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+                m_signaturePosition = aggregateInfo.var.prevSignaturePosition + 1;
                 m_aggregateStack.pop_back();
                 return;
             }
@@ -535,7 +536,7 @@ void ArgumentList::ReadCursor::advanceState()
             // fall through
         case BeginArray: {
             const bool isDict = aggregateInfo.aggregateType == BeginDict;
-            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition + 1] == '}')
+            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition] == '}')
                                              : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
             if (isEndOfEntry) {
                 m_state = isDict ? NextDictEntry : NextArrayEntry;
@@ -1280,6 +1281,7 @@ void ArgumentList::WriteCursor::finish()
     // - resize the signature to the minimum required size
     assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
     m_signature.begin[m_signaturePosition] = '\0';
+    m_signature.length = m_signaturePosition;
 
     m_dataPosition = 0;
 
