@@ -151,7 +151,7 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
     while (!isDone) {
         TEST(writer.state() != ArgumentList::InvalidData);
         if (debugPrint) {
-            cerr << "Reader state: " << reader.stateString().begin << endl;
+            cout << "Reader state: " << reader.stateString().begin << '\n';
         }
 
         switch(reader.state()) {
@@ -343,7 +343,7 @@ void test_roundtrip()
         byte *testData = reinterpret_cast<byte *>(&testArray);
 
         testArray.length = 1;
-        //doRoundtrip(ArgumentList(cstring("ay"), array(testData, 5)));
+        doRoundtrip(ArgumentList(cstring("ay"), array(testData, 5)));
         testArray.length = 4;
         doRoundtrip(ArgumentList(cstring("ai"), array(testData, 8)));
         testArray.length = 8;
