@@ -381,9 +381,25 @@ void test_roundtrip()
     }
 }
 
+static void test_writerMisuse()
+{
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.nextDictEntry();
+        writer.writeByte(1);
+        writer.writeByte(2);
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.writeByte(3); // wrong, a dict contains only exactly two types
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     test_stringValidation();
     test_nesting();
     test_roundtrip();
+    test_writerMisuse();
 }

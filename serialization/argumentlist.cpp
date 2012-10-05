@@ -1096,8 +1096,8 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
                     VALID_IF(isPrimitiveType || isStringType);
                 }
                 // first type has been checked already, second must be present (checked in EndDict
-                //  state handler). no third type allowed.
-                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 2) { // TODO correct indexing
+                // state handler). no third type allowed.
+                if (m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2) {
                     VALID_IF(m_state == EndDict);
                 }
                 break;
