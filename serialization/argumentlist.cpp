@@ -34,6 +34,45 @@ struct Nesting
     int variant;
 };
 
+static cstring printableState(ArgumentList::CursorState state)
+{
+    if (state < ArgumentList::NotStarted || state > ArgumentList::UnixFd) {
+        return cstring();
+    }
+    static const char *strings[ArgumentList::UnixFd + 1] = {
+        "NotStarted",
+        "Finished",
+        "NeedMoreData",
+        "InvalidData",
+        "AnyData",
+        "DictKey",
+        "BeginArray",
+        "NextArrayEntry",
+        "EndArray",
+        "BeginDict",
+        "NextDictEntry",
+        "EndDict",
+        "BeginStruct",
+        "EndStruct",
+        "BeginVariant",
+        "EndVariant",
+        "Byte",
+        "Boolean",
+        "Int16",
+        "Uint16",
+        "Int32",
+        "Uint32",
+        "Int64",
+        "Uint64",
+        "Double",
+        "String",
+        "ObjectPath",
+        "Signature",
+        "UnixFd"
+    };
+    return cstring(strings[state]);
+}
+
 ArgumentList::ArgumentList()
    : m_isByteSwapped(false),
      m_readCursorCount(0),
@@ -285,6 +324,11 @@ ArgumentList::ReadCursor::~ReadCursor()
     }
     delete m_nesting;
     m_nesting = 0;
+}
+
+cstring ArgumentList::ReadCursor::stateString() const
+{
+    return printableState(m_state);
 }
 
 void ArgumentList::ReadCursor::replaceData(array data)
@@ -896,6 +940,11 @@ ArgumentList::WriteCursor::~WriteCursor()
     }
     delete m_nesting;
     m_nesting = 0;
+}
+
+cstring ArgumentList::WriteCursor::stateString() const
+{
+    return printableState(m_state);
 }
 
 ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32 alignAndSize)
