@@ -269,6 +269,45 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
     TEST(arraysEqual(argData, copyData));
 }
 
+void test_nesting()
+{
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        for (int i = 0; i < 32; i++) {
+            writer.beginArray(false);
+            writer.nextArrayEntry();
+        }
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.beginArray(false);
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        for (int i = 0; i < 32; i++) {
+            writer.beginDict(false);
+            writer.nextDictEntry();
+            writer.writeInt32(i); // key, next nested dict is value
+        }
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.beginStruct();
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        for (int i = 0; i < 32; i++) {
+            writer.beginDict(false);
+            writer.nextDictEntry();
+            writer.writeInt32(i); // key, next nested dict is value
+        }
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.beginArray(false);
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+}
+
 void test_roundtrip()
 {
     doRoundtrip(ArgumentList(cstring(""), array()));
@@ -323,5 +362,6 @@ void test_roundtrip()
 int main(int argc, char *argv[])
 {
     test_stringValidation();
+    test_nesting();
     test_roundtrip();
 }

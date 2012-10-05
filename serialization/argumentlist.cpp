@@ -1183,7 +1183,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
     case BeginDict:
     case BeginArray: {
-        VALID_IF(m_nesting->beginVariant());
+        VALID_IF(m_nesting->beginArray());
         if (m_state == BeginDict) {
             VALID_IF(m_nesting->beginParen());
         }
