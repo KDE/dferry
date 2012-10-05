@@ -62,10 +62,10 @@ static void test_stringValidation()
         cstring miniStruct("(t)");
         TEST(ArgumentList::isSignatureValid(miniStruct));
         TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
-        cstring badStruct("(()");
+        cstring badStruct("((i)");
         TEST(!ArgumentList::isSignatureValid(badStruct));
         TEST(!ArgumentList::isSignatureValid(badStruct, ArgumentList::VariantSignature));
-        cstring badStruct2("())");
+        cstring badStruct2("(i))");
         TEST(!ArgumentList::isSignatureValid(badStruct2));
         TEST(!ArgumentList::isSignatureValid(badStruct2, ArgumentList::VariantSignature));
     }
