@@ -416,6 +416,7 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *typeState, u
     case 'a':
         state = ArgumentList::BeginArray;
         isPrimitive = false;
+        break;
     case '{':
         state = ArgumentList::BeginDict;
         isPrimitive = false;
@@ -581,7 +582,7 @@ void ArgumentList::ReadCursor::advanceState()
         case BeginArray: {
             const bool isDict = aggregateInfo.aggregateType == BeginDict;
             const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition] == '}')
-                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin);
+                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
             if (isEndOfEntry) {
                 m_state = isDict ? NextDictEntry : NextArrayEntry;
                 return; // the rest is handled in nextArrayOrDictEntry()
@@ -806,6 +807,7 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
             m_signaturePosition = m_signature.length - temp.length - 1; // TODO check/fix the indexing
         }
     }
+    m_state = isDict ? NextDictEntry : NextArrayEntry;
 }
 
 // TODO introduce an error state different from InvalidData when the wrong method is called
@@ -842,6 +844,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
     }
     // no more iterations
     m_state = isDict ? EndDict : EndArray;
+    m_signaturePosition--; // this was increased in advanceState() before sending us here
     if (isDict) {
         m_nesting->endParen();
         m_signaturePosition++; // skip '}'
@@ -1349,7 +1352,11 @@ void ArgumentList::WriteCursor::finish()
         ElementInfo ei = m_elements[i];
         if (ei.size <= ElementInfo::LargestSize) {
             // copy data chunks while applying the proper alignment
+            int padStart = bufferPos;
             bufferPos = align(bufferPos, ei.alignment());
+            for (; padStart < bufferPos; padStart++) {
+                buffer[padStart] = 0; // zero out alignment padding
+            }
             m_dataPosition = align(m_dataPosition, ei.alignment());
             memcpy(buffer + bufferPos, m_data.begin + m_dataPosition, ei.size);
             bufferPos += ei.size;

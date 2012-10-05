@@ -123,7 +123,7 @@ static void printArray(array a)
 {
     cout << "Array: ";
     for (int i = 0; i < a.length; i++) {
-        cout << int(a.begin[i]);
+        cout << int(a.begin[i]) << ':';
     }
     cout << '\n';
 }
@@ -290,6 +290,33 @@ void test_roundtrip()
         doRoundtrip(ArgumentList(cstring("xy"), array(data, 9)));
         doRoundtrip(ArgumentList(cstring("t"), array(data, 8)));
         doRoundtrip(ArgumentList(cstring("ty"), array(data, 9)));
+    }
+    {
+        struct arrayData
+        {
+            uint32 length;
+            byte data[64];
+        };
+        arrayData testArray = {0};
+        for (int i = 0; i < 64; i++) {
+            testArray.data[i] = i;
+        }
+        byte *testData = reinterpret_cast<byte *>(&testArray);
+
+        testArray.length = 1;
+        //doRoundtrip(ArgumentList(cstring("ay"), array(testData, 5)));
+        testArray.length = 4;
+        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 8)));
+        testArray.length = 8;
+        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 12)));
+        testArray.length = 64;
+        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 68)));
+        doRoundtrip(ArgumentList(cstring("an"), array(testData, 68)));
+
+        testArray.data[0] = 0; testArray.data[1] = 0; // zero out padding
+        testArray.data[2] = 0; testArray.data[3] = 0;
+        testArray.length = 56;
+        doRoundtrip(ArgumentList(cstring("ad"), array(testData, 64)));
     }
 }
 
