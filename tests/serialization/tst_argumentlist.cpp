@@ -123,7 +123,7 @@ static void printArray(array a)
 {
     cout << "Array: ";
     for (int i = 0; i < a.length; i++) {
-        cout << int(a.begin[i]) << ':';
+        cout << int(a.begin[i]) << '|';
     }
     cout << '\n';
 }
@@ -379,6 +379,20 @@ static void test_roundtrip()
         byte *testData = reinterpret_cast<byte *>(&testDict);
         doRoundtrip(ArgumentList(cstring("a{yy}"), array(testData, 10)));
     }
+    {
+        byte testData[36] = {
+            5, // variant signature length
+            '(', 'y', 'g', 'd', ')', '\0', // signature: struct of: byte, signature (easiest because
+                                           //   its length prefix is byte order independent), double
+            0,      // pad to 8-byte boundary for struct
+            23,     // the byte
+            6, 'i', 'a', '{', 'i', 'v', '}', '\0', // the signature
+            0, 0, 0, 0, 0, 0, 0,    // padding to 24 bytes (next 8-byte boundary)
+            1, 2, 3, 4, 5, 6, 7, 8, // the double
+            20, 21, 22, 23 // the int (not part of the variant)
+        };
+        doRoundtrip(ArgumentList(cstring("vi"), array(testData, 36)));
+    }
 }
 
 static void test_writerMisuse()
@@ -402,4 +416,9 @@ int main(int argc, char *argv[])
     test_nesting();
     test_roundtrip();
     test_writerMisuse();
+    // TODO ReadCursor should check that padding bytes are zero
+    // TODO many more misuse tests for WriteCursor and maybe some for ReadCursor
+    // TODO nested variants, dicts, arrays
+    // TODO NeedMoreData tests for ReadCursor
+    std::cout << "Passed!\n";
 }

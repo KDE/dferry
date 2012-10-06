@@ -572,7 +572,7 @@ void ArgumentList::ReadCursor::advanceState()
                 m_nesting->endVariant();
                 m_signature.begin = aggregateInfo.var.prevSignature.begin;
                 m_signature.length = aggregateInfo.var.prevSignature.length;
-                m_signaturePosition = aggregateInfo.var.prevSignaturePosition + 1;
+                m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
                 m_aggregateStack.pop_back();
                 return;
             }
@@ -610,7 +610,6 @@ void ArgumentList::ReadCursor::advanceState()
     if (m_state == InvalidData) {
         return;
     }
-
 
     // check if we have enough data for the next type, and read it
     // if we're in a zero-length array, we are iterating only over the types without reading any data
@@ -668,11 +667,11 @@ void ArgumentList::ReadCursor::advanceState()
         cstring signature;
         if (m_zeroLengthArrayNesting) {
             static const char *emptyString = "";
-            signature = cstring(emptyString, 1);
+            signature = cstring(emptyString, 0);
         } else {
-            signature.length = m_data.begin[m_dataPosition++] + 1;
+            signature.length = m_data.begin[m_dataPosition++];
             signature.begin = m_data.begin + m_dataPosition;
-            m_dataPosition += signature.length;
+            m_dataPosition += signature.length + 1;
             if (m_dataPosition > m_data.length) {
                 goto out_needMoreData;
             }
@@ -998,7 +997,6 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32
 ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPrefixSize)
 {
     // TODO request more data when we'd overflow the output buffer
-
     bool isValidString = false;
     if (m_state == String) {
         isValidString = ArgumentList::isStringValid(cstring(m_String.begin, m_String.length));
@@ -1068,6 +1066,8 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
     if (signatureFragment.length) {
         getTypeInfo(signatureFragment.begin[0], 0, &alignment, &isPrimitiveType, &isStringType);
+        // fortunately, none of the state transitions that have no signature fragment need alignment
+        m_dataPosition = align(m_dataPosition, alignment);
     }
 
     // TODO review all the signature indexing
@@ -1138,7 +1138,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         aggregateInfo.aggregateType = BeginStruct;
         aggregateInfo.sct.containedTypeBegin = m_signaturePosition;
         m_aggregateStack.push_back(aggregateInfo);
-        m_elements.push_back(ElementInfo(8, 0)); // align only
+        m_elements.push_back(ElementInfo(alignment, 0)); // align only
         break;
     case EndStruct:
         m_nesting->endParen();
@@ -1170,7 +1170,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         VALID_IF(!m_aggregateStack.empty());
         aggregateInfo = m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginVariant);
-        m_signature.begin[m_signaturePosition++] = '\0';
+        m_signature.begin[m_signaturePosition] = '\0';
         assert(aggregateInfo.var.signatureIndex < m_variantSignatures.size());
         m_variantSignatures[aggregateInfo.var.signatureIndex].length = m_signaturePosition;
         assert(m_variantSignatures[aggregateInfo.var.signatureIndex].begin = m_signature.begin);
@@ -1194,6 +1194,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
         m_elements.push_back(ElementInfo(4, ElementInfo::ArrayLengthField));
         if (m_state == BeginDict) {
+            m_dataPosition = align(m_dataPosition, 8);
             m_elements.push_back(ElementInfo(8, 0)); // align only
             m_state = DictKey;
             return;
@@ -1379,10 +1380,9 @@ void ArgumentList::WriteCursor::finish()
                 basic::writeUint32(buffer + al.lengthFieldPosition, bufferPos - al.dataStartPosition);
                 lengthFieldStack.pop_back();
             } else { // ei.size == ElementInfo::VariantSignature
-                // fill in signature (should already include length prefix and trailing null)
+                // fill in signature (should already include trailing null)
                 cstring signature = m_variantSignatures[variantSignatureIndex++];
-                bufferPos = align(bufferPos, ei.alignment());
-                m_dataPosition = align(m_dataPosition, ei.alignment());
+                buffer[bufferPos++] = signature.length;
                 memcpy(buffer + bufferPos, signature.begin, signature.length + 1);
                 bufferPos += signature.length + 1;
                 free(signature.begin);

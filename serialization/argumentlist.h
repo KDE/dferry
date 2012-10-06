@@ -149,7 +149,7 @@ public:
         double readDouble() { double ret = m_Double; advanceState(); return ret; }
         cstring readString() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
         cstring readObjectPath() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        cstring readSignature() { cstring ret(m_String.begin, m_String.length); return ret; }
+        cstring readSignature() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
         uint32 readUnixFd() { uint32 ret = m_Uint32; advanceState(); return ret; }
 
     private:
