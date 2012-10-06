@@ -13,6 +13,16 @@ static int align(uint32 index, uint32 alignment)
     return (index + maxStepUp) & ~maxStepUp;
 }
 
+static inline void zeroPad(byte *buffer, uint32 alignment, int *bufferPos)
+{
+    int i = *bufferPos;
+    const int padEnd = align(i, alignment);
+    for (; i < padEnd; i++) {
+        buffer[i] = '\0';
+    }
+    *bufferPos = padEnd;
+}
+
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
 {
@@ -1353,11 +1363,7 @@ void ArgumentList::WriteCursor::finish()
         ElementInfo ei = m_elements[i];
         if (ei.size <= ElementInfo::LargestSize) {
             // copy data chunks while applying the proper alignment
-            int padStart = bufferPos;
-            bufferPos = align(bufferPos, ei.alignment());
-            for (; padStart < bufferPos; padStart++) {
-                buffer[padStart] = 0; // zero out alignment padding
-            }
+            zeroPad(buffer, ei.alignment(), &bufferPos);
             m_dataPosition = align(m_dataPosition, ei.alignment());
             memcpy(buffer + bufferPos, m_data.begin + m_dataPosition, ei.size);
             bufferPos += ei.size;
@@ -1367,11 +1373,11 @@ void ArgumentList::WriteCursor::finish()
             if (ei.size == ElementInfo::ArrayLengthField) {
                 // start of an array
                 // reserve space for the array length prefix
-                bufferPos = align(bufferPos, 4);
+                zeroPad(buffer, ei.alignment(), &bufferPos);
                 al.lengthFieldPosition = bufferPos;
                 bufferPos += 4;
                 // array data starts aligned to the first array element
-                bufferPos = align(bufferPos, m_elements[i + 1].alignment());
+                zeroPad(buffer, m_elements[i + 1].alignment(), &bufferPos);
                 al.dataStartPosition = bufferPos;
                 lengthFieldStack.push_back(al);
             } else if (ei.size == ElementInfo::ArrayLengthEndMark) {
