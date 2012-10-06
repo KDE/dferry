@@ -2,15 +2,27 @@
 
 #include "basictypeio.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 
-static int align(uint32 index, uint32 alignment)
+static inline int align(uint32 index, uint32 alignment)
 {
     const int maxStepUp = alignment - 1;
     return (index + maxStepUp) & ~maxStepUp;
+}
+
+static inline bool isPaddingZero(const array &buffer, int padStart, int padEnd)
+{
+    padEnd = std::min(padEnd, buffer.length);
+    for (; padStart < padEnd; padStart++) {
+        if (buffer.begin[padStart] != '\0') {
+            return false;
+        }
+    }
+    return true;
 }
 
 static inline void zeroPad(byte *buffer, uint32 alignment, int *bufferPos)
@@ -624,29 +636,34 @@ void ArgumentList::ReadCursor::advanceState()
     // check if we have enough data for the next type, and read it
     // if we're in a zero-length array, we are iterating only over the types without reading any data
 
-    if (m_zeroLengthArrayNesting && (isPrimitiveType || isStringType)) {
-        return; // nothing to do
-    }
+    int padStart = m_dataPosition;
 
-    m_dataPosition = align(m_dataPosition, alignment);
-
-    if (((isPrimitiveType || isStringType) && m_dataPosition + alignment > m_data.length)
-        || m_dataPosition > m_data.length) {
-        goto out_needMoreData;
-    }
-
-    if (isPrimitiveType) {
-        m_state = doReadPrimitiveType();
-        m_dataPosition += alignment;
-        return;
-    }
-
-    if (isStringType) {
-        m_state = doReadString(alignment);
-        if (m_state == NeedMoreData) {
+    if (!m_zeroLengthArrayNesting) {
+        m_dataPosition = align(m_dataPosition, alignment);
+        if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
+            m_state = InvalidData;
+            return;
+        }
+        if (m_dataPosition > m_data.length) {
             goto out_needMoreData;
         }
-        return;
+
+        if (isPrimitiveType || isStringType) {
+            if (m_dataPosition + alignment > m_data.length) {
+                goto out_needMoreData;
+            }
+
+            if (isPrimitiveType) {
+                m_state = doReadPrimitiveType();
+                m_dataPosition += alignment;
+            } else {
+                m_state = doReadString(alignment);
+                if (m_state == NeedMoreData) {
+                    goto out_needMoreData;
+                }
+            }
+            return;
+        }
     }
 
     // now the interesting part: aggregates
@@ -731,12 +748,17 @@ void ArgumentList::ReadCursor::advanceState()
 
         // ### are we supposed to align m_dataPosition if the array is empty?
         if (!m_zeroLengthArrayNesting) {
+            padStart = m_dataPosition;
             m_dataPosition = align(m_dataPosition, firstElementAlignment);
-        }
-        aggregateInfo.arr.dataEnd = m_dataPosition + arrayLength;
-        if (aggregateInfo.arr.dataEnd > m_data.length) {
-            // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
-            goto out_needMoreData;
+            if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
+                m_state = InvalidData;
+                return;
+            }
+            aggregateInfo.arr.dataEnd = m_dataPosition + arrayLength;
+            if (aggregateInfo.arr.dataEnd > m_data.length) {
+                // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
+                goto out_needMoreData;
+            }
         }
         bool nestOk = m_nesting->beginArray();
         if (firstElementType == BeginDict) {
@@ -1352,14 +1374,14 @@ void ArgumentList::WriteCursor::finish()
 
     byte *buffer = reinterpret_cast<byte *>(malloc(16384)); // TODO dynamic resize
     int bufferPos = 0;
-    int count = m_elements.size();
+    uint32 count = m_elements.size();
     int variantSignatureIndex = 0;
 
     std::vector<ArrayLengthField> lengthFieldStack;
 
     // TODO zero out alignment padding (maybe just zero out the whole allocated buffer beforehand)
 
-    for (int i = 0; i < count; i++) {
+    for (uint32 i = 0; i < count; i++) {
         ElementInfo ei = m_elements[i];
         if (ei.size <= ElementInfo::LargestSize) {
             // copy data chunks while applying the proper alignment
