@@ -306,6 +306,16 @@ static void test_nesting()
         writer.beginArray(false);
         TEST(writer.state() == ArgumentList::InvalidData);
     }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        for (int i = 0; i < 64; i++) {
+            writer.beginVariant();
+        }
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.beginVariant();
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
 }
 
 struct LengthPrefixedData
