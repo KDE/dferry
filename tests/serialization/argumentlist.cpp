@@ -269,7 +269,7 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
     TEST(arraysEqual(argData, copyData));
 }
 
-void test_nesting()
+static void test_nesting()
 {
     {
         ArgumentList arg;
@@ -314,7 +314,7 @@ struct LengthPrefixedData
     byte data[256];
 };
 
-void test_roundtrip()
+static void test_roundtrip()
 {
     doRoundtrip(ArgumentList(cstring(""), array()));
     {
