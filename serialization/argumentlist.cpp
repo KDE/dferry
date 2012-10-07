@@ -663,6 +663,10 @@ void ArgumentList::ReadCursor::advanceState()
             }
             return;
         }
+    } else {
+        if (isPrimitiveType || isStringType) {
+            return; // nothing to do! (readFoo() will return "random" data, don't use it!)
+        }
     }
 
     // now the interesting part: aggregates
