@@ -1059,7 +1059,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
                 }
                 break;
             case BeginArray:
-                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
+                if (m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1) {
                     VALID_IF(m_state == EndArray);
                 }
                 break;
@@ -1175,8 +1175,6 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
     case EndDict:
     case EndArray: {
-        // TODO check that there is at least one type inside the array and that we're at the end of
-        //      the current array iteration
         const bool isDict = m_state == EndDict;
         if (isDict) {
             m_nesting->endParen();
@@ -1185,6 +1183,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         VALID_IF(!m_aggregateStack.empty());
         aggregateInfo = m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+        VALID_IF(m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1));
         m_aggregateStack.pop_back();
         if (m_zeroLengthArrayNesting) {
             m_zeroLengthArrayNesting--;
@@ -1233,7 +1232,7 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
         VALID_IF(m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
     } else {
         if (m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
-            // TODO first iteration, anything to do?
+            // TODO first iteration, anything to do? (look at the checks in advanceState - EndArray!)
         } else if (isDict) {
             // a dict must have a key and value
             VALID_IF(m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);

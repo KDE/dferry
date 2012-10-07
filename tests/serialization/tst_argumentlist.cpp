@@ -410,12 +410,46 @@ static void test_writerMisuse()
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(false);
+        writer.nextArrayEntry();
+        writer.endArray(); // wrong, must contain exactly one type
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(false);
+        writer.nextArrayEntry();
+        writer.writeByte(1);
+        writer.writeByte(2);  // wrong, must contain exactly one type
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
         writer.writeByte(2);
         TEST(writer.state() != ArgumentList::InvalidData);
         writer.writeByte(3); // wrong, a dict contains only exactly two types
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.nextDictEntry();
+        writer.beginVariant(); // wrong, key type must be basic
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.nextDictEntry();
+        writer.writeByte(1);
+        writer.endDict(); // wrong, a dict must contain exactly two types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
 }
