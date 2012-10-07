@@ -225,6 +225,8 @@ public:
         cstring stateString() const;
 
         void beginArray(bool isEmpty);
+        // call this before writing each entry; calling it before the first entry is optional for
+        // the convenience of client code.
         void nextArrayEntry();
         void endArray();
 
@@ -274,7 +276,7 @@ public:
 
         struct VariantInfo
         {
-            podCstring prevSignature;       // a variant switches the currently parsed signature, so we
+            podCstring prevSignature;     // a variant switches the currently parsed signature, so we
             uint32 prevSignaturePosition; // need to store the old signature and parse position.
             uint32 signatureIndex; // index in m_variantSignatures
         };

@@ -164,7 +164,7 @@ static void printArray(array a)
     cout << '\n';
 }
 
-static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
+static void doRoundtrip(ArgumentList arg, bool skipNextEntryAtArrayStart, bool debugPrint)
 {
     ArgumentList::ReadCursor reader = arg.beginRead();
 
@@ -172,6 +172,8 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
     ArgumentList::WriteCursor writer = copy.beginWrite();
 
     bool isDone = false;
+    bool isFirstEntry = false;
+
     while (!isDone) {
         TEST(writer.state() != ArgumentList::InvalidData);
         if (debugPrint) {
@@ -203,36 +205,42 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
             writer.endVariant();
             break;
         case ArgumentList::BeginArray: {
+            isFirstEntry = true;
             bool isEmpty;
             reader.beginArray(&isEmpty);
             writer.beginArray(isEmpty);
             break; }
         case ArgumentList::NextArrayEntry:
             if (reader.nextArrayEntry()) {
-                writer.nextArrayEntry();
-            } else {
-                writer.endArray();
+                if (isFirstEntry && skipNextEntryAtArrayStart) {
+                    isFirstEntry = false;
+                } else {
+                    writer.nextArrayEntry();
+                }
             }
             break;
         case ArgumentList::EndArray:
             reader.endArray();
-            // writer.endArray(); // already done when reader.nextArrayEntry() returns false
+            writer.endArray();
             break;
         case ArgumentList::BeginDict: {
+            isFirstEntry = true;
             bool isEmpty;
             reader.beginDict(&isEmpty);
             writer.beginDict(isEmpty);
             break; }
         case ArgumentList::NextDictEntry:
             if (reader.nextDictEntry()) {
-                writer.nextDictEntry();
-            } else {
-                writer.endDict();
+                if (isFirstEntry && skipNextEntryAtArrayStart) {
+                    isFirstEntry = false;
+                } else {
+                    writer.nextDictEntry();
+                }
             }
             break;
         case ArgumentList::EndDict:
             reader.endDict();
-            // writer.endDict(); // already done when reader.nextDictEntry() returns false
+            writer.endDict();
             break;
         case ArgumentList::Byte:
             writer.writeByte(reader.readByte());
@@ -291,6 +299,13 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
         printArray(copyData);
     }
     TEST(arraysEqual(argData, copyData));
+}
+
+static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
+{
+    // test both with and without calling WriteCursor::next(Array,Dict)Entry at the start of an array
+    doRoundtrip(arg, false, debugPrint);
+    doRoundtrip(arg, true, debugPrint);
 }
 
 static void test_nesting()
@@ -431,12 +446,21 @@ static void test_roundtrip()
 
 static void test_writerMisuse()
 {
+    // Array
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginArray(false);
-        writer.endArray(); // wrong, nextArrayEntry() not called, and must contain exactly one type
+        writer.endArray(); // wrong,  must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(false);
+        writer.writeByte(1); // in WriteCursor, calling nextArrayEntry() after beginArray() is optional
+        writer.endArray();
+        TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
@@ -455,13 +479,31 @@ static void test_writerMisuse()
         writer.writeByte(2);  // wrong, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
-
+    // Dict
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginDict(false);
-        writer.endDict(); // wrong, nextDictEntry() not called, and must contain exactly two types
+        writer.endDict(); // wrong, must contain exactly two types
         TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.nextDictEntry();
+        writer.writeByte(1);
+        writer.endDict(); // wrong, a dict must contain exactly two types
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.writeByte(1); // in WriteCursor, calling nextDictEntry() after beginDict() is optional
+        writer.writeByte(2);
+        writer.endDict();
+        TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
@@ -482,16 +524,7 @@ static void test_writerMisuse()
         writer.beginVariant(); // wrong, key type must be basic
         TEST(writer.state() == ArgumentList::InvalidData);
     }
-    {
-        ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
-        writer.beginDict(false);
-        writer.nextDictEntry();
-        writer.writeByte(1);
-        writer.endDict(); // wrong, a dict must contain exactly two types
-        TEST(writer.state() == ArgumentList::InvalidData);
-    }
-
+    // Variant
     {
         // this and the next are a baseline to make sure that the following test fails for a good reason
         ArgumentList arg;
