@@ -665,7 +665,7 @@ void ArgumentList::ReadCursor::advanceState()
         }
     } else {
         if (isPrimitiveType || isStringType) {
-            return; // nothing to do! (readFoo() will return "random" data, don't use it!)
+            return; // nothing to do! (readFoo() will return "random" data, so don't use that data!)
         }
     }
 
