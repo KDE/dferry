@@ -1302,6 +1302,9 @@ void ArgumentList::WriteCursor::finish()
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - assemble the message, inserting variant signatures and array lengths
     // - close the signature by adding the terminating null
+    if (m_state == InvalidData) {
+        return;
+    }
     assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
     m_signature.begin[m_signaturePosition] = '\0';
     m_signature.length = m_signaturePosition;
