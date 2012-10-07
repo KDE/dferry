@@ -608,12 +608,6 @@ void ArgumentList::ReadCursor::advanceState()
             if (isEndOfEntry) {
                 m_state = isDict ? NextDictEntry : NextArrayEntry;
                 return; // the rest is handled in nextArrayOrDictEntry()
-            } else {
-                const bool isEndOfData = m_dataPosition >= aggregateInfo.arr.dataEnd;
-                if (isEndOfData) {
-                    m_state = InvalidData;
-                    return;
-                }
             }
             break; }
         default:
