@@ -411,6 +411,13 @@ static void test_writerMisuse()
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginArray(false);
+        writer.endArray(); // wrong, nextArrayEntry() not called, and must contain exactly one type
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(false);
         writer.nextArrayEntry();
         writer.endArray(); // wrong, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
@@ -425,6 +432,13 @@ static void test_writerMisuse()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
 
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginDict(false);
+        writer.endDict(); // wrong, nextDictEntry() not called, and must contain exactly two types
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
