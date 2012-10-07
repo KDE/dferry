@@ -101,6 +101,42 @@ static void test_stringValidation()
     }
 }
 
+static void test_readerWriterExclusion()
+{
+    ArgumentList arg;
+    {
+        ArgumentList::ReadCursor reader1 = arg.beginRead();
+        {
+            ArgumentList::ReadCursor reader2 = arg.beginRead();
+            TEST(reader2.isValid());
+        }
+        {
+            ArgumentList::WriteCursor writer1 = arg.beginWrite();
+            TEST(!writer1.isValid());
+        }
+    }
+    {
+        ArgumentList::ReadCursor reader3 = arg.beginRead();
+        TEST(reader3.isValid());
+    }
+    {
+        ArgumentList::WriteCursor writer2 = arg.beginWrite();
+        TEST(writer2.isValid());
+        {
+            ArgumentList::ReadCursor reader4 = arg.beginRead();
+            TEST(!reader4.isValid());
+        }
+        {
+            ArgumentList::ReadCursor writer3 = arg.beginRead();
+            TEST(!writer3.isValid());
+        }
+    }
+    {
+        ArgumentList::WriteCursor writer4 = arg.beginWrite();
+        TEST(writer4.isValid());
+    }
+}
+
 static bool arraysEqual(array a1, array a2)
 {
     if (a1.length != a2.length) {
@@ -131,21 +167,9 @@ static void printArray(array a)
 static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
 {
     ArgumentList::ReadCursor reader = arg.beginRead();
-    {
-        ArgumentList::ReadCursor reader2 = arg.beginRead();
-        TEST(reader2.isValid());
-    }
 
     ArgumentList copy;
     ArgumentList::WriteCursor writer = copy.beginWrite();
-    {
-        ArgumentList::WriteCursor writer2 = copy.beginWrite();
-        TEST(!writer2.isValid());
-    }
-    {
-        ArgumentList::ReadCursor reader3 = copy.beginRead();
-        TEST(!reader3.isValid());
-    }
 
     bool isDone = false;
     while (!isDone) {
@@ -492,12 +516,12 @@ static void test_writerMisuse()
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
-
 }
 
 int main(int argc, char *argv[])
 {
     test_stringValidation();
+    test_readerWriterExclusion();
     test_nesting();
     test_roundtrip();
     test_writerMisuse();
