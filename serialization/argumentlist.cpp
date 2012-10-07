@@ -636,9 +636,8 @@ void ArgumentList::ReadCursor::advanceState()
     // check if we have enough data for the next type, and read it
     // if we're in a zero-length array, we are iterating only over the types without reading any data
 
-    int padStart = m_dataPosition;
-
     if (!m_zeroLengthArrayNesting) {
+        int padStart = m_dataPosition;
         m_dataPosition = align(m_dataPosition, alignment);
         if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
             m_state = InvalidData;
@@ -748,7 +747,7 @@ void ArgumentList::ReadCursor::advanceState()
 
         // ### are we supposed to align m_dataPosition if the array is empty?
         if (!m_zeroLengthArrayNesting) {
-            padStart = m_dataPosition;
+            int padStart = m_dataPosition;
             m_dataPosition = align(m_dataPosition, firstElementAlignment);
             if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
                 m_state = InvalidData;
