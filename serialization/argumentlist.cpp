@@ -1054,7 +1054,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
             case BeginVariant:
                 // arrays and variants may contain just one single complete type (note that this will
                 // trigger only when not inside an aggregate inside the variant or array)
-                if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
+                if (m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1) {
                     VALID_IF(m_state == EndVariant);
                 }
                 break;

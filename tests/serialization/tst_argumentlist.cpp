@@ -424,6 +424,7 @@ static void test_writerMisuse()
         writer.writeByte(2);  // wrong, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
+
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
@@ -452,6 +453,32 @@ static void test_writerMisuse()
         writer.endDict(); // wrong, a dict must contain exactly two types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
+
+    {
+        // this and the next are a baseline to make sure that the following test fails for a good reason
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginVariant();
+        writer.writeByte(1);
+        writer.endVariant();
+        TEST(writer.state() != ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginVariant();
+        writer.endVariant();
+        TEST(writer.state() != ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginVariant();
+        writer.writeByte(1);
+        writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+
 }
 
 int main(int argc, char *argv[])
