@@ -551,6 +551,75 @@ static void test_writerMisuse()
     }
 }
 
+static void test_complicated()
+{
+    ArgumentList arg;
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.writeInt64(234234);
+        writer.beginVariant();
+            writer.beginDict(false);
+                writer.writeByte(23);
+                writer.beginVariant();
+                    writer.writeString(cstring("twenty-three"));
+                writer.endVariant();
+            writer.nextDictEntry();
+                writer.writeByte(83);
+                writer.beginVariant();
+                writer.endVariant();
+            writer.nextDictEntry();
+                writer.writeByte(234);
+                writer.beginVariant();
+                    writer.beginArray(false);
+                        writer.writeUint16(234);
+                    writer.nextArrayEntry();
+                        writer.writeUint16(234);
+                    writer.nextArrayEntry();
+                        writer.writeUint16(234);
+                    writer.endArray();
+                writer.endVariant();
+            writer.nextDictEntry();
+                writer.writeByte(25);
+                writer.beginVariant();
+                    writer.beginVariant();
+                        writer.beginVariant();
+                            writer.beginVariant();
+                                writer.beginVariant();
+                                    writer.beginStruct();
+                                        writer.writeString(cstring("Quite nesty"));
+                                        writer.writeObjectPath(cstring("/path/to/object"));
+                                        writer.writeUint64(234234234);
+                                        writer.writeByte(2);
+                                        writer.writeUint64(234234223434);
+                                    writer.endStruct();
+                                writer.endVariant();
+                            writer.endVariant();
+                        writer.endVariant();
+                    writer.endVariant();
+                writer.endVariant();
+            writer.endDict();
+        writer.endVariant();
+        writer.writeString("Hello D-Bus!");
+        writer.beginArray(false);
+            writer.writeDouble(1.567898);
+        writer.nextArrayEntry();
+            writer.writeDouble(1.523428);
+        writer.nextArrayEntry();
+            writer.writeDouble(1.621133);
+        writer.nextArrayEntry();
+            writer.writeDouble(1.982342);
+        writer.endArray();
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() != ArgumentList::InvalidData);
+    }
+
+    doRoundtrip(arg);
+
+    // TODO test recovery from NeedMoreData with that nontrivial payload
+    //      (or just do it in every doRoundtrip()!)
+}
+
 int main(int argc, char *argv[])
 {
     test_stringValidation();
@@ -558,9 +627,7 @@ int main(int argc, char *argv[])
     test_nesting();
     test_roundtrip();
     test_writerMisuse();
-    // TODO ReadCursor should check that padding bytes are zero
+    test_complicated();
     // TODO many more misuse tests for WriteCursor and maybe some for ReadCursor
-    // TODO nested variants, dicts, arrays
-    // TODO NeedMoreData tests for ReadCursor
     std::cout << "Passed!\n";
 }
