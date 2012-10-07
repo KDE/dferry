@@ -11,7 +11,8 @@
 // Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
 // "data is good if X" instead of "data is bad if Y". That stuff should end up the same after
 // optimization anyway.
-#define VALID_IF(cond) if (cond) {} else { m_state = InvalidData; return; } do {} while (0)
+// while to avoid the dangling-else problem
+#define VALID_IF(cond) while (!(cond)) { m_state = InvalidData; return; }
 
 static inline int align(uint32 index, uint32 alignment)
 {
