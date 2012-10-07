@@ -600,16 +600,17 @@ void ArgumentList::ReadCursor::advanceState()
             }
             break;
         case BeginDict:
-            // fall through
-        case BeginArray: {
-            const bool isDict = aggregateInfo.aggregateType == BeginDict;
-            const bool isEndOfEntry = isDict ? (m_signature.begin[m_signaturePosition] == '}')
-                                             : (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
-            if (isEndOfEntry) {
-                m_state = isDict ? NextDictEntry : NextArrayEntry;
-                return; // the rest is handled in nextArrayOrDictEntry()
+            if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 2) {
+                m_state = NextDictEntry;
+                return;
             }
-            break; }
+            break;
+        case BeginArray:
+            if (m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
+                m_state = NextArrayEntry;
+                return;
+            }
+            break;
         default:
             break;
         }
