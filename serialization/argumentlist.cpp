@@ -8,6 +8,11 @@
 #include <cstring>
 #include <iostream>
 
+// Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
+// "data is good if X" instead of "data is bad if Y". That stuff should end up the same after
+// optimization anyway.
+#define VALID_IF(cond) if (cond) {} else { m_state = InvalidData; return; } do {} while (0)
+
 static inline int align(uint32 index, uint32 alignment)
 {
     const int maxStepUp = alignment - 1;
@@ -327,16 +332,11 @@ ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
      m_dataPosition(0),
      m_zeroLengthArrayNesting(0)
 {
-    if (m_argList) {
-        m_signature = m_argList->m_signature;
-        m_data = m_argList->m_data;
-        if (!ArgumentList::isSignatureValid(m_signature)) {
-            m_state = InvalidData;
-        }
-        advanceState();
-    } else {
-        m_state = InvalidData;
-    }
+    VALID_IF(m_argList);
+    m_signature = m_argList->m_signature;
+    m_data = m_argList->m_data;
+    VALID_IF(ArgumentList::isSignatureValid(m_signature));
+    advanceState();
 }
 
 ArgumentList::ReadCursor::~ReadCursor()
@@ -633,10 +633,7 @@ void ArgumentList::ReadCursor::advanceState()
     if (!m_zeroLengthArrayNesting) {
         int padStart = m_dataPosition;
         m_dataPosition = align(m_dataPosition, alignment);
-        if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
-            m_state = InvalidData;
-            return;
-        }
+        VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
         if (m_dataPosition > m_data.length) {
             goto out_needMoreData;
         }
@@ -669,10 +666,7 @@ void ArgumentList::ReadCursor::advanceState()
 
     switch (m_state) {
     case BeginStruct:
-        if (!m_nesting->beginParen()) {
-            m_state = InvalidData;
-            return;
-        }
+        VALID_IF(m_nesting->beginParen());
         aggregateInfo.aggregateType = BeginStruct;
         m_aggregateStack.push_back(aggregateInfo);
         break;
@@ -701,15 +695,8 @@ void ArgumentList::ReadCursor::advanceState()
             }
         }
         // do not clobber nesting before potentially going to out_needMoreData!
-        if (!m_nesting->beginVariant()) {
-            m_state = InvalidData;
-            return;
-        }
-
-        if (!ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature)) {
-            m_state = InvalidData;
-            return;
-        }
+        VALID_IF(m_nesting->beginVariant());
+        VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature));
 
         aggregateInfo.aggregateType = BeginVariant;
         aggregateInfo.var.prevSignature.begin = m_signature.begin;
@@ -728,10 +715,7 @@ void ArgumentList::ReadCursor::advanceState()
             }
             static const int maxArrayDataLength = 67108864; // from the spec
             arrayLength = basic::readUint32(m_data.begin + m_dataPosition, m_argList->m_isByteSwapped);
-            if (arrayLength > maxArrayDataLength) {
-                m_state = InvalidData;
-                return;
-            }
+            VALID_IF(arrayLength <= maxArrayDataLength);
             m_dataPosition += 4;
         }
 
@@ -747,24 +731,17 @@ void ArgumentList::ReadCursor::advanceState()
         if (!m_zeroLengthArrayNesting) {
             int padStart = m_dataPosition;
             m_dataPosition = align(m_dataPosition, firstElementAlignment);
-            if (!isPaddingZero(m_data, padStart, m_dataPosition)) {
-                m_state = InvalidData;
-                return;
-            }
+            VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
             aggregateInfo.arr.dataEnd = m_dataPosition + arrayLength;
             if (aggregateInfo.arr.dataEnd > m_data.length) {
                 // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
                 goto out_needMoreData;
             }
         }
-        bool nestOk = m_nesting->beginArray();
+        VALID_IF(m_nesting->beginArray());
         if (firstElementType == BeginDict) {
             m_signaturePosition++;
-            nestOk = nestOk && m_nesting->beginParen();
-        }
-        if (!nestOk) {
-            m_state = InvalidData;
-            return;
+            VALID_IF(m_nesting->beginParen());
         }
 
         // position at the 'a' or '{' because we increment m_signaturePosition before reading a char
@@ -784,23 +761,20 @@ void ArgumentList::ReadCursor::advanceState()
     return;
 
 out_needMoreData:
+    // we only start an array when the data for it has fully arrived (possible due to the length
+    // prefix), so if we still run out of data in an array the input is inconsistent.
+    VALID_IF(!m_nesting->array);
     m_state = NeedMoreData;
-    if (m_nesting->array) {
-        // we only start an array when the data for it has fully arrived (possible due to the length
-        // prefix), so if we still run out of data in an array the input is inconsistent.
-        m_state = InvalidData;
-    }
     m_signaturePosition = savedSignaturePosition;
     m_dataPosition = savedDataPosition;
 }
 
 void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
 {
-    if (m_state == expectedState) {
-        advanceState();
-    } else {
-        m_state = InvalidData;
-    }
+    // Calling this method could be replaced with using VALID_IF in the callers, but it currently
+    // seems more conventient like this.
+    VALID_IF(m_state == expectedState);
+    advanceState();
 }
 
 void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
@@ -823,11 +797,8 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
                 m_signaturePosition--; // it was moved ahead by one to skip the '{'
             }
             m_nesting->endArray();
-            if (!parseSingleCompleteType(&temp, m_nesting)) {
-                // must have been too deep nesting (assuming no bugs)
-                m_state = InvalidData;
-                return;
-            }
+            // must have been too deep nesting if the following fails (assuming no bugs in the code)
+            VALID_IF(parseSingleCompleteType(&temp, m_nesting));
             m_nesting->beginArray();
             if (isDict) {
                 m_nesting->beginParen();
@@ -841,11 +812,8 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
 // TODO introduce an error state different from InvalidData when the wrong method is called
 void ArgumentList::ReadCursor::beginArray(bool *isEmpty)
 {
-    if (m_state == BeginArray) {
-        beginArrayOrDict(false, isEmpty);
-    } else {
-        m_state = InvalidData;
-    }
+    VALID_IF(m_state == BeginArray);
+    beginArrayOrDict(false, isEmpty);
 }
 
 bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
@@ -897,13 +865,10 @@ void ArgumentList::ReadCursor::endArray()
     advanceStateFrom(EndArray);
 }
 
-bool ArgumentList::ReadCursor::beginDict(bool *isEmpty)
+void ArgumentList::ReadCursor::beginDict(bool *isEmpty)
 {
-    if (m_state == BeginDict) {
-        beginArrayOrDict(true, isEmpty);
-    } else {
-        m_state = InvalidData;
-    }
+    VALID_IF(m_state == BeginDict);
+    beginArrayOrDict(true, isEmpty);
 }
 
 bool ArgumentList::ReadCursor::nextDictEntry()
@@ -916,27 +881,27 @@ bool ArgumentList::ReadCursor::nextDictEntry()
     }
 }
 
-bool ArgumentList::ReadCursor::endDict()
+void ArgumentList::ReadCursor::endDict()
 {
     advanceStateFrom(EndDict);
 }
 
-bool ArgumentList::ReadCursor::beginStruct()
+void ArgumentList::ReadCursor::beginStruct()
 {
     advanceStateFrom(BeginStruct);
 }
 
-bool ArgumentList::ReadCursor::endStruct()
+void ArgumentList::ReadCursor::endStruct()
 {
     advanceStateFrom(EndStruct);
 }
 
-bool ArgumentList::ReadCursor::beginVariant()
+void ArgumentList::ReadCursor::beginVariant()
 {
     advanceStateFrom(BeginVariant);
 }
 
-bool ArgumentList::ReadCursor::endVariant()
+void ArgumentList::ReadCursor::endVariant()
 {
     advanceStateFrom(EndVariant);
 }
@@ -1059,9 +1024,6 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
 
 void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorState newState)
 {
-// Macros are really ugly, but here every use saves three lines...
-#define VALID_IF(cond) if (cond) {} else { m_state = InvalidData; return; } do {} while (0)
-
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
     //   check if the type to be written is the same as the one that's already in the signature
@@ -1301,8 +1263,6 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
     }
 
     // TODO need to touch the data? apply alignment?
-
-#undef VALID_IF
 }
 
 void ArgumentList::WriteCursor::nextArrayEntry()

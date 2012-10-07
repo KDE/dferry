@@ -124,15 +124,15 @@ public:
         bool nextArrayEntry();
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
-        bool beginDict(bool *isEmpty = 0);
+        void beginDict(bool *isEmpty = 0);
         bool nextDictEntry(); // like nextArrayEntry()
-        bool endDict(); // like endArray()
+        void endDict(); // like endArray()
 
-        bool beginStruct();
-        bool endStruct(); // like endArray()
+        void beginStruct();
+        void endStruct(); // like endArray()
 
-        bool beginVariant();
-        bool endVariant(); // like endArray()
+        void beginVariant();
+        void endVariant(); // like endArray()
 
         std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
 
