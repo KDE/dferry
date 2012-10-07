@@ -546,9 +546,6 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
 
 void ArgumentList::ReadCursor::advanceState()
 {
-    // TODO: when inside any array, we may never run out of data because the array length is given
-    //       in the data stream and we won't start the array until its data is complete.
-
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
     // we don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
@@ -565,20 +562,9 @@ void ArgumentList::ReadCursor::advanceState()
     const int savedSignaturePosition = m_signaturePosition;
     const int savedDataPosition = m_dataPosition;
 
-    // how to recognize end of...
-    // - array entry: BeginArray at top of aggregate stack and we're not at the beginning
-    //                of the array (so we've just finished reading a single complete type)
-    // - dict entry: BeginDict at top of aggregate stack and the current type signature char is '}'
-    // - array: at/past end of array data; end of array entry condition must hold, too
-    // - dict: at/past end of dict data; end of dict entry conditions must hold, too
-    // - struct: BeginStruct at top of aggregate stack and current char = ')'
-    // - variant: BeginVariant at top of aggregate stack and at end of type signature
-    // - argument list: aggregate stack is empty and at end of type signature
-
-    // check if we are about to close any aggregate or even the whole argument list
-
     m_signaturePosition++;
 
+    // check if we are about to close any aggregate or even the whole argument list
     if (m_aggregateStack.empty()) {
         if (m_signaturePosition >= m_signature.length) {
             m_state = Finished;
@@ -1031,20 +1017,14 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     //   check if the type to be written is the same as the one that's already in the signature
     //   - otherwise we still need to check if the data we're adding conforms with the spec, e.g.
     //     no empty structs, dict entries must have primitive key type and exactly one value type
-    // - check well-formedness of data: strings, maximum lengths in binary format
-    //   (due to variant length only being known after finishing it and the need to insert it into
-    //    the data stream, keeping track of length is more difficult than just using the current
-    //    write position in the output buffer)
+    // - check well-formedness of data: strings, maximum serialized array length and message length
+    //   (variant signature length only being known after finishing a variant introduces uncertainty
+    //    of final data stream size - due to alignment padding, a variant signature longer by one can
+    //    cause an up to seven bytes longer message. in other cases it won't change message length at all.)
     // - increase size of data buffer when it gets too small
-    // - keep track of variants in some data structure, in order to:
+    // - store information about variants and arrays, in order to:
     //   - know what the final binary message size will be
-    //   - in finish(), create the final data stream with inline variant signatures
-
-    // TODO
-    // if the innermost aggregate is...
-    // - array: first iteration: write type and data, or if empty just write type
-    //   higher iterations: check type and write data
-    // - variant: write type (to special variant signature storage) and data; check type is single complete
+    //   - in finish(), create the final data stream with inline variant signatures and array lengths
 
     // TODO extend m_data before it overflows!
 
@@ -1063,7 +1043,6 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         m_dataPosition = align(m_dataPosition, alignment);
     }
 
-    // TODO review all the signature indexing
     bool isWritingSignature = m_signaturePosition == m_signature.length; // TODO correct?
     if (isWritingSignature) {
         // signature additions must conform to syntax
@@ -1322,9 +1301,8 @@ void ArgumentList::WriteCursor::finish()
 {
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
-    // - "pack" or expand the message, depending on how variant support is done
-    //   (and resize the data buffer to the minimum required size)
-    // - resize the signature to the minimum required size
+    // - assemble the message, inserting variant signatures and array lengths
+    // - close the signature by adding the terminating null
     assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
     m_signature.begin[m_signaturePosition] = '\0';
     m_signature.length = m_signaturePosition;
@@ -1337,8 +1315,6 @@ void ArgumentList::WriteCursor::finish()
     int variantSignatureIndex = 0;
 
     std::vector<ArrayLengthField> lengthFieldStack;
-
-    // TODO zero out alignment padding (maybe just zero out the whole allocated buffer beforehand)
 
     for (uint32 i = 0; i < count; i++) {
         ElementInfo ei = m_elements[i];
