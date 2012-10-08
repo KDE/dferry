@@ -7,135 +7,7 @@
 
 using namespace std;
 
-static void test_stringValidation()
-{
-    {
-        cstring emptyWithNull("");
-        cstring emptyWithoutNull;
-
-        TEST(!ArgumentList::isStringValid(emptyWithoutNull));
-        TEST(ArgumentList::isStringValid(emptyWithNull));
-
-        TEST(!ArgumentList::isObjectPathValid(emptyWithoutNull));
-        TEST(!ArgumentList::isObjectPathValid(emptyWithNull));
-
-        TEST(ArgumentList::isSignatureValid(emptyWithNull));
-        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull));
-        TEST(ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
-        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
-    }
-    {
-        cstring trivial("i");
-        TEST(ArgumentList::isSignatureValid(trivial));
-        TEST(ArgumentList::isSignatureValid(trivial, ArgumentList::VariantSignature));
-    }
-    {
-        cstring list("iqb");
-        TEST(ArgumentList::isSignatureValid(list));
-        TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
-        cstring list2("aii");
-        TEST(ArgumentList::isSignatureValid(list2));
-        TEST(!ArgumentList::isSignatureValid(list2, ArgumentList::VariantSignature));
-    }
-    {
-        cstring simpleArray("ai");
-        TEST(ArgumentList::isSignatureValid(simpleArray));
-        TEST(ArgumentList::isSignatureValid(simpleArray, ArgumentList::VariantSignature));
-    }
-    {
-        cstring messyArray("a(iaia{ia{iv}})");
-        TEST(ArgumentList::isSignatureValid(messyArray));
-        TEST(ArgumentList::isSignatureValid(messyArray, ArgumentList::VariantSignature));
-    }
-    {
-        cstring dictFail("a{vi}");
-        TEST(!ArgumentList::isSignatureValid(dictFail));
-        TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
-    }
-    {
-        cstring emptyStruct("()");
-        TEST(!ArgumentList::isSignatureValid(emptyStruct));
-        TEST(!ArgumentList::isSignatureValid(emptyStruct, ArgumentList::VariantSignature));
-        cstring emptyStruct2("(())");
-        TEST(!ArgumentList::isSignatureValid(emptyStruct2));
-        TEST(!ArgumentList::isSignatureValid(emptyStruct2, ArgumentList::VariantSignature));
-        cstring miniStruct("(t)");
-        TEST(ArgumentList::isSignatureValid(miniStruct));
-        TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
-        cstring badStruct("((i)");
-        TEST(!ArgumentList::isSignatureValid(badStruct));
-        TEST(!ArgumentList::isSignatureValid(badStruct, ArgumentList::VariantSignature));
-        cstring badStruct2("(i))");
-        TEST(!ArgumentList::isSignatureValid(badStruct2));
-        TEST(!ArgumentList::isSignatureValid(badStruct2, ArgumentList::VariantSignature));
-    }
-    {
-        cstring nullStr;
-        cstring emptyStr("");
-        TEST(!ArgumentList::isObjectPathValid(nullStr));
-        TEST(!ArgumentList::isObjectPathValid(emptyStr));
-        TEST(ArgumentList::isObjectPathValid(cstring("/")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc/")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/abc")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/abc/def")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc&def")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc//def")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
-    }
-    {
-        cstring maxStruct("((((((((((((((((((((((((((((((((i"
-                          "))))))))))))))))))))))))))))))))");
-        TEST(ArgumentList::isSignatureValid(maxStruct));
-        TEST(ArgumentList::isSignatureValid(maxStruct, ArgumentList::VariantSignature));
-        cstring struct33("(((((((((((((((((((((((((((((((((i" // too much nesting by one
-                         ")))))))))))))))))))))))))))))))))");
-        TEST(!ArgumentList::isSignatureValid(struct33));
-        TEST(!ArgumentList::isSignatureValid(struct33, ArgumentList::VariantSignature));
-
-        cstring maxArray("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
-        TEST(ArgumentList::isSignatureValid(maxArray));
-        TEST(ArgumentList::isSignatureValid(maxArray, ArgumentList::VariantSignature));
-        cstring array33("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
-        TEST(!ArgumentList::isSignatureValid(array33));
-        TEST(!ArgumentList::isSignatureValid(array33, ArgumentList::VariantSignature));
-    }
-}
-
-static void test_readerWriterExclusion()
-{
-    ArgumentList arg;
-    {
-        ArgumentList::ReadCursor reader1 = arg.beginRead();
-        {
-            ArgumentList::ReadCursor reader2 = arg.beginRead();
-            TEST(reader2.isValid());
-        }
-        {
-            ArgumentList::WriteCursor writer1 = arg.beginWrite();
-            TEST(!writer1.isValid());
-        }
-    }
-    {
-        ArgumentList::ReadCursor reader3 = arg.beginRead();
-        TEST(reader3.isValid());
-    }
-    {
-        ArgumentList::WriteCursor writer2 = arg.beginWrite();
-        TEST(writer2.isValid());
-        {
-            ArgumentList::ReadCursor reader4 = arg.beginRead();
-            TEST(!reader4.isValid());
-        }
-        {
-            ArgumentList::ReadCursor writer3 = arg.beginRead();
-            TEST(!writer3.isValid());
-        }
-    }
-    {
-        ArgumentList::WriteCursor writer4 = arg.beginWrite();
-        TEST(writer4.isValid());
-    }
-}
+// Handy helpers
 
 static bool arraysEqual(array a1, array a2)
 {
@@ -306,6 +178,142 @@ static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
     // test both with and without calling WriteCursor::next(Array,Dict)Entry at the start of an array
     doRoundtrip(arg, false, debugPrint);
     doRoundtrip(arg, true, debugPrint);
+}
+
+
+
+// Tests proper
+
+
+
+static void test_stringValidation()
+{
+    {
+        cstring emptyWithNull("");
+        cstring emptyWithoutNull;
+
+        TEST(!ArgumentList::isStringValid(emptyWithoutNull));
+        TEST(ArgumentList::isStringValid(emptyWithNull));
+
+        TEST(!ArgumentList::isObjectPathValid(emptyWithoutNull));
+        TEST(!ArgumentList::isObjectPathValid(emptyWithNull));
+
+        TEST(ArgumentList::isSignatureValid(emptyWithNull));
+        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull));
+        TEST(ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
+        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
+    }
+    {
+        cstring trivial("i");
+        TEST(ArgumentList::isSignatureValid(trivial));
+        TEST(ArgumentList::isSignatureValid(trivial, ArgumentList::VariantSignature));
+    }
+    {
+        cstring list("iqb");
+        TEST(ArgumentList::isSignatureValid(list));
+        TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
+        cstring list2("aii");
+        TEST(ArgumentList::isSignatureValid(list2));
+        TEST(!ArgumentList::isSignatureValid(list2, ArgumentList::VariantSignature));
+    }
+    {
+        cstring simpleArray("ai");
+        TEST(ArgumentList::isSignatureValid(simpleArray));
+        TEST(ArgumentList::isSignatureValid(simpleArray, ArgumentList::VariantSignature));
+    }
+    {
+        cstring messyArray("a(iaia{ia{iv}})");
+        TEST(ArgumentList::isSignatureValid(messyArray));
+        TEST(ArgumentList::isSignatureValid(messyArray, ArgumentList::VariantSignature));
+    }
+    {
+        cstring dictFail("a{vi}");
+        TEST(!ArgumentList::isSignatureValid(dictFail));
+        TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
+    }
+    {
+        cstring emptyStruct("()");
+        TEST(!ArgumentList::isSignatureValid(emptyStruct));
+        TEST(!ArgumentList::isSignatureValid(emptyStruct, ArgumentList::VariantSignature));
+        cstring emptyStruct2("(())");
+        TEST(!ArgumentList::isSignatureValid(emptyStruct2));
+        TEST(!ArgumentList::isSignatureValid(emptyStruct2, ArgumentList::VariantSignature));
+        cstring miniStruct("(t)");
+        TEST(ArgumentList::isSignatureValid(miniStruct));
+        TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
+        cstring badStruct("((i)");
+        TEST(!ArgumentList::isSignatureValid(badStruct));
+        TEST(!ArgumentList::isSignatureValid(badStruct, ArgumentList::VariantSignature));
+        cstring badStruct2("(i))");
+        TEST(!ArgumentList::isSignatureValid(badStruct2));
+        TEST(!ArgumentList::isSignatureValid(badStruct2, ArgumentList::VariantSignature));
+    }
+    {
+        cstring nullStr;
+        cstring emptyStr("");
+        TEST(!ArgumentList::isObjectPathValid(nullStr));
+        TEST(!ArgumentList::isObjectPathValid(emptyStr));
+        TEST(ArgumentList::isObjectPathValid(cstring("/")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc/")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/abc")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/abc/def")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc&def")));
+        TEST(!ArgumentList::isObjectPathValid(cstring("/abc//def")));
+        TEST(ArgumentList::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
+    }
+    {
+        cstring maxStruct("((((((((((((((((((((((((((((((((i"
+                          "))))))))))))))))))))))))))))))))");
+        TEST(ArgumentList::isSignatureValid(maxStruct));
+        TEST(ArgumentList::isSignatureValid(maxStruct, ArgumentList::VariantSignature));
+        cstring struct33("(((((((((((((((((((((((((((((((((i" // too much nesting by one
+                         ")))))))))))))))))))))))))))))))))");
+        TEST(!ArgumentList::isSignatureValid(struct33));
+        TEST(!ArgumentList::isSignatureValid(struct33, ArgumentList::VariantSignature));
+
+        cstring maxArray("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
+        TEST(ArgumentList::isSignatureValid(maxArray));
+        TEST(ArgumentList::isSignatureValid(maxArray, ArgumentList::VariantSignature));
+        cstring array33("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
+        TEST(!ArgumentList::isSignatureValid(array33));
+        TEST(!ArgumentList::isSignatureValid(array33, ArgumentList::VariantSignature));
+    }
+}
+
+static void test_readerWriterExclusion()
+{
+    ArgumentList arg;
+    {
+        ArgumentList::ReadCursor reader1 = arg.beginRead();
+        {
+            ArgumentList::ReadCursor reader2 = arg.beginRead();
+            TEST(reader2.isValid());
+        }
+        {
+            ArgumentList::WriteCursor writer1 = arg.beginWrite();
+            TEST(!writer1.isValid());
+        }
+    }
+    {
+        ArgumentList::ReadCursor reader3 = arg.beginRead();
+        TEST(reader3.isValid());
+    }
+    {
+        ArgumentList::WriteCursor writer2 = arg.beginWrite();
+        TEST(writer2.isValid());
+        {
+            ArgumentList::ReadCursor reader4 = arg.beginRead();
+            TEST(!reader4.isValid());
+        }
+        {
+            ArgumentList::ReadCursor writer3 = arg.beginRead();
+            TEST(!writer3.isValid());
+        }
+    }
+    {
+        ArgumentList::WriteCursor writer4 = arg.beginWrite();
+        TEST(writer4.isValid());
+    }
 }
 
 static void test_nesting()
