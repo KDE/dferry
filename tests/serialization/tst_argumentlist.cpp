@@ -171,6 +171,9 @@ static void doRoundtrip(ArgumentList arg, bool skipNextEntryAtArrayStart, bool d
         printArray(copyData);
     }
     TEST(arraysEqual(argData, copyData));
+
+    free(copySignature.begin);
+    free(copyData.begin);
 }
 
 static void doRoundtrip(ArgumentList arg, bool debugPrint = false)

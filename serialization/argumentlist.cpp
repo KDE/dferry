@@ -922,6 +922,8 @@ ArgumentList::WriteCursor::~WriteCursor()
         assert(m_argList->m_hasWriteCursor);
         m_argList->m_hasWriteCursor = false;
     }
+    free(m_data.begin);
+    m_data = array();
     delete m_nesting;
     m_nesting = 0;
 }
