@@ -357,6 +357,10 @@ cstring ArgumentList::ReadCursor::stateString() const
 void ArgumentList::ReadCursor::replaceData(array data)
 {
     m_data = data;
+    // TODO fail if wrong state?
+    if (m_state == NeedMoreData) {
+        advanceState();
+    }
 }
 
 static void getTypeInfo(byte letterCode, ArgumentList::CursorState *typeState, uint32 *alignment,

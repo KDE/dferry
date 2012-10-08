@@ -107,7 +107,7 @@ public:
          // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
          // ### will need to fix up any VariantInfo::prevSignature on the stack where prevSignature
          //     is inside m_data; length will still work but begin will be outdated.
-        void replaceData(array data);
+        void replaceData(array data); // TODO move this to ArgumentList
 
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }

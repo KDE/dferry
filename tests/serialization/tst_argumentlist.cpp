@@ -36,8 +36,15 @@ static void printArray(array a)
     cout << '\n';
 }
 
-static void doRoundtrip(ArgumentList arg, bool skipNextEntryAtArrayStart, bool debugPrint)
+static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, bool debugPrint)
 {
+    cstring signature = arg_in.signature();
+    array data = arg_in.data();
+    const int realDataLength = data.length;
+    data.length = 0; // let's test everything that is not explicitly forbidden...
+
+    ArgumentList arg(signature, data);
+
     ArgumentList::ReadCursor reader = arg.beginRead();
 
     ArgumentList copy;
@@ -58,7 +65,10 @@ static void doRoundtrip(ArgumentList arg, bool skipNextEntryAtArrayStart, bool d
             isDone = true;
             break;
         case ArgumentList::NeedMoreData:
-            TEST(false);
+            TEST(data.length < realDataLength);
+            data.length++;
+            // TODO harsher test: move data.begin around to require working fixups in ReadCursor
+            reader.replaceData(data);
             break;
         case ArgumentList::BeginStruct:
             reader.beginStruct();
@@ -163,7 +173,9 @@ static void doRoundtrip(ArgumentList arg, bool skipNextEntryAtArrayStart, bool d
     TEST(ArgumentList::isSignatureValid(copySignature));
     TEST(stringsEqual(argSignature, copySignature));
 
-    array argData = arg.data();
+    //  HACK array argData = arg.data(); (do this properly once we have ArgumentList::replaceData())
+    array argData = data; // HACK
+
     array copyData = copy.data();
     TEST(argData.length == copyData.length);
     if (debugPrint && !arraysEqual(argData, copyData)) {
@@ -626,9 +638,6 @@ static void test_complicated()
     }
 
     doRoundtrip(arg);
-
-    // TODO test recovery from NeedMoreData with that nontrivial payload
-    //      (or just do it in every doRoundtrip()!)
 }
 
 int main(int argc, char *argv[])
