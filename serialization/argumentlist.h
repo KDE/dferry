@@ -170,7 +170,7 @@ public:
 
         struct VariantInfo
         {
-            podCstring prevSignature;       // a variant switches the currently parsed signature, so we
+            podCstring prevSignature;     // a variant switches the currently parsed signature, so we
             uint32 prevSignaturePosition; // need to store the old signature and parse position.
         };
 

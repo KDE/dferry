@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -356,8 +357,27 @@ cstring ArgumentList::ReadCursor::stateString() const
 
 void ArgumentList::ReadCursor::replaceData(array data)
 {
+    VALID_IF(data.length >= m_dataPosition);
+
+    ptrdiff_t offset = data.begin - m_data.begin;
+
+    // fix up saved signatures on the aggregate stack except for the first, which is not contained in m_data
+    bool isOriginalSignature = true;
+    const int size = m_aggregateStack.size();
+    for (int i = 0; i < size; i++) {
+        if (m_aggregateStack[i].aggregateType == BeginVariant) {
+            if (isOriginalSignature) {
+                isOriginalSignature = false;
+            } else {
+                m_aggregateStack[i].var.prevSignature.begin += offset;
+            }
+        }
+    }
+    if (!isOriginalSignature) {
+        m_signature.begin += offset;
+    }
+
     m_data = data;
-    // TODO fail if wrong state?
     if (m_state == NeedMoreData) {
         advanceState();
     }

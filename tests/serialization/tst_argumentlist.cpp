@@ -2,6 +2,7 @@
 
 #include "../testutil.h"
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 
@@ -36,14 +37,13 @@ static void printArray(array a)
     cout << '\n';
 }
 
-static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, bool debugPrint)
+static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int dataIncrement, bool debugPrint)
 {
     cstring signature = arg_in.signature();
     array data = arg_in.data();
-    const int realDataLength = data.length;
-    data.length = 0; // let's test everything that is not explicitly forbidden...
+    array shortData;
 
-    ArgumentList arg(signature, data);
+    ArgumentList arg(signature, shortData);
 
     ArgumentList::ReadCursor reader = arg.beginRead();
 
@@ -64,12 +64,25 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, boo
             writer.finish();
             isDone = true;
             break;
-        case ArgumentList::NeedMoreData:
-            TEST(data.length < realDataLength);
-            data.length++;
-            // TODO harsher test: move data.begin around to require working fixups in ReadCursor
-            reader.replaceData(data);
-            break;
+        case ArgumentList::NeedMoreData: {
+            TEST(shortData.length < data.length);
+            // reallocate shortData to test that ReadCursor can handle the data moving around - and
+            // allocate the new one before destroying the old one to make sure that the pointer differs
+            array oldData = shortData;
+            shortData.length = std::min(shortData.length + dataIncrement, data.length);
+            shortData.begin = reinterpret_cast<byte *>(malloc(shortData.length));
+            for (int i = 0; i < shortData.length; i++) {
+                shortData.begin[i] = data.begin[i];
+            }
+            // clobber it to provoke errors that only valgrind might find otherwise
+            for (int i = 0; i < oldData.length; i++) {
+                oldData.begin[i] = '\xff';
+            }
+            if (oldData.begin) {
+                free(oldData.begin);
+            }
+            reader.replaceData(shortData);
+            break; }
         case ArgumentList::BeginStruct:
             reader.beginStruct();
             writer.beginStruct();
@@ -184,15 +197,20 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, boo
     }
     TEST(arraysEqual(argData, copyData));
 
+    if (shortData.begin) {
+        free(shortData.begin);
+    }
     free(copySignature.begin);
     free(copyData.begin);
 }
 
 static void doRoundtrip(ArgumentList arg, bool debugPrint = false)
 {
-    // test both with and without calling WriteCursor::next(Array,Dict)Entry at the start of an array
-    doRoundtrip(arg, false, debugPrint);
-    doRoundtrip(arg, true, debugPrint);
+    int maxIncrement = arg.data().length;
+    for (int i = 1; i <= maxIncrement; i++) {
+        doRoundtrip(arg, false, i, debugPrint);
+        doRoundtrip(arg, true, i, debugPrint);
+    }
 }
 
 
@@ -574,11 +592,49 @@ static void test_writerMisuse()
     }
 }
 
+void addSomeVariantStuff(ArgumentList::WriteCursor *writer)
+{
+    writer->beginVariant();
+        writer->beginVariant();
+            writer->beginVariant();
+                writer->beginStruct();
+                    writer->writeString(cstring("Smoerebroed smoerebroed"));
+                    writer->beginStruct();
+                        writer->writeString(cstring("Bork bork bork"));
+                        writer->beginVariant();
+                            writer->beginStruct();
+                                writer->writeString(cstring("Quite nesty"));
+                                writer->writeObjectPath(cstring("/path/to/object"));
+                                writer->writeUint64(234234234);
+                                writer->writeByte(2);
+                                writer->writeUint64(234234223434);
+                                writer->writeUint16(34);
+                            writer->endStruct();
+                        writer->endVariant();
+                        writer->beginStruct();
+                            writer->writeByte(34);
+                        writer->endStruct();
+                    writer->endStruct();
+                    writer->writeString(cstring("Another string"));
+                writer->endStruct();
+            writer->endVariant();
+        writer->endVariant();
+    writer->endVariant();
+}
+
 static void test_complicated()
 {
     ArgumentList arg;
     {
         ArgumentList::WriteCursor writer = arg.beginWrite();
+        // NeedMoreData-related bugs are less dangerous inside arrays, so we try to provoke one here;
+        // the reason for arrays preventing failures is that they have a length prefix which enables
+        // and encourages pre-fetching all the array's data before processing *anything* inside the
+        // array. therefore no NeedMoreData state happens while really deserializing the array's
+        // contents. but we exactly want NeedMoreData while in the middle of deserializing something
+        // meaty, specifically variants. see ReadCursor::replaceData().
+        addSomeVariantStuff(&writer);
+
         writer.writeInt64(234234);
         writer.beginVariant();
             writer.beginDict(false);
@@ -604,21 +660,7 @@ static void test_complicated()
             writer.nextDictEntry();
                 writer.writeByte(25);
                 writer.beginVariant();
-                    writer.beginVariant();
-                        writer.beginVariant();
-                            writer.beginVariant();
-                                writer.beginVariant();
-                                    writer.beginStruct();
-                                        writer.writeString(cstring("Quite nesty"));
-                                        writer.writeObjectPath(cstring("/path/to/object"));
-                                        writer.writeUint64(234234234);
-                                        writer.writeByte(2);
-                                        writer.writeUint64(234234223434);
-                                    writer.endStruct();
-                                writer.endVariant();
-                            writer.endVariant();
-                        writer.endVariant();
-                    writer.endVariant();
+                    addSomeVariantStuff(&writer);
                 writer.endVariant();
             writer.endDict();
         writer.endVariant();
@@ -636,7 +678,6 @@ static void test_complicated()
         writer.finish();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
-
     doRoundtrip(arg);
 }
 
