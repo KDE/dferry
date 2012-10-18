@@ -1,6 +1,10 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+// ### this belongs into a different header
+#define likely(x)    __builtin_expect(!!(x), 1)
+#define unlikely(x)  __builtin_expect(!!(x), 0)
+
 typedef unsigned char byte;
 typedef short int int16;
 typedef unsigned short int uint16;

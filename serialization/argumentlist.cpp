@@ -13,7 +13,7 @@
 // "data is good if X" instead of "data is bad if Y". That stuff should end up the same after
 // optimization anyway.
 // while to avoid the dangling-else problem
-#define VALID_IF(cond) while (!(cond)) { m_state = InvalidData; return; }
+#define VALID_IF(cond) while (unlikely(!(cond))) { m_state = InvalidData; return; }
 
 static inline int align(uint32 index, uint32 alignment)
 {
@@ -25,7 +25,7 @@ static inline bool isPaddingZero(const array &buffer, int padStart, int padEnd)
 {
     padEnd = std::min(padEnd, buffer.length);
     for (; padStart < padEnd; padStart++) {
-        if (buffer.begin[padStart] != '\0') {
+        if (unlikely(buffer.begin[padStart] != '\0')) {
             return false;
         }
     }
@@ -50,11 +50,11 @@ struct Nesting
     static const int parenMax = 32;
     static const int totalMax = 64;
 
-    bool beginArray() { array++; return array <= arrayMax && total() <= totalMax; }
+    bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
     void endArray() { array--; }
-    bool beginParen() { paren++; return paren <= parenMax && total() <= totalMax; }
+    bool beginParen() { paren++; return likely(paren <= parenMax && total() <= totalMax); }
     void endParen() { paren--; }
-    bool beginVariant() { variant++; return total() <= totalMax; }
+    bool beginVariant() { variant++; return likely(total() <= totalMax); }
     void endVariant() { variant--; }
     int total() { return array + paren + variant; }
 
@@ -158,9 +158,9 @@ bool ArgumentList::isStringValid(cstring string)
     return true;
 }
 
-static bool isObjectNameLetter(byte b)
+static inline bool isObjectNameLetter(byte b)
 {
-    return (b >= 'a' && b <= 'z') || b == '_' || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9');
+    return likely((b >= 'a' && b <= 'z') || b == '_' || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9'));
 }
 
 // static
@@ -548,7 +548,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
                                           m_argList->m_isByteSwapped);
     }
     m_dataPosition += lengthPrefixSize;
-    if (m_dataPosition + stringLength > m_data.length) {
+    if (unlikely(m_dataPosition + stringLength > m_data.length)) {
         return NeedMoreData;
     }
     m_String.begin = m_data.begin + m_dataPosition;
@@ -562,7 +562,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
     } else if (m_state == Signature) {
         isValidString = ArgumentList::isSignatureValid(cstring(m_String.begin, m_String.length));
     }
-    if (!isValidString) {
+    if (unlikely(!isValidString)) {
         return InvalidData;
     }
     return m_state;
@@ -577,7 +577,7 @@ void ArgumentList::ReadCursor::advanceState()
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
 
-    if (m_state == InvalidData) { // nonrecoverable...
+    if (unlikely(m_state == InvalidData)) { // nonrecoverable...
         return;
     }
 
@@ -635,23 +635,23 @@ void ArgumentList::ReadCursor::advanceState()
     getTypeInfo(m_signature.begin[m_signaturePosition],
                 &m_state, &alignment, &isPrimitiveType, &isStringType);
 
-    if (m_state == InvalidData) {
+    if (unlikely(m_state == InvalidData)) {
         return;
     }
 
     // check if we have enough data for the next type, and read it
     // if we're in a zero-length array, we are iterating only over the types without reading any data
 
-    if (!m_zeroLengthArrayNesting) {
+    if (likely(!m_zeroLengthArrayNesting)) {
         int padStart = m_dataPosition;
         m_dataPosition = align(m_dataPosition, alignment);
         VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
-        if (m_dataPosition > m_data.length) {
+        if (unlikely(m_dataPosition > m_data.length)) {
             goto out_needMoreData;
         }
 
         if (isPrimitiveType || isStringType) {
-            if (m_dataPosition + alignment > m_data.length) {
+            if (unlikely(m_dataPosition + alignment > m_data.length)) {
                 goto out_needMoreData;
             }
 
@@ -660,7 +660,7 @@ void ArgumentList::ReadCursor::advanceState()
                 m_dataPosition += alignment;
             } else {
                 m_state = doReadString(alignment);
-                if (m_state == NeedMoreData) {
+                if (unlikely(m_state == NeedMoreData)) {
                     goto out_needMoreData;
                 }
             }
@@ -691,18 +691,18 @@ void ArgumentList::ReadCursor::advanceState()
         break;
 
     case BeginVariant: {
-        if (m_dataPosition >= m_data.length) {
+        if (unlikely(m_dataPosition >= m_data.length)) {
             goto out_needMoreData;
         }
         cstring signature;
-        if (m_zeroLengthArrayNesting) {
+        if (unlikely(m_zeroLengthArrayNesting)) {
             static const char *emptyString = "";
             signature = cstring(emptyString, 0);
         } else {
             signature.length = m_data.begin[m_dataPosition++];
             signature.begin = m_data.begin + m_dataPosition;
             m_dataPosition += signature.length + 1;
-            if (m_dataPosition > m_data.length) {
+            if (unlikely(m_dataPosition > m_data.length)) {
                 goto out_needMoreData;
             }
         }
@@ -721,8 +721,8 @@ void ArgumentList::ReadCursor::advanceState()
 
     case BeginArray: {
         uint32 arrayLength = 0;
-        if (!m_zeroLengthArrayNesting) {
-            if (m_dataPosition + 4 > m_data.length) {
+        if (likely(!m_zeroLengthArrayNesting)) {
+            if (unlikely(m_dataPosition + 4 > m_data.length)) {
                 goto out_needMoreData;
             }
             static const int maxArrayDataLength = 67108864; // from the spec
@@ -740,12 +740,12 @@ void ArgumentList::ReadCursor::advanceState()
         aggregateInfo.aggregateType = m_state;
 
         // ### are we supposed to align m_dataPosition if the array is empty?
-        if (!m_zeroLengthArrayNesting) {
+        if (likely(!m_zeroLengthArrayNesting)) {
             int padStart = m_dataPosition;
             m_dataPosition = align(m_dataPosition, firstElementAlignment);
             VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
             aggregateInfo.arr.dataEnd = m_dataPosition + arrayLength;
-            if (aggregateInfo.arr.dataEnd > m_data.length) {
+            if (unlikely(aggregateInfo.arr.dataEnd > m_data.length)) {
                 // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
                 goto out_needMoreData;
             }
@@ -799,7 +799,7 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
         *isEmpty = m_zeroLengthArrayNesting;
     }
 
-    if (m_zeroLengthArrayNesting) {
+    if (unlikely(m_zeroLengthArrayNesting)) {
         if (!isEmpty) {
             // need to move m_signaturePosition to the end of the array signature or it won't happen
             cstring temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
@@ -834,7 +834,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
     assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
-    if (m_zeroLengthArrayNesting) {
+    if (unlikely(m_zeroLengthArrayNesting)) {
         if (m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
             // do one iteration to read the types
             return true;
@@ -1013,7 +1013,7 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
     } else if (m_state == Signature) {
         isValidString = ArgumentList::isSignatureValid(cstring(m_String.begin, m_String.length));
     }
-    if (!isValidString) {
+    if (unlikely(!isValidString)) {
         return InvalidData;
     }
 
@@ -1054,7 +1054,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
     // TODO extend m_data before it overflows!
 
-    if (m_state == InvalidData) {
+    if (unlikely(m_state == InvalidData)) {
         return;
     }
 
@@ -1211,7 +1211,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
         VALID_IF(m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1));
         m_aggregateStack.pop_back();
-        if (m_zeroLengthArrayNesting) {
+        if (unlikely(m_zeroLengthArrayNesting)) {
             m_zeroLengthArrayNesting--;
         }
 
@@ -1253,7 +1253,7 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
     AggregateInfo &aggregateInfo = m_aggregateStack.back();
     VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
-    if (m_zeroLengthArrayNesting) {
+    if (unlikely(m_zeroLengthArrayNesting)) {
         // allow one iteration to write the types
         VALID_IF(m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
     } else {

@@ -16,7 +16,7 @@ namespace basic
 inline int16 readInt16(const byte *raw, bool swap)
 {
     byte buf[2];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[1];
         buf[1] = raw[0];
         raw = buf;
@@ -27,7 +27,7 @@ inline int16 readInt16(const byte *raw, bool swap)
 inline uint16 readUint16(const byte *raw, bool swap)
 {
     byte buf[2];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[1];
         buf[1] = raw[0];
         raw = buf;
@@ -38,7 +38,7 @@ inline uint16 readUint16(const byte *raw, bool swap)
 inline int32 readInt32(const byte *raw, bool swap)
 {
     byte buf[4];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[3];
         buf[1] = raw[2];
         buf[2] = raw[1];
@@ -51,7 +51,7 @@ inline int32 readInt32(const byte *raw, bool swap)
 inline uint32 readUint32(const byte *raw, bool swap)
 {
     byte buf[4];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[3];
         buf[1] = raw[2];
         buf[2] = raw[1];
@@ -64,7 +64,7 @@ inline uint32 readUint32(const byte *raw, bool swap)
 inline int64 readInt64(const byte *raw, bool swap)
 {
     byte buf[8];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[7];
         buf[1] = raw[6];
         buf[2] = raw[5];
@@ -81,7 +81,7 @@ inline int64 readInt64(const byte *raw, bool swap)
 inline uint64 readUint64(const byte *raw, bool swap)
 {
     byte buf[8];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[7];
         buf[1] = raw[6];
         buf[2] = raw[5];
@@ -98,7 +98,7 @@ inline uint64 readUint64(const byte *raw, bool swap)
 inline double readDouble(const byte *raw, bool swap)
 {
     byte buf[8];
-    if (swap) {
+    if (unlikely(swap)) {
         buf[0] = raw[7];
         buf[1] = raw[6];
         buf[2] = raw[5];
