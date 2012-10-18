@@ -186,8 +186,8 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
     TEST(ArgumentList::isSignatureValid(copySignature));
     TEST(stringsEqual(argSignature, copySignature));
 
-    //  HACK array argData = arg.data(); (do this properly once we have ArgumentList::replaceData())
-    array argData = data; // HACK
+    // TODO when it's wired up between ReadCursor and ArgumentList: array argData = arg.data();
+    array argData = arg_in.data();
 
     array copyData = copy.data();
     TEST(argData.length == copyData.length);

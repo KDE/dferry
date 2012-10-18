@@ -5,7 +5,10 @@
 
 // ### this is the dumb version for now (unrolled for possible performance gain)
 
-// note that there are no writeFoo() methods; we just expect the receiver to deal with our byte order.
+// note that there are no byte-swapping writeFoo() methods;
+// we just expect the receiver to deal with our byte order.
+
+// we could add alignment assertions here to make extra sure that it's correct
 
 namespace basic
 {
