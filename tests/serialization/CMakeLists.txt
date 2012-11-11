@@ -1,5 +1,3 @@
-include_directories(${CMAKE_SOURCE_DIR}/serialization)
-
 MACRO(SERIALIZATIONTESTS)
     FOREACH(_testname ${ARGN})
         add_executable(tst_${_testname} tst_${_testname}.cpp)
