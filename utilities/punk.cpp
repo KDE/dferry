@@ -26,9 +26,8 @@ int main(int argc, char *argv[])
 
     int uid = 1000; // H4X
     stringstream uidDecimal;
-    uidStream << uid;
-    stringstream uidDecimal;
-    cout << uidStream.str() << ':' << hexEncode(uidStream.str()) << '\n';
+    uidDecimal << uid;
+    cout << uidDecimal.str() << ':' << hexEncode(uidDecimal.str()) << '\n';
 
     // TODO authentication ping-pong
     // some findings:
