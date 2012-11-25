@@ -148,6 +148,15 @@ void LocalSocket::notifyRead()
 #endif
 }
 
+int LocalSocket::availableBytesForReading()
+{
+    int available = 0;
+    if (ioctl(m_fd, FIONREAD, &available) < 0) {
+            available = 0;
+    }
+    return available;
+}
+
 array LocalSocket::read(int maxLen /* = -1 */)
 {
     array ret;

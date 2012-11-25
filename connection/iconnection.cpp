@@ -1,14 +1,26 @@
 #include "iconnection.h"
 
+#include "iconnectionclient.h"
 #include "ieventdispatcher.h"
 
 IConnection::IConnection()
-   : m_eventDispatcher(0)
+   : m_eventDispatcher(0),
+     m_client(0)
 {
 }
 
 IConnection::~IConnection()
 {
+}
+
+void IConnection::setClient(IConnectionClient *client)
+{
+    m_client = client;
+}
+
+IConnectionClient *IConnection::client() const
+{
+    return m_client;
 }
 
 void IConnection::setEventDispatcher(IEventDispatcher *ed)
@@ -28,4 +40,18 @@ void IConnection::setEventDispatcher(IEventDispatcher *ed)
 IEventDispatcher *IConnection::eventDispatcher() const
 {
     return m_eventDispatcher;
+}
+
+void IConnection::notifyRead()
+{
+    if (m_client) {
+        m_client->notifyConnectionReadyRead();
+    }
+}
+
+void IConnection::notifyWrite()
+{
+    if (m_client) {
+        m_client->notifyConnectionReadyWrite();
+    }
 }

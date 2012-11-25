@@ -9,8 +9,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 include_directories(${CMAKE_SOURCE_DIR}/connection ${CMAKE_SOURCE_DIR}/serialization)
 
 set(DSEL_SOURCES
+    connection/authnegotiator.cpp
     connection/epolleventdispatcher.cpp
     connection/iconnection.cpp
+    connection/iconnectionclient.cpp
     connection/ieventdispatcher.cpp
     connection/localsocket.cpp
     connection/pathfinder.cpp
@@ -20,9 +22,11 @@ set(DSEL_SOURCES
     serialization/types.cpp)
 
 set(DSEL_HEADERS
+    connection/authnegotiator.h
     connection/epolleventdispatcher.h
-    connection/iauth.h
+    connection/iauthmechanism.h
     connection/iconnection.h
+    connection/iconnectionclient.h
     connection/ieventdispatcher.h
     connection/localsocket.h
     connection/pathfinder.h

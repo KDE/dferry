@@ -20,6 +20,7 @@ public:
 
     // pure virtuals from IConnection
     int write(array data);
+    int availableBytesForReading();
     array read(int maxSize = -1);
     bool isOpen();
     int fileDescriptor() const;

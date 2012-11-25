@@ -1,23 +1,20 @@
 #include "platform.h"
 #include "types.h"
 
+class IConnectionClient;
 class IEventDispatcher;
-
-#if 0
-class IConnectionReader
-{
-public:
-    virtual ~IConnectionReader {}
-    virtual void notifyRead() = 0;
-};
-#endif
 
 class IConnection
 {
 public:
     IConnection();
     virtual ~IConnection();
+
+    void setClient(IConnectionClient *client);
+    IConnectionClient *client() const;
+
     virtual int write(array data) = 0;
+    virtual int availableBytesForReading() = 0;
     virtual array read(int maxLen = -1) = 0;
 
     virtual bool isOpen() = 0;
@@ -28,9 +25,11 @@ public:
 
 private:
     friend class IEventDispatcher;
-    // called from the event loop
-    virtual void notifyRead() = 0;
-    // virtual void notifyWrite() = 0; // for now we just block when the buffers are full
-    
+    // called from the event dispatcher. might become necessary to make them virtual in case any
+    // new connection type has special requirements.
+    void notifyRead();
+    void notifyWrite();
+
     IEventDispatcher *m_eventDispatcher;
+    IConnectionClient *m_client;
 };
