@@ -11,7 +11,7 @@ class IEventDispatcher
 {
 public:
     virtual ~IEventDispatcher();
-    virtual void poll() = 0;
+    virtual void poll(int timeout = -1) = 0;
 
 protected:
     friend class IConnection;

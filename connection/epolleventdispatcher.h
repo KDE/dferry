@@ -10,7 +10,7 @@ class EpollEventDispatcher : public IEventDispatcher
 public:
     EpollEventDispatcher();
     virtual ~EpollEventDispatcher();
-    virtual void poll();
+    virtual void poll(int timeout = -1);
 
 protected:
     // reimplemented from IEventDispatcher

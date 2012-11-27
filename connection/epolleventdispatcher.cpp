@@ -18,10 +18,9 @@ EpollEventDispatcher::~EpollEventDispatcher()
     close(m_epollFd);
 }
 
-void EpollEventDispatcher::poll(/*int timeout*/)
+void EpollEventDispatcher::poll(int timeout)
 {
     static const int maxEvPerPoll = 8;
-    static const int timeout = 0;
     struct epoll_event results[maxEvPerPoll];
     int nresults = epoll_wait(m_epollFd, results, maxEvPerPoll, timeout);
     if (nresults < 0) {
