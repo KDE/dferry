@@ -19,11 +19,12 @@ public:
     ~LocalSocket();
 
     // pure virtuals from IConnection
-    int write(array data);
-    int availableBytesForReading();
-    array read(int maxSize = -1);
-    bool isOpen();
-    int fileDescriptor() const;
+    virtual int write(array data);
+    virtual int availableBytesForReading();
+    virtual array read(int maxSize = -1);
+    virtual bool isOpen();
+    virtual int fileDescriptor() const;
+    virtual void notifyRead();
     // end IConnection
 
 private:
@@ -35,12 +36,6 @@ private:
     LocalSocket(); // not implemented
     LocalSocket(const LocalSocket &); // not implemented, disable copying
     LocalSocket &operator=(const LocalSocket &); // dito
-
-    // pure virtual from IConnection
-    void notifyRead();
-    // end IConnection
-
-    void doRead();
 
     void closeFd();
 

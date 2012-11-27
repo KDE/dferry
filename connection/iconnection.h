@@ -23,13 +23,13 @@ public:
     virtual void setEventDispatcher(IEventDispatcher *loop);
     virtual IEventDispatcher *eventDispatcher() const;
 
-private:
+protected:
     friend class IEventDispatcher;
-    // called from the event dispatcher. might become necessary to make them virtual in case any
-    // new connection type has special requirements.
-    void notifyRead();
-    void notifyWrite();
+    // called from the event dispatcher. virtual because at least LocalSocket requires extra logic.
+    virtual void notifyRead();
+    virtual void notifyWrite();
 
+private:
     IEventDispatcher *m_eventDispatcher;
     IConnectionClient *m_client;
 };

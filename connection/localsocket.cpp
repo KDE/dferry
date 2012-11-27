@@ -133,26 +133,11 @@ int LocalSocket::write(array a)
     return a.length - iov.iov_len; // "- iov.iov_len" is for later, TODO revisit
 }
 
-void LocalSocket::notifyRead()
-{
-    // TODO notify watchers or something?
-#if 0
-    int available = 0;
-    do {
-        doRead();
-        // read until there is no more data
-        if (ioctl(m_fd, FIONREAD, &available) < 0) {
-            available = 0;
-        }
-    } while (available);
-#endif
-}
-
 int LocalSocket::availableBytesForReading()
 {
     int available = 0;
     if (ioctl(m_fd, FIONREAD, &available) < 0) {
-            available = 0;
+        available = 0;
     }
     return available;
 }
@@ -227,4 +212,14 @@ bool LocalSocket::isOpen()
 int LocalSocket::fileDescriptor() const
 {
     return m_fd;
+}
+
+void LocalSocket::notifyRead()
+{
+    if (availableBytesForReading()) {
+        IConnection::notifyRead();
+    } else {
+        // This should really only happen in error cases! ### TODO test?
+        closeFd();
+    }
 }
