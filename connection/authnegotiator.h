@@ -19,6 +19,7 @@ public:
 
 private:
     bool readLine();
+    bool isEndOfLine() const;
     void advanceState();
 
     enum State {

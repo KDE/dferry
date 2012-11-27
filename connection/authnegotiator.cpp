@@ -39,6 +39,9 @@ void AuthNegotiator::notifyConnectionReadyRead()
 bool AuthNegotiator::readLine()
 {
     // don't care about performance here, this doesn't run often or process much data
+    if (isEndOfLine()) {
+        m_line.length = 0; // start a new line
+    }
     while (m_connection->availableBytesForReading()) {
         array in = m_connection->read(1);
         // TODO properly handle the conditions that we currently assert
@@ -46,13 +49,18 @@ bool AuthNegotiator::readLine()
         assert(m_line.length + 1 < m_maxLineLength); // room for current letter and '\0' // TODO unittest
         m_line.begin[m_line.length++] = in.begin[0];
 
-        if (m_line.length >= 2 &&
-            m_line.begin[m_line.length - 2] == '\r' && m_line.begin[m_line.length - 1] == '\n') {
+        if (isEndOfLine()) {
             m_line.begin[m_line.length] = '\0'; // maintain cstring invariant
             return true;
         }
     }
     return false;
+}
+
+bool AuthNegotiator::isEndOfLine() const
+{
+    return m_line.length >= 2 &&
+           m_line.begin[m_line.length - 2] == '\r' && m_line.begin[m_line.length - 1] == '\n';
 }
 
 void AuthNegotiator::advanceState()
