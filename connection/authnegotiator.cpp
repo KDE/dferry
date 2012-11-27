@@ -19,14 +19,18 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     byte nullBuf[1] = { 0 };
     connection->write(array(nullBuf, 1));
 
+    // no idea why the uid is first encoded to ascii and the ascii to hex...
     uid_t uid = geteuid();
     stringstream uidDecimal;
     uidDecimal << uid;
+    string extLine = "AUTH EXTERNAL " + hexEncode(uidDecimal.str()) + "\r\n";
+    cout << extLine;
+    connection->write(array(extLine.c_str(), extLine.length()));
 
-    string extAuthLine = "AUTH EXTERNAL " + hexEncode(uidDecimal.str()) + "\r\n";
-    cout << extAuthLine;
-
-    connection->write(array(extAuthLine.c_str(), extAuthLine.length()));
+    cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
+    connection->write(array(negotiateLine.begin, negotiateLine.length));
+    cstring beginLine("BEGIN\r\n");
+    connection->write(array(beginLine.begin, beginLine.length));
 }
 
 void AuthNegotiator::notifyConnectionReadyRead()
