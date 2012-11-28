@@ -13,6 +13,7 @@ using namespace std;
 
 AuthNegotiator::AuthNegotiator(IConnection *connection)
    : m_connection(connection),
+     m_state(InitialState),
      m_line(m_lineBuffer, 0)
 {
     connection->setClient(this);
@@ -26,11 +27,7 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     string extLine = "AUTH EXTERNAL " + hexEncode(uidDecimal.str()) + "\r\n";
     cout << extLine;
     connection->write(array(extLine.c_str(), extLine.length()));
-
-    cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
-    connection->write(array(negotiateLine.begin, negotiateLine.length));
-    cstring beginLine("BEGIN\r\n");
-    connection->write(array(beginLine.begin, beginLine.length));
+    m_state = ExpectOkState;
 }
 
 void AuthNegotiator::notifyConnectionReadyRead()
@@ -75,4 +72,23 @@ void AuthNegotiator::advanceState()
     // - the string after the client "EXTERNAL" is the hex-encoded UID
 
     cout << m_line.begin;
+
+    switch (m_state) {
+    case ExpectOkState: {
+        // TODO check the OK
+        cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
+        cout << negotiateLine.begin;
+        m_connection->write(array(negotiateLine.begin, negotiateLine.length));
+        m_state = ExpectUnixFdResponseState;
+        break; }
+    case ExpectUnixFdResponseState: {
+        // TODO check the response
+        cstring beginLine("BEGIN\r\n");
+        cout << beginLine.begin;
+        m_connection->write(array(beginLine.begin, beginLine.length));
+        break; }
+    default:
+        m_state = AuthenticationFailedState;
+        m_connection->close();
+    }
 }

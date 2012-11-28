@@ -46,20 +46,20 @@ LocalSocket::LocalSocket(const string &socketFilePath)
     if (ok) {
         m_fd = fd;
     } else {
-        close(fd);
+        ::close(fd);
     }
 }
 
 LocalSocket::~LocalSocket()
 {
-    closeFd();
+    close();
 }
 
-void LocalSocket::closeFd()
+void LocalSocket::close()
 {
     setEventDispatcher(0);
     if (m_fd >= 0) {
-        close(m_fd);
+        ::close(m_fd);
     }
     m_fd = -1;
 }
@@ -117,7 +117,7 @@ int LocalSocket::write(array a)
             if (errno == EINTR) {
                 continue;
             } else {
-                closeFd();
+                close();
                 return false;
             }
         }
@@ -177,7 +177,7 @@ array LocalSocket::read(int maxLen /* = -1 */)
     while (iov.iov_len > 0) {
         int nbytes =  recvmsg(m_fd, &recv_msg, 0);
         if (nbytes < 0 && errno != EINTR) {
-            closeFd();
+            close();
             return ret;
         }
         ret.length += nbytes;
@@ -220,6 +220,6 @@ void LocalSocket::notifyRead()
         IConnection::notifyRead();
     } else {
         // This should really only happen in error cases! ### TODO test?
-        closeFd();
+        close();
     }
 }

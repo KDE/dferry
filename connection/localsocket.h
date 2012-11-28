@@ -22,6 +22,7 @@ public:
     virtual int write(array data);
     virtual int availableBytesForReading();
     virtual array read(int maxSize = -1);
+    virtual void close();
     virtual bool isOpen();
     virtual int fileDescriptor() const;
     virtual void notifyRead();
@@ -36,8 +37,6 @@ private:
     LocalSocket(); // not implemented
     LocalSocket(const LocalSocket &); // not implemented, disable copying
     LocalSocket &operator=(const LocalSocket &); // dito
-
-    void closeFd();
 
     int m_fd;
     IEventLoop *m_eventLoop;

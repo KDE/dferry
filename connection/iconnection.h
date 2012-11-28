@@ -16,6 +16,7 @@ public:
     virtual int write(array data) = 0;
     virtual int availableBytesForReading() = 0;
     virtual array read(int maxLen = -1) = 0;
+    virtual void close() = 0;
 
     virtual bool isOpen() = 0;
     virtual FileDescriptor fileDescriptor() const = 0;

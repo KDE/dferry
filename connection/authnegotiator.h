@@ -23,7 +23,11 @@ private:
     void advanceState();
 
     enum State {
-
+        InitialState,
+        ExpectOkState,
+        ExpectUnixFdResponseState,
+        AuthenticationFailedState,
+        AuthenticatedState
     };
 
     IConnection *m_connection;
