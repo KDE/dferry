@@ -3,7 +3,7 @@
 
 #include "iconnectionclient.h"
 
-#include "types.h"
+#include <string>
 
 // TODO we are currently handling all authentication from here; later this class should only
 //      enumerate client and server auth mechanisms and then instantiate and pass control to
@@ -32,9 +32,7 @@ private:
 
     IConnection *m_connection;
     State m_state;
-    static const int m_maxLineLength = 256;
-    byte m_lineBuffer[m_maxLineLength];
-    cstring m_line;
+    std::string m_line;
 };
 
 #endif
