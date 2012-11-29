@@ -83,16 +83,15 @@ void Message::parseVariableHeaders()
     ArgumentList::ReadCursor reader = m_headerParser->beginRead();
     assert(reader.isValid());
 
-    // TODO the isZeroLengthArray stuff is just an API demo(!), we don't actually want to do anything
-    //      if the array is empty. remove it when we have tests / examples.
-    bool isZeroLengthArray;
-    for (reader.beginArray(&isZeroLengthArray); reader.nextArrayEntry(); ) {
-        reader.beginStruct();
-        byte headerType = reader.readByte();
+    if (reader.state() == ArgumentList::BeginArray) {
+        reader.beginArray();
+        while (reader.nextArrayEntry()) {
+            reader.beginStruct();
+            byte headerType = reader.readByte();
 
-        reader.beginVariant();
-        if (!isZeroLengthArray) {
+            reader.beginVariant();
             switch (headerType) {
+            // TODO: proper error handling instead of assertions
             case PATH: {
                 assert(reader.state() == ArgumentList::ObjectPath);
                 m_stringHeaders[headerType] = reader.readObjectPath();
@@ -121,12 +120,14 @@ void Message::parseVariableHeaders()
             }
             default:
                 break; // ignore unknown headers
-            };
+            }
+            reader.endVariant();
+            reader.endStruct();
         }
-        reader.endVariant();
-        reader.endStruct();
+        reader.endArray();
+    } else {
+        // TODO handle error
     }
-    reader.endArray();
 
     static const int maxMessageLength = 134217728;
     // TODO check header length + message length <= maxMessageLength
