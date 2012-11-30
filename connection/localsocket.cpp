@@ -142,10 +142,10 @@ int LocalSocket::availableBytesForReading()
     return available;
 }
 
-array LocalSocket::read(int maxLen /* = -1 */)
+array LocalSocket::read(byte *buffer, int maxSize)
 {
     array ret;
-    if (!maxLen) {
+    if (maxSize <= 0) {
         return ret;
     }
 
@@ -166,14 +166,10 @@ array LocalSocket::read(int maxLen /* = -1 */)
 
     // end boilerplate
 
-    static const int maxMaxLen = 1 << 16;
-    if (maxLen < 0 || maxLen > maxMaxLen) {
-        maxLen = maxMaxLen;
-    }
-    ret.begin = static_cast<byte *>(malloc(maxLen));
+    ret.begin = buffer;
     ret.length = 0;
     iov.iov_base = ret.begin;
-    iov.iov_len = maxLen;
+    iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
         int nbytes =  recvmsg(m_fd, &recv_msg, 0);
         if (nbytes < 0 && errno != EINTR) {

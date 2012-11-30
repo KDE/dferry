@@ -43,7 +43,8 @@ bool AuthNegotiator::readLine()
         m_line.clear(); // start a new line
     }
     while (m_connection->availableBytesForReading()) {
-        array in = m_connection->read(1);
+        byte readBuf[1];
+        array in = m_connection->read(readBuf, 1);
         assert(in.length == 1);
         m_line += in.begin[0];
 

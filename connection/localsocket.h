@@ -21,7 +21,7 @@ public:
     // pure virtuals from IConnection
     virtual int write(array data);
     virtual int availableBytesForReading();
-    virtual array read(int maxSize = -1);
+    virtual array read(byte *buffer, int maxSize);
     virtual void close();
     virtual bool isOpen();
     virtual int fileDescriptor() const;
