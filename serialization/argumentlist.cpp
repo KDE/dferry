@@ -1354,6 +1354,7 @@ void ArgumentList::WriteCursor::finish()
             bufferPos += ei.size;
             m_dataPosition += ei.size;
         } else {
+            // the value of ei.size has special meaning
             ArrayLengthField al;
             if (ei.size == ElementInfo::ArrayLengthField) {
                 // start of an array
