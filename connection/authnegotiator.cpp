@@ -67,7 +67,7 @@ void AuthNegotiator::advanceState()
     // some findings:
     // - the string after the server OK is its UUID that also appears in the address string
 
-    cout << m_line;
+    cout << "> " << m_line;
 
     switch (m_state) {
     case ExpectOkState: {
