@@ -62,7 +62,6 @@ bool EpollEventDispatcher::removeConnection(IConnection *connection)
     assert(connFd >= 0);
     struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
     epoll_ctl(m_epollFd, EPOLL_CTL_DEL, connFd, &epevt);
-    m_connections.erase(connFd);
     return true;
 }
 
