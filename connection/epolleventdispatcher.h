@@ -16,6 +16,7 @@ protected:
     // reimplemented from IEventDispatcher
     bool addConnection(IConnection *conn);
     bool removeConnection(IConnection *conn);
+    void setReadWriteInterest(IConnection *conn, bool read, bool write);
 
 private:
     void notifyRead(int fd);

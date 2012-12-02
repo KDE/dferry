@@ -12,10 +12,10 @@
 using namespace std;
 
 AuthNegotiator::AuthNegotiator(IConnection *connection)
-   : m_connection(connection),
-     m_state(InitialState)
+   : m_state(InitialState)
 {
-    connection->setClient(this);
+    connection->addClient(this);
+    setIsReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
     connection->write(array(nullBuf, 1));
 
@@ -42,9 +42,9 @@ bool AuthNegotiator::readLine()
     if (isEndOfLine()) {
         m_line.clear(); // start a new line
     }
-    while (m_connection->availableBytesForReading()) {
+    while (connection()->availableBytesForReading()) {
         byte readBuf[1];
-        array in = m_connection->read(readBuf, 1);
+        array in = connection()->read(readBuf, 1);
         assert(in.length == 1);
         m_line += in.begin[0];
 
@@ -74,17 +74,17 @@ void AuthNegotiator::advanceState()
         // TODO check the OK
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
         cout << negotiateLine.begin;
-        m_connection->write(array(negotiateLine.begin, negotiateLine.length));
+        connection()->write(array(negotiateLine.begin, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
         cout << beginLine.begin;
-        m_connection->write(array(beginLine.begin, beginLine.length));
+        connection()->write(array(beginLine.begin, beginLine.length));
         break; }
     default:
         m_state = AuthenticationFailedState;
-        m_connection->close();
+        connection()->close();
     }
 }

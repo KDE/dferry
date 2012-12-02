@@ -4,6 +4,8 @@
 
 #include <cstdio>
 
+#define IEVENTDISPATCHER_DEBUG
+
 using namespace std;
 
 IEventDispatcher::~IEventDispatcher()
@@ -32,6 +34,24 @@ void IEventDispatcher::notifyConnectionForReading(FileDescriptor fd)
     if (it != m_connections.end()) {
         it->second->notifyRead();
     } else {
+#ifdef IEVENTDISPATCHER_DEBUG
+        // while interesting for debugging, this is not an error if a connection was in the epoll
+        // set and disconnected in its notifyRead() or notifyWrite() implementation
         printf("IEventDispatcher::notifyRead(): unhandled file descriptor %d.\n", fd);
+#endif
+    }
+}
+
+void IEventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
+{
+    std::map<int, IConnection *>::iterator it = m_connections.find(fd);
+    if (it != m_connections.end()) {
+        it->second->notifyRead();
+    } else {
+#ifdef IEVENTDISPATCHER_DEBUG
+        // while interesting for debugging, this is not an error if a connection was in the epoll
+        // set and disconnected in its notifyRead() or notifyWrite() implementation
+        printf("IEventDispatcher::notifyWrite(): unhandled file descriptor %d.\n", fd);
+#endif
     }
 }

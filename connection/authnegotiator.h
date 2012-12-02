@@ -30,7 +30,6 @@ private:
         AuthenticatedState
     };
 
-    IConnection *m_connection;
     State m_state;
     std::string m_line;
 };

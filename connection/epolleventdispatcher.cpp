@@ -33,6 +33,9 @@ void EpollEventDispatcher::poll(int timeout)
         if (evt->events & EPOLLIN) {
             notifyConnectionForReading(evt->data.fd);
         }
+        if (evt->events & EPOLLOUT) {
+            notifyConnectionForWriting(evt->data.fd);
+        }
     }
 }
 
@@ -42,8 +45,8 @@ bool EpollEventDispatcher::addConnection(IConnection *connection)
         return false;
     }
     struct epoll_event epevt;
-    epevt.events = EPOLLIN;
-    epevt.data.u64 = 0;
+    epevt.events = 0;
+    epevt.data.u64 = 0; // clear high bits in the union
     epevt.data.fd = connection->fileDescriptor();
     epoll_ctl(m_epollFd, EPOLL_CTL_ADD, connection->fileDescriptor(), &epevt);
     return true;
@@ -55,12 +58,23 @@ bool EpollEventDispatcher::removeConnection(IConnection *connection)
         return false;
     }
     const int connFd = connection->fileDescriptor();
-    // the assertion is technically not necessary because Connection should call us *before*
-    // resetting its fd on failure, and we don't need the fd to remove the Connection.
+    // Connection should call us *before* resetting its fd on failure
     assert(connFd >= 0);
-    // connFd will be removed from the epoll set automatically when it is closed - if there are
-    // no copies of it made using e.g. dup(). better safe than sorry anyway...
-    epoll_ctl(m_epollFd, EPOLL_CTL_DEL, connFd, 0);
+    struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
+    epoll_ctl(m_epollFd, EPOLL_CTL_DEL, connFd, &epevt);
     m_connections.erase(connFd);
     return true;
+}
+
+void EpollEventDispatcher::setReadWriteInterest(IConnection *conn, bool readEnabled, bool writeEnabled)
+{
+    FileDescriptor fd = conn->fileDescriptor();
+    if (!fd) {
+        return;
+    }
+    struct epoll_event epevt;
+    epevt.events = (readEnabled ? EPOLLIN : 0) | (writeEnabled ? EPOLLOUT : 0);
+    epevt.data.u64 = 0; // clear high bits in the union
+    epevt.data.fd = fd;
+    epoll_ctl(m_epollFd, EPOLL_CTL_MOD, fd, &epevt);
 }
