@@ -15,33 +15,6 @@
 // while to avoid the dangling-else problem
 #define VALID_IF(cond) while (unlikely(!(cond))) { m_state = InvalidData; return; }
 
-static inline int align(uint32 index, uint32 alignment)
-{
-    const int maxStepUp = alignment - 1;
-    return (index + maxStepUp) & ~maxStepUp;
-}
-
-static inline bool isPaddingZero(const array &buffer, int padStart, int padEnd)
-{
-    padEnd = std::min(padEnd, buffer.length);
-    for (; padStart < padEnd; padStart++) {
-        if (unlikely(buffer.begin[padStart] != '\0')) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static inline void zeroPad(byte *buffer, uint32 alignment, int *bufferPos)
-{
-    int i = *bufferPos;
-    const int padEnd = align(i, alignment);
-    for (; i < padEnd; i++) {
-        buffer[i] = '\0';
-    }
-    *bufferPos = padEnd;
-}
-
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
 {
