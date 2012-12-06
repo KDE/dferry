@@ -907,7 +907,8 @@ ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
      m_nesting(new Nesting),
      m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
      m_signaturePosition(0),
-     m_data(reinterpret_cast<byte *>(malloc(16384)), 0),
+     m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
+     m_dataCapacity(InitialDataCapacity),
      m_dataPosition(0),
      m_zeroLengthArrayNesting(0)
 {
@@ -919,8 +920,8 @@ ArgumentList::WriteCursor::~WriteCursor()
         assert(m_argList->m_hasWriteCursor);
         m_argList->m_hasWriteCursor = false;
     }
-    free(m_data.begin);
-    m_data = array();
+    free(m_data);
+    m_data = 0;
     delete m_nesting;
     m_nesting = 0;
 }
@@ -932,52 +933,57 @@ cstring ArgumentList::WriteCursor::stateString() const
 
 ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32 alignAndSize)
 {
+    const uint32 newDataPosition = m_dataPosition + alignAndSize;
+    if (unlikely(newDataPosition > m_dataCapacity)) {
+        m_dataCapacity *= 2;
+        m_data = reinterpret_cast<byte *>(realloc(m_data, m_dataCapacity));
+    }
+
     switch(m_state) {
     case Byte:
-        m_data.begin[m_dataPosition] = m_Byte;
+        m_data[m_dataPosition] = m_Byte;
         break;
     case Boolean: {
         uint32 num = m_Boolean ? 1 : 0;
-        basic::writeUint32(m_data.begin + m_dataPosition, num);
+        basic::writeUint32(m_data + m_dataPosition, num);
         break; }
     case Int16:
-        basic::writeInt16(m_data.begin + m_dataPosition, m_Int16);
+        basic::writeInt16(m_data + m_dataPosition, m_Int16);
         break;
     case Uint16:
-        basic::writeUint16(m_data.begin + m_dataPosition, m_Uint16);
+        basic::writeUint16(m_data + m_dataPosition, m_Uint16);
         break;
     case Int32:
-        basic::writeInt32(m_data.begin + m_dataPosition, m_Int32);
+        basic::writeInt32(m_data + m_dataPosition, m_Int32);
         break;
     case Uint32:
-        basic::writeUint32(m_data.begin + m_dataPosition, m_Uint32);
+        basic::writeUint32(m_data + m_dataPosition, m_Uint32);
         break;
     case Int64:
-        basic::writeInt64(m_data.begin + m_dataPosition, m_Int64);
+        basic::writeInt64(m_data + m_dataPosition, m_Int64);
         break;
     case Uint64:
-        basic::writeUint64(m_data.begin + m_dataPosition, m_Uint64);
+        basic::writeUint64(m_data + m_dataPosition, m_Uint64);
         break;
     case Double:
-        basic::writeDouble(m_data.begin + m_dataPosition, m_Double);
+        basic::writeDouble(m_data + m_dataPosition, m_Double);
         break;
     case UnixFd: {
         uint32 index; // TODO = index of the FD we actually want to send
-        basic::writeUint32(m_data.begin + m_dataPosition, index);
+        basic::writeUint32(m_data + m_dataPosition, index);
         break; }
     default:
         assert(false);
         return InvalidData;
     }
 
-    m_dataPosition += alignAndSize;
+    m_dataPosition = newDataPosition;
     m_elements.push_back(ElementInfo(alignAndSize, alignAndSize));
     return m_state;
 }
 
 ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPrefixSize)
 {
-    // TODO request more data when we'd overflow the output buffer
     bool isValidString = false;
     if (m_state == String) {
         isValidString = ArgumentList::isStringValid(cstring(m_String.begin, m_String.length));
@@ -990,16 +996,22 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
         return InvalidData;
     }
 
+    const uint32 newDataPosition = m_dataPosition + lengthPrefixSize + m_String.length + 1;
+    while (unlikely(newDataPosition > m_dataCapacity)) {
+        m_dataCapacity *= 2;
+        m_data = reinterpret_cast<byte *>(realloc(m_data, m_dataCapacity));
+    }
+
     if (lengthPrefixSize == 1) {
-        m_data.begin[m_dataPosition] = m_String.length;
+        m_data[m_dataPosition] = m_String.length;
     } else {
-        basic::writeUint32(m_data.begin + m_dataPosition, m_String.length);
+        basic::writeUint32(m_data + m_dataPosition, m_String.length);
     }
     m_dataPosition += lengthPrefixSize;
-    memcpy(m_data.begin + m_dataPosition, m_String.begin, m_String.length + 1);
-    m_dataPosition += m_String.length + 1;
-
     m_elements.push_back(ElementInfo(lengthPrefixSize, lengthPrefixSize));
+
+    memcpy(m_data + m_dataPosition, m_String.begin, m_String.length + 1);
+    m_dataPosition = newDataPosition;
     for (uint32 l = m_String.length + 1; l; ) {
         uint32 chunkSize = std::min(l, uint32(ElementInfo::LargestSize));
         m_elements.push_back(ElementInfo(1, chunkSize));
@@ -1024,8 +1036,6 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     // - store information about variants and arrays, in order to:
     //   - know what the final binary message size will be
     //   - in finish(), create the final data stream with inline variant signatures and array lengths
-
-    // TODO extend m_data before it overflows!
 
     if (unlikely(m_state == InvalidData)) {
         return;
@@ -1310,7 +1320,11 @@ void ArgumentList::WriteCursor::finish()
 
     m_dataPosition = 0;
 
-    byte *buffer = reinterpret_cast<byte *>(malloc(16384)); // TODO dynamic resize
+    // ### is this really always big enough? I think so because natural alignment can only bloat data
+    //     by slightly less than a factor of 2. the minimum of InitialDataCapacity is just there to avoid
+    //     allocating nothing, which might cause problems.
+    // better calculated bounds on the maximum output size could also help performance somewhat
+    byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(InitialDataCapacity), m_dataCapacity * 2)));
     int bufferPos = 0;
     uint32 count = m_elements.size();
     int variantSignatureIndex = 0;
@@ -1323,7 +1337,7 @@ void ArgumentList::WriteCursor::finish()
             // copy data chunks while applying the proper alignment
             zeroPad(buffer, ei.alignment(), &bufferPos);
             m_dataPosition = align(m_dataPosition, ei.alignment());
-            memcpy(buffer + bufferPos, m_data.begin + m_dataPosition, ei.size);
+            memcpy(buffer + bufferPos, m_data + m_dataPosition, ei.size);
             bufferPos += ei.size;
             m_dataPosition += ei.size;
         } else {

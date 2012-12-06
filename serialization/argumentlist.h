@@ -316,7 +316,7 @@ public:
             }
             byte alignment() { return 1 << alignmentExponent; }
 
-            uint32 alignmentExponent : 2; // powers of 2, so 1. 2. 4. 8
+            uint32 alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
             uint32 size : 6; // that's up to 63
             enum SizeCode {
                 LargestSize = 60,
@@ -333,9 +333,16 @@ public:
         CursorState m_state;
         Nesting *m_nesting;
         cstring m_signature;
-        array m_data;
         int m_signaturePosition;
+
+        enum {
+            // got a linker error with static const int...
+            InitialDataCapacity = 256
+        };
+        byte *m_data;
+        int m_dataCapacity;
         int m_dataPosition;
+
         int m_zeroLengthArrayNesting;
         // this keeps track of which aggregates we are currently in
         std::vector<AggregateInfo> m_aggregateStack;
