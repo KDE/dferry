@@ -75,6 +75,8 @@ static cstring printableState(ArgumentList::CursorState state)
     return cstring(strings[state]);
 }
 
+const int ArgumentList::maxSignatureLength; // for the linker; technically this is required
+
 ArgumentList::ArgumentList()
    : m_isByteSwapped(false),
      m_readCursorCount(0),
