@@ -2,6 +2,7 @@
 #include "authnegotiator.h"
 #include "epolleventdispatcher.h"
 #include "localsocket.h"
+#include "message.h"
 #include "pathfinder.h"
 
 #include <iostream>
@@ -26,20 +27,39 @@ int main(int argc, char *argv[])
     EpollEventDispatcher dispatcher;
     socket.setEventDispatcher(&dispatcher);
 
-    AuthNegotiator authNegotiator(&socket);
-
-    while (socket.isOpen()) {
-        dispatcher.poll();
-#if 0
-        // TODO
-        if (!socket.hasMessage()) {
-            continue;
+    {
+        AuthNegotiator authNegotiator(&socket);
+        while (socket.isOpen() && !authNegotiator.isAuthenticated()) {
+            dispatcher.poll();
         }
-        Message msg = socket.takeMessage();
-        ArgumentList argList = msg.argumentList();
-        ArgumentList::ReadCursor reader = argList.beginRead();
-        printArguments(reader);
-#endif
+
+        if (!authNegotiator.isAuthenticated()) {
+            return 1;
+        }
     }
+
+    {
+        Message hello(1);
+        hello.setType(Message::MethodCallMessage);
+        hello.setStringHeader(Message::DestinationHeader, string("org.freedesktop.DBus"));
+        hello.setStringHeader(Message::InterfaceHeader, string("org.freedesktop.DBus"));
+        hello.setStringHeader(Message::PathHeader, string("/org/freedesktop/DBus"));
+        hello.setStringHeader(Message::MemberHeader, string("Hello"));
+        hello.writeTo(&socket);
+        while (socket.isOpen() && hello.isWriting()) {
+            dispatcher.poll();
+        }
+        cout << "Hello sent(?)\n";
+    }
+
+    {
+        Message helloReply;
+        helloReply.readFrom(&socket);
+        while (socket.isOpen() && helloReply.isReading()) {
+            dispatcher.poll();
+        }
+        cout << "Hello received(?)\n";
+    }
+
     return 0;
 }

@@ -1,54 +1,102 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
+#include "argumentlist.h"
+#include "iconnectionclient.h"
 #include "types.h"
 
 #include <map>
+#include <string>
+#include <vector>
 
-class ArgumentList;
+class IConnection;
 
-class Message
+class Message : public IConnectionClient
 {
-    // -- the following methods must only be used when serializing a message --
+public:
+    // this class contains header data in deserialized form (maybe also serialized) and the payload
+    // in serialized form
 
-    Message(int serial); // constructs a new message
-    // TODO methods to set the type, flags etc., try to enforce sanity via checks and a restrictive API
-    // TODO void setArgumentList(const ArgumentList &arguments)
+    Message(int serial); // constructs a new message (to be serialized later, usually)
 
+    Message(); // constructs an invalid message (to be filled in later, usually)
 
-    // -- the following methods must only be used when DEserializing a message --
+    enum Type {
+        InvalidMessage = 0,
+        MethodCallMessage,
+        MethodReturnMessage,
+        ErrorMessage,
+        SignalMessage
+    };
 
-    // deserializes a message from a data stream; a must be large enough to contain the fixed headers,
-    // i.e. 12 bytes.
-    Message(array a);
+    // TODO try to enforce sanity via checks and a restrictive API
+    Type type() const;
+    void setType(Type type);
+    byte flags() const;
+    uint32 protocolVersion() const;
+    int serial() const;
 
-    // add more data; there are two use cases for this:
-    // - when forwarding a message, do it until isHeaderComplete(), then pass on the rest of the data unparsed
-    // - when preparing a message for the final consumer, read until missingBytesCountForBody() == 0.
-    void addData(array a);
-    // returns false as long as more data is required to get all the variable headers.
-    bool isHeaderComplete() const { return !m_headerParser; }
+    enum VariableHeader {
+        PathHeader = 1,
+        InterfaceHeader,
+        MemberHeader,
+        ErrorNameHeader,
+        ReplySerialHeader,
+        DestinationHeader,
+        SenderHeader,
+        SignatureHeader,
+        UnixFdsHeader
+    };
 
-    // When forwarding a message, only the header is required for routing. The rest of the data can
-    // be passed on without looking at it. This tells how much such data should be passed on.
-    // When the header is not yet complete, this returns -1.
-    int32 missingBytesCountForBody() const;
+    std::string stringHeader(VariableHeader header, bool *isPresent = 0) const;
+    bool setStringHeader(VariableHeader header, const std::string &value);
+    uint32 intHeader(VariableHeader header, bool *isPresent = 0) const;
+    bool setIntHeader(VariableHeader header, uint32 value);
+
+    // TODO a method that returns if the message is valid in its current state (flags have valid
+    //      values, mandatory variable header fields for the message type are present, ...?
+
+    void setArgumentList(const ArgumentList &arguments);
+    const ArgumentList &argumentList() const;
+
+    void readFrom(IConnection *connection); // fills in this message from connection
+    bool isReading() const;
+    void writeTo(IConnection *connection); // sends this message over connection
+    bool isWriting() const;
+
+protected:
+    virtual void notifyConnectionReadyRead();
+    virtual void notifyConnectionReadyWrite();
 
 private:
-    void parseVariableHeaders();
+    bool requiredHeadersPresent() const;
+    bool deserializeFixedHeaders();
+    bool deserializeVariableHeaders();
+    bool fillOutBuffer();
+    void serializeFixedHeaders();
+    void serializeVariableHeaders(ArgumentList *headerArgs);
 
-    array m_data;
+    // there is no explicit dirty flag; the buffer is simply cleared when dirtying any of the data below.
+    std::vector<byte> m_buffer;
 
     bool m_isByteSwapped;
-    byte m_messageType;
+    enum {
+        NoIo,
+        ReadIo,
+        WriteIo
+    } m_io;
+    Type m_messageType;
     byte m_flags;
     byte m_protocolVersion;
+    uint32 m_headerLength;
+    uint32 m_headerPadding;
     uint32 m_bodyLength;
     uint32 m_serial;
 
-    ArgumentList *m_headerParser;
-    std::map<byte, cstring> m_stringHeaders;
-    std::map<byte, uint32> m_intHeaders;
+    ArgumentList m_mainArguments;
+
+    std::map<int, std::string> m_stringHeaders;
+    std::map<int, uint32> m_intHeaders;
 };
 
 #endif // MESSAGE_H

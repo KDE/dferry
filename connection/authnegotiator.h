@@ -17,6 +17,8 @@ public:
     // reimplemented from IConnectionClient
     virtual void notifyConnectionReadyRead();
 
+    bool isAuthenticated() const { return m_state == AuthenticatedState; };// HACK
+
 private:
     bool readLine();
     bool isEndOfLine() const;
