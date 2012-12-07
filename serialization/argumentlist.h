@@ -1,3 +1,6 @@
+#ifndef ARGUMENTLIST_H
+#define ARGUMENTLIST_H
+
 #include "types.h"
 
 #include <cassert>
@@ -368,3 +371,5 @@ private:
     cstring m_signature;
     array m_data;
 };
+
+#endif // ARGUMENTLIST_H
