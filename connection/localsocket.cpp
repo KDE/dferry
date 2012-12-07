@@ -19,13 +19,11 @@ static const int maxFds = 12;
 using namespace std;
 
 LocalSocket::LocalSocket(int fd)
-   : m_fd(fd),
-     m_eventLoop(0)
+   : m_fd(fd)
 {}
 
 LocalSocket::LocalSocket(const string &socketFilePath)
-   : m_fd(-1),
-     m_eventLoop(0)
+   : m_fd(-1)
 {
     const int fd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {

@@ -6,7 +6,6 @@
 #include <map>
 #include <string>
 
-class IEventLoop;
 class IConnectionListener;
 struct SessionBusInfo;
 
@@ -39,7 +38,6 @@ private:
     LocalSocket &operator=(const LocalSocket &); // dito
 
     int m_fd;
-    IEventLoop *m_eventLoop;
 };
 
 #endif // LOCALSOCKET_H
