@@ -177,10 +177,6 @@ array LocalSocket::read(byte *buffer, int maxSize)
         ret.length += nbytes;
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
         iov.iov_len -= nbytes;
-        // recvmsg() should always return the number of bytes asked for or block, so...
-        if (nbytes != 0) {
-            assert(iov.iov_len == 0);
-        }
     }
 
     // done reading "regular data", now read any file descriptors passed via control messages
