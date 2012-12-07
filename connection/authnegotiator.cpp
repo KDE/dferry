@@ -82,6 +82,7 @@ void AuthNegotiator::advanceState()
         cstring beginLine("BEGIN\r\n");
         cout << beginLine.begin;
         connection()->write(array(beginLine.begin, beginLine.length));
+        m_state = AuthenticatedState;
         break; }
     default:
         m_state = AuthenticationFailedState;
