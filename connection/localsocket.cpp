@@ -69,7 +69,7 @@ int LocalSocket::write(array a)
     }
 
     // sendmsg  boilerplate
-    struct msghdr send_msg; // C convention makes them stand out (too many similar variables...)
+    struct msghdr send_msg;
     struct iovec iov;
 
     send_msg.msg_name = 0;
@@ -110,14 +110,18 @@ int LocalSocket::write(array a)
     }
 
     while (iov.iov_len > 0) {
-        int nbytes = sendmsg(m_fd, &send_msg, 0);
+        int nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
-            } else {
-                close();
-                return false;
             }
+            // if we were notified for writing, we must have written at least one byte before getting
+            // EAGAIN aka EWOULDBLOCK
+            if (errno == EAGAIN && iov.iov_len < a.length) {
+                break;
+            }
+            close();
+            return false;
         }
 
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
@@ -169,8 +173,16 @@ array LocalSocket::read(byte *buffer, int maxSize)
     iov.iov_base = ret.begin;
     iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
-        int nbytes =  recvmsg(m_fd, &recv_msg, 0);
-        if (nbytes < 0 && errno != EINTR) {
+        int nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
+        if (nbytes < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            // if we were notified for reading, we must have read at least one byte before getting
+            // EAGAIN aka EWOULDBLOCK
+            if (errno == EAGAIN && iov.iov_len < maxSize) {
+                break;
+            }
             close();
             return ret;
         }
