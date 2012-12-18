@@ -66,6 +66,96 @@ int Message::serial() const
     return m_serial;
 }
 
+std::string Message::path() const
+{
+    return stringHeader(PathHeader, 0);
+}
+
+void Message::setPath(const std::string &path)
+{
+    setStringHeader(PathHeader, path);
+}
+
+std::string Message::interface() const
+{
+    return stringHeader(InterfaceHeader, 0);
+}
+
+void Message::setInterface(const std::string &interface)
+{
+    setStringHeader(InterfaceHeader, interface);
+}
+
+std::string Message::method() const
+{
+    return stringHeader(MethodHeader, 0);
+}
+
+void Message::setMethod(const std::string &method)
+{
+    setStringHeader(MethodHeader, method);
+}
+
+std::string Message::errorName() const
+{
+    return stringHeader(ErrorNameHeader, 0);
+}
+
+void Message::setErrorName(const std::string &errorName)
+{
+    setStringHeader(ErrorNameHeader, errorName);
+}
+
+uint32 Message::replySerial() const
+{
+    return intHeader(ReplySerialHeader, 0);
+}
+
+void Message::setReplySerial(uint32 replySerial)
+{
+    setIntHeader(ReplySerialHeader, replySerial);
+}
+
+std::string Message::destination() const
+{
+    return stringHeader(DestinationHeader, 0);
+}
+
+void Message::setDestination(const std::string &destination)
+{
+    setStringHeader(DestinationHeader, destination);
+}
+
+std::string Message::sender() const
+{
+    return stringHeader(SenderHeader, 0);
+}
+
+void Message::setSender(const std::string &sender)
+{
+    setStringHeader(SenderHeader, sender);
+}
+
+std::string Message::signature() const
+{
+    return stringHeader(SignatureHeader, 0);
+}
+
+void Message::setSignature(const std::string &signature)
+{
+    setStringHeader(SignatureHeader, signature);
+}
+
+uint32 Message::unixFdCount() const
+{
+    return intHeader(UnixFdsHeader, 0);
+}
+
+void Message::setUnixFdCount(uint32 fdCount)
+{
+    setIntHeader(UnixFdsHeader, fdCount);
+}
+
 string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
     map<int, string>::const_iterator it = m_stringHeaders.find(header);
@@ -234,14 +324,14 @@ bool Message::requiredHeadersPresent() const
 
     switch (m_messageType) {
     case SignalMessage:
-        // required: PathHeader, InterfaceHeader, MemberHeader
+        // required: PathHeader, InterfaceHeader, MethodHeader
         if (!m_stringHeaders.count(InterfaceHeader)) {
             return false;
         }
         // fall through
     case MethodCallMessage:
-        // required: PathHeader, MemberHeader
-        return m_stringHeaders.count(PathHeader) && m_stringHeaders.count(MemberHeader);
+        // required: PathHeader, MethodHeader
+        return m_stringHeaders.count(PathHeader) && m_stringHeaders.count(MethodHeader);
 
     case ErrorMessage:
         // required: ErrorNameHeader, ReplySerialHeader
@@ -315,7 +405,7 @@ bool Message::deserializeVariableHeaders()
                 break;
             }
             case InterfaceHeader:
-            case MemberHeader:
+            case MethodHeader:
             case ErrorNameHeader:
             case DestinationHeader:
             case SenderHeader: {
@@ -455,7 +545,7 @@ void Message::serializeVariableHeaders(ArgumentList *headerArgs)
             writer.writeObjectPath(cstring(it->second.c_str(), it->second.length()));
             break;
         case InterfaceHeader:
-        case MemberHeader:
+        case MethodHeader:
         case ErrorNameHeader:
         case DestinationHeader:
         case SenderHeader:

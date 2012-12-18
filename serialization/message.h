@@ -36,10 +36,34 @@ public:
     uint32 protocolVersion() const;
     int serial() const;
 
+    // more convenient access to headers
+    void setPath(const std::string &path);
+    void setInterface(const std::string &interface);
+    void setMethod(const std::string &method);
+    void setErrorName(const std::string &errorName);
+    void setReplySerial(uint32 replySerial);
+    void setDestination(const std::string &destination);
+    void setSender(const std::string &sender);
+    // you usually shouldn't need to call this; see setArgumentList()
+    void setSignature(const std::string &signature);
+    void setUnixFdCount(uint32 fdCount);
+
+    std::string path() const;
+    std::string interface() const;
+    std::string method() const;
+    std::string errorName() const;
+    uint32 replySerial() const;
+    std::string destination() const;
+    std::string sender() const;
+    std::string signature() const;
+    uint32 unixFdCount() const;
+
+    // "more generic", enum-based access to headers
+
     enum VariableHeader {
         PathHeader = 1,
         InterfaceHeader,
-        MemberHeader,
+        MethodHeader, // called "member" in the spec
         ErrorNameHeader,
         ReplySerialHeader,
         DestinationHeader,
@@ -56,6 +80,7 @@ public:
     // TODO a method that returns if the message is valid in its current state (flags have valid
     //      values, mandatory variable header fields for the message type are present, ...?
 
+    // setArgumentList also sets the signature header of the message
     void setArgumentList(const ArgumentList &arguments);
     const ArgumentList &argumentList() const;
 

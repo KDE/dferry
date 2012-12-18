@@ -41,10 +41,10 @@ int main(int argc, char *argv[])
     {
         Message hello(1);
         hello.setType(Message::MethodCallMessage);
-        hello.setStringHeader(Message::DestinationHeader, string("org.freedesktop.DBus"));
-        hello.setStringHeader(Message::InterfaceHeader, string("org.freedesktop.DBus"));
-        hello.setStringHeader(Message::PathHeader, string("/org/freedesktop/DBus"));
-        hello.setStringHeader(Message::MemberHeader, string("Hello"));
+        hello.setDestination(string("org.freedesktop.DBus"));
+        hello.setInterface(string("org.freedesktop.DBus"));
+        hello.setPath(string("/org/freedesktop/DBus"));
+        hello.setMethod(string("Hello"));
         hello.writeTo(&socket);
         while (socket.isOpen() && hello.isWriting()) {
             dispatcher.poll();
