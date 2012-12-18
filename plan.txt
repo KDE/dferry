@@ -27,3 +27,20 @@ Some ideas for classes:
 Scope (aka for now: features not planned):
 - probably not in scope: code generator for the XML interface description format
   because it needs to work against the consumer API (Qt, GLib, ?)
+
+Need to implement (server) / talk to (client) the following bus-owned methods:
+org.freedesktop.DBus.Hello
+org.freedesktop.DBus.ListNames
+org.freedesktop.DBus.ListActivatableNames
+org.freedesktop.DBus.NameHasOwner
+org.freedesktop.DBus.NameOwnerChanged
+org.freedesktop.DBus.NameLost
+org.freedesktop.DBus.NameAcquired
+org.freedesktop.DBus.StartServiceByName
+org.freedesktop.DBus.UpdateActivationEnvironment
+org.freedesktop.DBus.GetNameOwner
+org.freedesktop.DBus.GetConnectionUnixUser
+org.freedesktop.DBus.GetConnectionUnixProcessID
+org.freedesktop.DBus.AddMatch
+org.freedesktop.DBus.RemoveMatch
+org.freedesktop.DBus.GetId
