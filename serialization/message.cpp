@@ -282,6 +282,9 @@ void Message::notifyConnectionReadyRead()
             assert(m_buffer.size() == m_headerLength + m_bodyLength);
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
+            std::string sig = signature();
+            array data(&m_buffer.front() + m_headerLength, m_bodyLength);
+            m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), data, m_isByteSwapped);
             break;
         }
         if (!connection()->isOpen()) {
