@@ -4,7 +4,7 @@
 #include "types.h"
 
 #include <cassert>
-
+#include <string>
 #include <vector>
 
 class Nesting; // TODO remove this when we've d-pointerized everything
@@ -15,6 +15,8 @@ public:
     ArgumentList(); // constructs an empty argument list
      // constructs an argument list to deserialize data in @p data with signature @p signature
     ArgumentList(cstring signature, array data, bool isByteSwapped = false);
+
+    std::string prettyPrint() const;
 
      // returns true when at least one read cursor is open, false otherwise
     bool isReading() const { return m_readCursorCount; }

@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
+#include <sstream>
 
 // Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
 // "data is good if X" instead of "data is bad if Y". That stuff should end up the same after
@@ -91,6 +91,131 @@ ArgumentList::ArgumentList(cstring signature, array data, bool isByteSwapped)
      m_signature(signature),
      m_data(data)
 {
+}
+
+std::string ArgumentList::prettyPrint() const
+{
+    ReadCursor reader = const_cast<ArgumentList*>(this)->beginRead();
+    if (!reader.isValid()) {
+        return std::string();
+    }
+    std::stringstream ret;
+    std::string nestingPrefix;
+
+    bool isDone = false;
+    bool isFirstEntry = false;
+
+    while (!isDone) {
+        switch(reader.state()) {
+        case ArgumentList::Finished:
+            assert(nestingPrefix.empty());
+            isDone = true;
+            break;
+        case ArgumentList::BeginStruct:
+            reader.beginStruct();
+            ret << nestingPrefix << "begin struct\n";
+            nestingPrefix += "( ";
+            break;
+        case ArgumentList::EndStruct:
+            reader.endStruct();
+            nestingPrefix.resize(nestingPrefix.size() - 2);
+            ret << nestingPrefix << "end struct\n";
+            break;
+        case ArgumentList::BeginVariant:
+            reader.beginVariant();
+            ret << nestingPrefix << "begin variant\n";
+            nestingPrefix += "v ";
+            break;
+        case ArgumentList::EndVariant:
+            reader.endVariant();
+            nestingPrefix.resize(nestingPrefix.size() - 2);
+            ret << nestingPrefix << "end variant\n";
+            break;
+        case ArgumentList::BeginArray: {
+            isFirstEntry = true;
+            bool isEmpty;
+            reader.beginArray(&isEmpty);
+            ret << nestingPrefix << "begin array\n";
+            nestingPrefix += "[ ";
+            break; }
+        case ArgumentList::NextArrayEntry:
+            reader.nextArrayEntry();
+            break;
+        case ArgumentList::EndArray:
+            reader.endArray();
+            nestingPrefix.resize(nestingPrefix.size() - 2);
+            ret << nestingPrefix << "end array\n";
+            break;
+        case ArgumentList::BeginDict: {
+            isFirstEntry = true;
+            bool isEmpty;
+            reader.beginDict(&isEmpty);
+            ret << nestingPrefix << "begin dict\n";
+            nestingPrefix += "{ ";
+            break; }
+        case ArgumentList::NextDictEntry:
+            reader.nextDictEntry();
+            break;
+        case ArgumentList::EndDict:
+            reader.endDict();
+            nestingPrefix.resize(nestingPrefix.size() - 2);
+            ret << nestingPrefix << "end dict\n";
+            break;
+        case ArgumentList::Byte:
+            ret << nestingPrefix << "byte: " << int(reader.readByte()) << '\n';
+            break;
+        case ArgumentList::Boolean:
+            ret << nestingPrefix << "bool: " << (reader.readBoolean() ? "true" : "false") << '\n';
+            break;
+        case ArgumentList::Int16:
+            ret << nestingPrefix << "int16: " << reader.readInt16() << '\n';
+            break;
+        case ArgumentList::Uint16:
+            ret << nestingPrefix << "uint16: " << reader.readUint16() << '\n';
+            break;
+        case ArgumentList::Int32:
+            ret << nestingPrefix << "int32: " << reader.readInt32() << '\n';
+            break;
+        case ArgumentList::Uint32:
+            ret << nestingPrefix << "uint32: " << reader.readUint32() << '\n';
+            break;
+        case ArgumentList::Int64:
+            ret << nestingPrefix << "int64: " << reader.readInt64() << '\n';
+            break;
+        case ArgumentList::Uint64:
+            ret << nestingPrefix << "uint64: " << reader.readUint64() << '\n';
+            break;
+        case ArgumentList::Double:
+            ret << nestingPrefix << "double: " << reader.readDouble() << '\n';
+            break;
+        case ArgumentList::String: {
+            cstring cstr = reader.readString();
+            ret << nestingPrefix << "string: "
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            break; }
+        case ArgumentList::ObjectPath: {
+            cstring cstr = reader.readObjectPath();
+            ret << nestingPrefix << "object path: "
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            break; }
+        case ArgumentList::Signature: {
+            cstring cstr = reader.readSignature();
+            ret << nestingPrefix << "signature: "
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            break; }
+        case ArgumentList::UnixFd:
+            // TODO
+            break;
+        case ArgumentList::InvalidData:
+        case ArgumentList::NeedMoreData:
+        default: {
+            cstring cstr = reader.stateString();
+            return std::string("<error: ") +
+                   std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) + ">\n";
+            break; }
+        }
+    }
+    return ret.str();
 }
 
 ArgumentList::ReadCursor ArgumentList::beginRead()
