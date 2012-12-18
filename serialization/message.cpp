@@ -252,10 +252,10 @@ void Message::notifyConnectionReadyRead()
         if (!m_headerLength) {
             // the message might only consist of the header, so we must be careful to avoid reading
             // data meant for the next message
-            readMax = std::max(readMax, int(s_extendedFixedHeaderLength - m_buffer.size()));
+            readMax = std::min(readMax, int(s_extendedFixedHeaderLength - m_buffer.size()));
         } else {
             // reading variable headers and/or body
-            readMax = std::max(readMax, int(m_headerLength + m_bodyLength - m_buffer.size()));
+            readMax = std::min(readMax, int(m_headerLength + m_bodyLength - m_buffer.size()));
         }
 
         const bool headersDone = m_headerLength > 0 && m_buffer.size() >= m_headerLength;
