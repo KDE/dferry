@@ -13,8 +13,6 @@ using namespace std;
 // TODO
 static const byte thisMachineEndianness = 'l';
 
-// TODO validate when deserializing: check that header-body padding is zero
-
 // TODO think of copying signature from and to output!
 
 Message::Message(int serial)
@@ -438,7 +436,7 @@ bool Message::deserializeVariableHeaders()
         return false;
     }
 
-    // check that padding is in fact zeroed out
+    // check that header->body padding is in fact zero filled
     for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
         if (base[i] != '\0') {
             return false;
