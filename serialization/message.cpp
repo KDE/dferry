@@ -382,62 +382,68 @@ bool Message::deserializeFixedHeaders()
 bool Message::deserializeVariableHeaders()
 {
     // use ArgumentList to parse the variable header fields
-    byte *base = &m_buffer.front() + s_properFixedHeaderLength;
-    array headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength);
-    cstring varHeadersSig("a(yv)");
+    // HACK: the fake first int argument is there to start the ArgumentList's data 8 byte aligned
+    byte *base = &m_buffer.front() + s_properFixedHeaderLength - sizeof(int32);
+    array headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
+    cstring varHeadersSig("ia(yv)");
     ArgumentList argList(varHeadersSig, headerData, m_isByteSwapped);
 
     ArgumentList::ReadCursor reader = argList.beginRead();
     assert(reader.isValid());
 
-    if (reader.state() == ArgumentList::BeginArray) {
-        reader.beginArray();
-        while (reader.nextArrayEntry()) {
-            reader.beginStruct();
-            byte headerType = reader.readByte();
-
-            reader.beginVariant();
-            switch (headerType) {
-            // TODO: proper error handling instead of assertions
-            case PathHeader: {
-                assert(reader.state() == ArgumentList::ObjectPath);
-                cstring str = reader.readObjectPath();
-                m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
-                break;
-            }
-            case InterfaceHeader:
-            case MethodHeader:
-            case ErrorNameHeader:
-            case DestinationHeader:
-            case SenderHeader: {
-                assert(reader.state() == ArgumentList::String);
-                cstring str = reader.readString();
-                m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
-                break;
-            }
-            case ReplySerialHeader:
-                // fallthrough, also read uint32
-            case UnixFdsHeader: {
-                assert(reader.state() == ArgumentList::UnixFd);
-                m_intHeaders[headerType] = reader.readUint32();
-                break;
-            }
-            case SignatureHeader: {
-                assert(reader.state() == ArgumentList::Signature);
-                cstring str = reader.readSignature();
-                m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
-                break;
-            }
-            default:
-                break; // ignore unknown headers
-            }
-            reader.endVariant();
-            reader.endStruct();
-        }
-        reader.endArray();
-    } else {
+    if (reader.state() != ArgumentList::Int32) {
         return false;
     }
+    reader.readInt32();
+    if (reader.state() != ArgumentList::BeginArray) {
+        return false;
+    }
+    reader.beginArray();
+
+    while (reader.nextArrayEntry()) {
+        reader.beginStruct();
+        byte headerType = reader.readByte();
+
+        reader.beginVariant();
+        switch (headerType) {
+        // TODO: proper error handling instead of assertions
+        case PathHeader: {
+            assert(reader.state() == ArgumentList::ObjectPath);
+            cstring str = reader.readObjectPath();
+            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            break;
+        }
+        case InterfaceHeader:
+        case MethodHeader:
+        case ErrorNameHeader:
+        case DestinationHeader:
+        case SenderHeader: {
+            assert(reader.state() == ArgumentList::String);
+            cstring str = reader.readString();
+            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            break;
+        }
+        case ReplySerialHeader:
+            assert(reader.state() == ArgumentList::Uint32);
+            m_intHeaders[headerType] = reader.readUint32();
+            break;
+        case UnixFdsHeader:
+            assert(reader.state() == ArgumentList::UnixFd);
+            // TODO
+            break;
+        case SignatureHeader: {
+            assert(reader.state() == ArgumentList::Signature);
+            cstring str = reader.readSignature();
+            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            break;
+        }
+        default:
+            break; // ignore unknown headers
+        }
+        reader.endVariant();
+        reader.endStruct();
+    }
+    reader.endArray();
 
     // check that header->body padding is in fact zero filled
     for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
