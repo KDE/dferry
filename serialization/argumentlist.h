@@ -16,11 +16,6 @@ public:
      // constructs an argument list to deserialize data in @p data with signature @p signature
     ArgumentList(cstring signature, array data, bool isByteSwapped = false);
 
-    // valid when no write cursor is open on the instance
-
-    // TODO rethink how to find out final message size
-    int length() const;
-
      // returns true when at least one read cursor is open, false otherwise
     bool isReading() const { return m_readCursorCount; }
     // returns true when a write cursor is open, false otherwise
