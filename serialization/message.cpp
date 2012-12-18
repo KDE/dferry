@@ -16,7 +16,7 @@ static const byte thisMachineEndianness = 'l';
 // TODO think of copying signature from and to output!
 
 Message::Message(int serial)
-   : m_io(NoIo),
+   : m_state(Empty),
      m_isByteSwapped(false),
      m_messageType(InvalidMessage),
      m_flags(0), // TODO
@@ -27,7 +27,7 @@ Message::Message(int serial)
 }
 
 Message::Message()
-   : m_io(NoIo),
+   : m_state(Empty),
      m_isByteSwapped(false),
      m_messageType(InvalidMessage),
      m_flags(0), // TODO
@@ -190,24 +190,24 @@ bool Message::setIntHeader(VariableHeader header, uint32 value)
 
 void Message::readFrom(IConnection *conn)
 {
-    if (m_io != NoIo) {
+    if (m_state > LastSteadyState) {
         return;
     }
     conn->addClient(this);
     setIsReadNotificationEnabled(true);
-    m_io = ReadIo;
+    m_state = Deserializing;
     m_headerLength = 0;
     m_bodyLength = 0;
 }
 
 bool Message::isReading() const
 {
-    return m_io == ReadIo;
+    return m_state == Deserializing;
 }
 
 void Message::writeTo(IConnection *conn)
 {
-    if (m_io != NoIo) {
+    if (m_state > LastSteadyState) {
         return;
     }
     if (m_buffer.empty() && !fillOutBuffer()) {
@@ -216,12 +216,12 @@ void Message::writeTo(IConnection *conn)
     }
     conn->addClient(this);
     setIsWriteNotificationEnabled(true);
-    m_io = WriteIo;
+    m_state = Serializing;
 }
 
 bool Message::isWriting() const
 {
-    return m_io == WriteIo;
+    return m_state == Serializing;
 }
 
 void Message::setArgumentList(const ArgumentList &arguments)
@@ -241,7 +241,7 @@ static const int s_maxMessageLength = 134217728;
 
 void Message::notifyConnectionReadyRead()
 {
-    if (m_io != ReadIo) {
+    if (m_state != Deserializing) {
         return;
     }
     bool isError = false;
@@ -281,7 +281,7 @@ void Message::notifyConnectionReadyRead()
             // all done!
             assert(m_buffer.size() == m_headerLength + m_bodyLength);
             setIsReadNotificationEnabled(false);
-            m_io = NoIo;
+            m_state = Deserialized;
             break;
         }
         if (!connection()->isOpen()) {
@@ -292,7 +292,7 @@ void Message::notifyConnectionReadyRead()
 
     if (isError) {
         setIsReadNotificationEnabled(false);
-        m_io = NoIo;
+        m_state = Empty;
         m_buffer.clear();
         // TODO reset other data members
     }
@@ -300,14 +300,14 @@ void Message::notifyConnectionReadyRead()
 
 void Message::notifyConnectionReadyWrite()
 {
-    if (m_io != WriteIo) {
+    if (m_state != Serializing) {
         return;
     }
     int written = 0;
     do {
         written = connection()->write(array(&m_buffer.front(), m_buffer.size())); // HACK
         setIsWriteNotificationEnabled(false);
-        m_io = NoIo;
+        m_state = Serialized;
         m_buffer.clear();
 
     } while (written > 0);

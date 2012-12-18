@@ -106,10 +106,13 @@ private:
 
     bool m_isByteSwapped;
     enum {
-        NoIo,
-        ReadIo,
-        WriteIo
-    } m_io;
+        Empty,
+        Serialized,
+        Deserialized,
+        LastSteadyState = Deserialized,
+        Serializing,
+        Deserializing
+    } m_state;
     Type m_messageType;
     byte m_flags;
     byte m_protocolVersion;
