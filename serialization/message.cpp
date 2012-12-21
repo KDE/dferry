@@ -446,6 +446,7 @@ bool Message::deserializeVariableHeaders()
     reader.endArray();
 
     // check that header->body padding is in fact zero filled
+    base = &m_buffer.front();
     for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
         if (base[i] != '\0') {
             return false;
