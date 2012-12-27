@@ -19,7 +19,7 @@ Message::Message(int serial)
    : m_state(Empty),
      m_isByteSwapped(false),
      m_messageType(InvalidMessage),
-     m_flags(0), // TODO
+     m_flags(0),
      m_protocolVersion(1),
      m_bodyLength(0),
      m_serial(serial)
@@ -30,7 +30,7 @@ Message::Message()
    : m_state(Empty),
      m_isByteSwapped(false),
      m_messageType(InvalidMessage),
-     m_flags(0), // TODO
+     m_flags(0),
      m_protocolVersion(1),
      m_bodyLength(0),
      m_serial(0)
@@ -44,14 +44,12 @@ Message::Type Message::type() const
 
 void Message::setType(Type type)
 {
+    if (m_messageType == type) {
+        return;
+    }
     m_buffer.clear(); // dirty
     m_messageType = type;
-}
-
-
-byte Message::flags() const
-{
-    return m_flags;
+    setExpectsReply(m_messageType == MethodCallMessage);
 }
 
 uint32 Message::protocolVersion() const
@@ -186,6 +184,20 @@ bool Message::setIntHeader(VariableHeader header, uint32 value)
     m_intHeaders[header] = value;
     // TODO error checking / validation
     return true;
+}
+
+bool Message::expectsReply() const
+{
+    return (m_flags & NoReplyExpectedFlag) == 0;
+}
+
+void Message::setExpectsReply(bool expectsReply)
+{
+    if (expectsReply) {
+        m_flags &= ~NoReplyExpectedFlag;
+    } else {
+        m_flags |= NoReplyExpectedFlag;
+    }
 }
 
 void Message::readFrom(IConnection *conn)

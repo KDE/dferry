@@ -32,7 +32,6 @@ public:
     // TODO try to enforce sanity via checks and a restrictive API
     Type type() const;
     void setType(Type type);
-    byte flags() const;
     uint32 protocolVersion() const;
     int serial() const;
 
@@ -57,6 +56,9 @@ public:
     std::string sender() const;
     std::string signature() const;
     uint32 unixFdCount() const;
+
+    bool expectsReply() const;
+    void setExpectsReply(bool);
 
     // "more generic", enum-based access to headers
 
@@ -114,6 +116,10 @@ private:
         Deserializing
     } m_state;
     Type m_messageType;
+    enum {
+        NoReplyExpectedFlag = 1,
+        NoAutoStartFlag = 2
+    };
     byte m_flags;
     byte m_protocolVersion;
     uint32 m_headerLength;
