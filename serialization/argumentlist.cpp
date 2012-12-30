@@ -1450,6 +1450,7 @@ void ArgumentList::WriteCursor::finish()
     // ### is this really always big enough? I think so because natural alignment can only bloat data
     //     by slightly less than a factor of 2. the minimum of InitialDataCapacity is just there to avoid
     //     allocating nothing, which might cause problems.
+    // ### FIXME it is NOT big enough, because variants are not naturally aligned but always 8 byte aligned.
     // better calculated bounds on the maximum output size could also help performance somewhat
     byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(InitialDataCapacity), m_dataCapacity * 2)));
     int bufferPos = 0;
