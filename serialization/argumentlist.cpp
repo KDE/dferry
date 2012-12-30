@@ -190,18 +190,18 @@ std::string ArgumentList::prettyPrint() const
             break;
         case ArgumentList::String: {
             cstring cstr = reader.readString();
-            ret << nestingPrefix << "string: "
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            ret << nestingPrefix << "string: \""
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
             break; }
         case ArgumentList::ObjectPath: {
             cstring cstr = reader.readObjectPath();
-            ret << nestingPrefix << "object path: "
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            ret << nestingPrefix << "object path: \""
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
             break; }
         case ArgumentList::Signature: {
             cstring cstr = reader.readSignature();
-            ret << nestingPrefix << "signature: "
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << '\n';
+            ret << nestingPrefix << "signature: \""
+                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
             break; }
         case ArgumentList::UnixFd:
             // TODO
