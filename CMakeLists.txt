@@ -6,9 +6,13 @@ cmake_minimum_required(VERSION 2.6.2 FATAL_ERROR)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 #include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_SOURCE_DIR}/connection ${CMAKE_SOURCE_DIR}/serialization)
+include_directories(${CMAKE_SOURCE_DIR}/buslogic
+                    ${CMAKE_SOURCE_DIR}/connection
+                    ${CMAKE_SOURCE_DIR}/serialization)
 
 set(DSEL_SOURCES
+    buslogic/itransceiverclient.cpp
+    buslogic/transceiver.cpp
     connection/authnegotiator.cpp
     connection/epolleventdispatcher.cpp
     connection/iconnection.cpp
@@ -18,10 +22,13 @@ set(DSEL_SOURCES
     connection/pathfinder.cpp
     connection/stringtools.cpp
     serialization/argumentlist.cpp
+    serialization/icompletionclient.cpp
     serialization/message.cpp
     serialization/types.cpp)
 
 set(DSEL_HEADERS
+    buslogic/itransceiverclient.h
+    buslogic/transceiver.h
     connection/authnegotiator.h
     connection/epolleventdispatcher.h
     connection/iauthmechanism.h
@@ -34,6 +41,7 @@ set(DSEL_HEADERS
     connection/stringtools.h
     serialization/argumentlist.h
     serialization/basictypeio.h
+    serialization/icompletionclient.h
     serialization/message.h
     serialization/types.h)
 

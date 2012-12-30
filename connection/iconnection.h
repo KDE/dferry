@@ -11,7 +11,7 @@ class IConnection
 public:
     // An IConnection subclass must have a file descriptor after construction and it must not change
     // except to the invalid file descriptor when disconnected.
-    IConnection();
+    IConnection(); // TODO event dispatcher as constructor argument?
     virtual ~IConnection();
 
     // usually, the maximum sensible number of clients is two: one for reading and one for writing.
@@ -27,7 +27,7 @@ public:
     virtual bool isOpen() = 0;
     virtual FileDescriptor fileDescriptor() const = 0;
 
-    virtual void setEventDispatcher(IEventDispatcher *loop);
+    virtual void setEventDispatcher(IEventDispatcher *ed);
     virtual IEventDispatcher *eventDispatcher() const;
 
 protected:

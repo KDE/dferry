@@ -10,6 +10,7 @@
 #include <vector>
 
 class IConnection;
+class ICompletionClient;
 
 class Message : public IConnectionClient
 {
@@ -91,6 +92,10 @@ public:
     void writeTo(IConnection *connection); // sends this message over connection
     bool isWriting() const;
 
+    // for read or write completion (it should be clear which because reading and writing can't
+    // happen simultaneously
+    void setCompletionClient(ICompletionClient *client);
+
 protected:
     virtual void notifyConnectionReadyRead();
     virtual void notifyConnectionReadyWrite();
@@ -102,6 +107,8 @@ private:
     bool fillOutBuffer();
     void serializeFixedHeaders();
     void serializeVariableHeaders(ArgumentList *headerArgs);
+
+    void notifyCompletionClient();
 
     // there is no explicit dirty flag; the buffer is simply cleared when dirtying any of the data below.
     std::vector<byte> m_buffer;
@@ -131,6 +138,8 @@ private:
 
     std::map<int, std::string> m_stringHeaders;
     std::map<int, uint32> m_intHeaders;
+
+    ICompletionClient *m_completionClient;
 };
 
 #endif // MESSAGE_H

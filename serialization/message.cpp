@@ -1,6 +1,7 @@
 #include "message.h"
 
 #include "basictypeio.h"
+#include "icompletionclient.h"
 #include "iconnection.h"
 
 #include <cassert>
@@ -22,7 +23,8 @@ Message::Message(int serial)
      m_flags(0),
      m_protocolVersion(1),
      m_bodyLength(0),
-     m_serial(serial)
+     m_serial(serial),
+     m_completionClient(0)
 {
 }
 
@@ -33,7 +35,8 @@ Message::Message()
      m_flags(0),
      m_protocolVersion(1),
      m_bodyLength(0),
-     m_serial(0)
+     m_serial(0),
+     m_completionClient(0)
 {
 }
 
@@ -236,6 +239,11 @@ bool Message::isWriting() const
     return m_state == Serializing;
 }
 
+void Message::setCompletionClient(ICompletionClient *client)
+{
+    m_completionClient = client;
+}
+
 void Message::setArgumentList(const ArgumentList &arguments)
 {
     m_buffer.clear();
@@ -297,6 +305,8 @@ void Message::notifyConnectionReadyRead()
             std::string sig = signature();
             array data(&m_buffer.front() + m_headerLength, m_bodyLength);
             m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), data, m_isByteSwapped);
+            assert(!isError);
+            notifyCompletionClient();
             break;
         }
         if (!connection()->isOpen()) {
@@ -309,6 +319,7 @@ void Message::notifyConnectionReadyRead()
         setIsReadNotificationEnabled(false);
         m_state = Empty;
         m_buffer.clear();
+        notifyCompletionClient();
         // TODO reset other data members
     }
 }
@@ -326,7 +337,7 @@ void Message::notifyConnectionReadyWrite()
         m_buffer.clear();
 
     } while (written > 0);
-
+    notifyCompletionClient();
 }
 
 bool Message::requiredHeadersPresent() const
@@ -584,4 +595,11 @@ void Message::serializeVariableHeaders(ArgumentList *headerArgs)
 
     writer.endArray();
     writer.finish();
+}
+
+void Message::notifyCompletionClient()
+{
+    if (m_completionClient) {
+        m_completionClient->notifyCompletion(this);
+    }
 }

@@ -1,9 +1,9 @@
 #include "argumentlist.h"
-#include "authnegotiator.h"
 #include "epolleventdispatcher.h"
+#include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
-#include "pathfinder.h"
+#include "transceiver.h"
 
 #include <iostream>
 
@@ -14,51 +14,41 @@ void printArguments(ArgumentList::ReadCursor reader )
     // TODO - this is well-known though
 }
 
+void fillHelloMessage(Message *hello)
+{
+    hello->setType(Message::MethodCallMessage);
+    hello->setDestination(string("org.freedesktop.DBus"));
+    hello->setInterface(string("org.freedesktop.DBus"));
+    hello->setPath(string("/org/freedesktop/DBus"));
+    hello->setMethod(string("Hello"));
+}
+
+class ReplyPrinter : public ITransceiverClient
+{
+    // reimplemented from ITransceiverClient
+    virtual void messageReceived(Message *m);
+};
+
+void ReplyPrinter::messageReceived(Message *m)
+{
+    cout << "Reply, pretty-printed:\n" << m->argumentList().prettyPrint();
+}
+
 int main(int argc, char *argv[])
 {
-    // TODO find session bus
-    SessionBusInfo sessionBusInfo = PathFinder::sessionBusInfo();
-    cout << "session bus address type: " << sessionBusInfo.addressType << '\n';
-    cout << "session bus path: " << sessionBusInfo.path << '\n';
-
-    LocalSocket socket(sessionBusInfo.path);
-    cout << "connection is " << (socket.isOpen() ? "open" : "closed") << ".\n";
 
     EpollEventDispatcher dispatcher;
-    socket.setEventDispatcher(&dispatcher);
 
-    {
-        AuthNegotiator authNegotiator(&socket);
-        while (socket.isOpen() && !authNegotiator.isAuthenticated()) {
-            dispatcher.poll();
-        }
-
-        if (!authNegotiator.isAuthenticated()) {
-            return 1;
-        }
-    }
-
+    Transceiver transceiver(&dispatcher);
+    ReplyPrinter receiver;
+    transceiver.setClient(&receiver);
     {
         Message hello(1);
-        hello.setType(Message::MethodCallMessage);
-        hello.setDestination(string("org.freedesktop.DBus"));
-        hello.setInterface(string("org.freedesktop.DBus"));
-        hello.setPath(string("/org/freedesktop/DBus"));
-        hello.setMethod(string("Hello"));
-        hello.writeTo(&socket);
-        while (socket.isOpen() && hello.isWriting()) {
+        fillHelloMessage(&hello);
+        transceiver.sendAsync(&hello);
+        while (true) {
             dispatcher.poll();
         }
-        cout << "Hello sent(?)\n";
-    }
-
-    {
-        Message helloReply;
-        helloReply.readFrom(&socket);
-        while (socket.isOpen() && helloReply.isReading()) {
-            dispatcher.poll();
-        }
-        cout << "Hello received(?)\n";
     }
 
     return 0;

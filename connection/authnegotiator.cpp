@@ -1,6 +1,8 @@
 #include "authnegotiator.h"
 
+#include "icompletionclient.h"
 #include "iconnection.h"
+#include "pathfinder.h"
 #include "stringtools.h"
 
 #include <cassert>
@@ -12,7 +14,8 @@
 using namespace std;
 
 AuthNegotiator::AuthNegotiator(IConnection *connection)
-   : m_state(InitialState)
+   : m_state(InitialState),
+     m_completionClient(0)
 {
     connection->addClient(this);
     setIsReadNotificationEnabled(true);
@@ -29,10 +32,29 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     m_state = ExpectOkState;
 }
 
+bool AuthNegotiator::isFinished() const
+{
+    return m_state >= AuthenticationFailedState;
+}
+
+bool AuthNegotiator::isAuthenticated() const
+{
+    return m_state == AuthenticatedState;
+}
+
+void AuthNegotiator::setCompletionClient(ICompletionClient *client)
+{
+    m_completionClient = client;
+}
+
 void AuthNegotiator::notifyConnectionReadyRead()
 {
-    while (readLine()) {
+    bool wasFinished = isFinished();
+    while (!isFinished() && readLine()) {
         advanceState();
+    }
+    if (isFinished() && !wasFinished && m_completionClient) {
+        m_completionClient->notifyCompletion(this);
     }
 }
 
