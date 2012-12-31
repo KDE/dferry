@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include <iostream>
+#include <sstream>
 
 using namespace std;
 
@@ -38,6 +39,73 @@ Message::Message()
      m_serial(0),
      m_completionClient(0)
 {
+}
+
+struct VarHeaderPrinter
+{
+    Message::VariableHeader field;
+    const char *name;
+};
+
+static const int stringHeadersCount = 7;
+static VarHeaderPrinter stringHeaderPrinters[stringHeadersCount] = {
+    { Message::PathHeader, "path" },
+    { Message::InterfaceHeader, "interface" },
+    { Message::MethodHeader, "method" },
+    { Message::ErrorNameHeader, "error name" },
+    { Message::DestinationHeader, "destination" },
+    { Message::SenderHeader, "sender" },
+    { Message::SignatureHeader, "signature" }
+};
+
+static const int intHeadersCount = 2;
+static VarHeaderPrinter intHeaderPrinters[intHeadersCount] = {
+    { Message::ReplySerialHeader, "reply serial" },
+    { Message::UnixFdsHeader, "#unix fds" }
+};
+
+static const int messageTypeCount = 5;
+static const char *printableMessageTypes[messageTypeCount] = {
+    "", // handled in code
+    "MethodCallMessage",
+    "MethodReturnMessage",
+    "ErrorMessage",
+    "SignalMessage"
+};
+
+string Message::prettyPrint() const
+{
+    string ret;
+    if (m_messageType >= 1 && m_messageType < messageTypeCount) {
+        ret += printableMessageTypes[m_messageType];
+    } else {
+        return string("Invalid message.\n");
+    }
+    ret += '\n';
+
+    for (int i = 0; i < stringHeadersCount; i++ ) {
+        bool isPresent = false;
+        string str = stringHeader(stringHeaderPrinters[i].field, &isPresent);
+        if (isPresent) {
+            ostringstream os;
+            os << "; " << stringHeaderPrinters[i].name << ": \"" << str << '"';
+            ret += os.str();
+        }
+    }
+
+    for (int i = 0; i < intHeadersCount; i++ ) {
+        bool isPresent = false;
+        uint32 intValue = intHeader(intHeaderPrinters[i].field, &isPresent);
+        if (isPresent) {
+            ostringstream os;
+            os << "; " << intHeaderPrinters[i].name << ": " << intValue;
+            ret += os.str();
+        }
+    }
+
+    ret += '\n';
+    ret += m_mainArguments.prettyPrint();
+    return ret;
 }
 
 Message::Type Message::type() const

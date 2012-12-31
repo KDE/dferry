@@ -31,7 +31,7 @@ class ReplyPrinter : public ITransceiverClient
 
 void ReplyPrinter::messageReceived(Message *m)
 {
-    cout << "Reply, pretty-printed:\n" << m->argumentList().prettyPrint();
+    cout << "Reply, pretty-printed:\n" << m->prettyPrint();
 }
 
 int main(int argc, char *argv[])

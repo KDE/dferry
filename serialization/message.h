@@ -22,6 +22,8 @@ public:
 
     Message(); // constructs an invalid message (to be filled in later, usually)
 
+    std::string prettyPrint() const;
+
     enum Type {
         InvalidMessage = 0,
         MethodCallMessage,
