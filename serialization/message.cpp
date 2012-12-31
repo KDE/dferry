@@ -67,10 +67,10 @@ static VarHeaderPrinter intHeaderPrinters[intHeadersCount] = {
 static const int messageTypeCount = 5;
 static const char *printableMessageTypes[messageTypeCount] = {
     "", // handled in code
-    "MethodCallMessage",
-    "MethodReturnMessage",
-    "ErrorMessage",
-    "SignalMessage"
+    "Method call",
+    "Method return",
+    "Method error return",
+    "Signal"
 };
 
 string Message::prettyPrint() const
@@ -81,7 +81,6 @@ string Message::prettyPrint() const
     } else {
         return string("Invalid message.\n");
     }
-    ret += '\n';
 
     for (int i = 0; i < stringHeadersCount; i++ ) {
         bool isPresent = false;
