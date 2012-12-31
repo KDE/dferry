@@ -159,7 +159,7 @@ string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
     map<int, string>::const_iterator it = m_stringHeaders.find(header);
     if (isPresent) {
-        *isPresent = it == m_stringHeaders.end();
+        *isPresent = it != m_stringHeaders.end();
     }
     return it == m_stringHeaders.end() ? string() : it->second;
 }
@@ -176,7 +176,7 @@ uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
 {
     map<int, uint32>::const_iterator it = m_intHeaders.find(header);
     if (isPresent) {
-        *isPresent = it == m_intHeaders.end();
+        *isPresent = it != m_intHeaders.end();
     }
     return it == m_intHeaders.end() ? 0 : it->second;
 }
