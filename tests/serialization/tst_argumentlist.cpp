@@ -10,13 +10,28 @@ using namespace std;
 
 // Handy helpers
 
+static void printArray(array a)
+{
+    cout << "Array: ";
+    for (int i = 0; i < a.length; i++) {
+        cout << int(a.begin[i]) << '|';
+    }
+    cout << '\n';
+}
+
 static bool arraysEqual(array a1, array a2)
 {
     if (a1.length != a2.length) {
+        cout << "Different lengths.\n";
+        printArray(a1);
+        printArray(a2);
         return false;
     }
     for (int i = 0; i < a1.length; i++) {
         if (a1.begin[i] != a2.begin[i]) {
+            cout << "Different content.\n";
+            printArray(a1);
+            printArray(a2);
             return false;
         }
     }
@@ -26,15 +41,6 @@ static bool arraysEqual(array a1, array a2)
 static bool stringsEqual(cstring s1, cstring s2)
 {
     return arraysEqual(array(s1.begin, s1.length), array(s2.begin, s2.length));
-}
-
-static void printArray(array a)
-{
-    cout << "Array: ";
-    for (int i = 0; i < a.length; i++) {
-        cout << int(a.begin[i]) << '|';
-    }
-    cout << '\n';
 }
 
 static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int dataIncrement, bool debugPrint)
