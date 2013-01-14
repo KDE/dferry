@@ -170,15 +170,21 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
         case ArgumentList::Double:
             writer.writeDouble(reader.readDouble());
             break;
-        case ArgumentList::String:
-            writer.writeString(reader.readString());
-            break;
-        case ArgumentList::ObjectPath:
-            writer.writeObjectPath(reader.readObjectPath());
-            break;
-        case ArgumentList::Signature:
-            writer.writeSignature(reader.readSignature());
-            break;
+        case ArgumentList::String: {
+            cstring s = reader.readString();
+            TEST(ArgumentList::isStringValid(s));
+            writer.writeString(s);
+            break; }
+        case ArgumentList::ObjectPath: {
+            cstring objectPath = reader.readObjectPath();
+            TEST(ArgumentList::isObjectPathValid(objectPath));
+            writer.writeObjectPath(objectPath);
+            break; }
+        case ArgumentList::Signature: {
+            cstring signature = reader.readSignature();
+            TEST(ArgumentList::isSignatureValid(signature));
+            writer.writeSignature(signature);
+            break; }
         case ArgumentList::UnixFd:
             writer.writeUnixFd(reader.readUnixFd());
             break;
