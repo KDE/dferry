@@ -1060,6 +1060,7 @@ cstring ArgumentList::WriteCursor::stateString() const
 
 ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32 alignAndSize)
 {
+    m_dataPosition = align(m_dataPosition, alignAndSize);
     const uint32 newDataPosition = m_dataPosition + alignAndSize;
     if (unlikely(newDataPosition > m_dataCapacity)) {
         m_dataCapacity *= 2;
@@ -1123,6 +1124,7 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
         return InvalidData;
     }
 
+    m_dataPosition = align(m_dataPosition, lengthPrefixSize);
     const uint32 newDataPosition = m_dataPosition + lengthPrefixSize + m_String.length + 1;
     while (unlikely(newDataPosition > m_dataCapacity)) {
         m_dataCapacity *= 2;
@@ -1175,8 +1177,6 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
     if (signatureFragment.length) {
         getTypeInfo(signatureFragment.begin[0], 0, &alignment, &isPrimitiveType, &isStringType);
-        // fortunately, none of the state transitions that have no signature fragment need alignment
-        m_dataPosition = align(m_dataPosition, alignment);
     }
 
     bool isWritingSignature = m_signaturePosition == m_signature.length; // TODO correct?
@@ -1464,10 +1464,13 @@ void ArgumentList::WriteCursor::finish()
         if (ei.size <= ElementInfo::LargestSize) {
             // copy data chunks while applying the proper alignment
             zeroPad(buffer, ei.alignment(), &bufferPos);
-            m_dataPosition = align(m_dataPosition, ei.alignment());
-            memcpy(buffer + bufferPos, m_data + m_dataPosition, ei.size);
-            bufferPos += ei.size;
-            m_dataPosition += ei.size;
+            // if !ei.size, it's alignment padding which does not apply to source data
+            if (ei.size) {
+                m_dataPosition = align(m_dataPosition, ei.alignment());
+                memcpy(buffer + bufferPos, m_data + m_dataPosition, ei.size);
+                bufferPos += ei.size;
+                m_dataPosition += ei.size;
+            }
         } else {
             // the value of ei.size has special meaning
             ArrayLengthField al;

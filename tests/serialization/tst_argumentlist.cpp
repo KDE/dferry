@@ -693,6 +693,73 @@ static void test_complicated()
     doRoundtrip(arg);
 }
 
+static void test_alignment()
+{
+    ArgumentList arg;
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.writeByte(123);
+        writer.beginArray(false);
+        writer.writeByte(64);
+        writer.endArray();
+        writer.writeByte(123);
+        for (int i = 124; i < 150; i++) {
+            writer.writeByte(i);
+        }
+
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() != ArgumentList::InvalidData);
+        doRoundtrip(arg);
+    }
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.writeByte(123);
+        writer.beginStruct();
+        writer.writeByte(110);
+        writer.endStruct();
+        writer.writeByte(200);
+        writer.finish();
+        doRoundtrip(arg);
+    }
+}
+
+static void test_arrayOfVariant()
+{
+    ArgumentList arg;
+    // non-empty array
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.writeByte(123);
+        writer.beginArray(false);
+        writer.beginVariant();
+        writer.writeByte(64);
+        writer.endVariant();
+        writer.endArray();
+        writer.writeByte(123);
+
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() != ArgumentList::InvalidData);
+        doRoundtrip(arg);
+    }
+    // empty array
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.writeByte(123);
+        writer.beginArray(true);
+        writer.beginVariant();
+        writer.endVariant();
+        writer.endArray();
+        writer.writeByte(123);
+
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() != ArgumentList::InvalidData);
+        doRoundtrip(arg);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     test_stringValidation();
@@ -701,6 +768,8 @@ int main(int argc, char *argv[])
     test_roundtrip();
     test_writerMisuse();
     test_complicated();
+    test_alignment();
+    test_arrayOfVariant();
     // TODO many more misuse tests for WriteCursor and maybe some for ReadCursor
     std::cout << "Passed!\n";
 }
