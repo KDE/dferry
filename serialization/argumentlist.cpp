@@ -791,14 +791,14 @@ void ArgumentList::ReadCursor::advanceState()
         break;
 
     case BeginVariant: {
-        if (unlikely(m_dataPosition >= m_data.length)) {
-            goto out_needMoreData;
-        }
         cstring signature;
         if (unlikely(m_zeroLengthArrayNesting)) {
             static const char *emptyString = "";
             signature = cstring(emptyString, 0);
         } else {
+            if (unlikely(m_dataPosition >= m_data.length)) {
+                goto out_needMoreData;
+            }
             signature.length = m_data.begin[m_dataPosition++];
             signature.begin = m_data.begin + m_dataPosition;
             m_dataPosition += signature.length + 1;
