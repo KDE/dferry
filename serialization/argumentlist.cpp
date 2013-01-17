@@ -1360,9 +1360,9 @@ void ArgumentList::WriteCursor::beginArrayOrDict(bool isDict, bool isEmpty)
         }
     }
     if (isDict) {
-        advanceState(array("a{", strlen("a{")),  BeginDict);
+        advanceState(array("a{", strlen("a{")), BeginDict);
     } else {
-        advanceState(array("a", strlen("a")),  BeginArray);
+        advanceState(array("a", strlen("a")), BeginArray);
     }
 }
 
