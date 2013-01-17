@@ -1322,7 +1322,15 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         VALID_IF(m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1));
         m_aggregateStack.pop_back();
         if (unlikely(m_zeroLengthArrayNesting)) {
-            m_zeroLengthArrayNesting--;
+            if (!--m_zeroLengthArrayNesting) {
+                // last chance to erase data inside the empty array so it doesn't end up in the output
+                m_variantSignatures.erase(m_variantSignatures.begin() +
+                                          m_variantSignaturesCountBeforeZeroLengthArray,
+                                          m_variantSignatures.end());
+                m_elements.erase(m_elements.begin() + m_dataElementsCountBeforeZeroLengthArray,
+                                 m_elements.end());
+                m_dataPosition = m_dataPositionBeforeZeroLengthArray;
+            }
         }
 
         // ### not checking array size here, it may change by a few bytes in the final data stream
@@ -1336,12 +1344,17 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
 void ArgumentList::WriteCursor::beginArrayOrDict(bool isDict, bool isEmpty)
 {
-    // can't create an array with contents during type-only iteration
-    VALID_IF(!m_zeroLengthArrayNesting || isEmpty);
+    isEmpty = isEmpty || m_zeroLengthArrayNesting;
     if (isEmpty) {
-        m_zeroLengthArrayNesting++;
-    } else {
-        VALID_IF(!m_zeroLengthArrayNesting);
+        if (!m_zeroLengthArrayNesting++) {
+            // for simplictiy and performance in the fast path, we keep storing the data chunks and any
+            // variant signatures written inside an empty array. when we close the array, though, we
+            // throw away all that data and signatures and keep only changes in the signature containing
+            // the topmost empty array.
+            m_variantSignaturesCountBeforeZeroLengthArray = m_variantSignatures.size();
+            m_dataElementsCountBeforeZeroLengthArray = m_elements.size() + 1; // +1 -> keep ArrayLengthField
+            m_dataPositionBeforeZeroLengthArray = m_dataPosition;
+        }
     }
     if (isDict) {
         advanceState(array("a{", strlen("a{")),  BeginDict);
@@ -1441,6 +1454,7 @@ void ArgumentList::WriteCursor::finish()
     if (m_state == InvalidData) {
         return;
     }
+    assert(!m_zeroLengthArrayNesting);
     assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
     m_signature.begin[m_signaturePosition] = '\0';
     m_signature.length = m_signaturePosition;

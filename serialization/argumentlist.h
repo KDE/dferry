@@ -329,6 +329,10 @@ public:
         std::vector<ElementInfo> m_elements;
         std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
 
+        int m_dataElementsCountBeforeZeroLengthArray;
+        int m_variantSignaturesCountBeforeZeroLengthArray;
+        int m_dataPositionBeforeZeroLengthArray;
+
         ArgumentList *m_argList;
         CursorState m_state;
         Nesting *m_nesting;
