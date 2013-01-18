@@ -28,6 +28,7 @@ class ReplyPrinter : public ITransceiverClient
 void ReplyPrinter::messageReceived(Message *m)
 {
     cout << "\nReceived:\n" << m->prettyPrint();
+    delete m;
 }
 
 int main(int argc, char *argv[])
