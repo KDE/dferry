@@ -796,6 +796,51 @@ static void test_arrayOfVariant()
     }
 }
 
+static void test_realMessage()
+{
+    ArgumentList arg;
+    // non-empty array
+    {
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+
+        writer.writeString(cstring("message"));
+        writer.writeString(cstring("konversation"));
+
+        writer.beginArray(true);
+        writer.beginVariant();
+        writer.endVariant();
+        writer.endArray();
+
+        writer.writeString(cstring(""));
+        writer.writeString(cstring("&lt;fredrikh&gt; he's never on irc"));
+
+        writer.beginArray(true);
+        writer.writeByte(123); // may not show up in the output
+        writer.endArray();
+
+        writer.beginArray(true);
+        writer.writeString(cstring("dummy, I may not show up in the output!"));
+        writer.endArray();
+
+        writer.writeInt32(-1);
+        writer.writeInt64(46137372);
+
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() != ArgumentList::InvalidData);
+    }
+    printArray(arg.data());
+    std::cout << arg.prettyPrint() << endl;
+    std::cout << arg.prettyPrint() << endl;
+    doRoundtrip(arg);
+}
+
+// TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
+//       length and long/short type signature, to make sure that the signature is written but not
+//       any data if the array is zero-length.
+
+// TODO test empty dicts, too
+
 int main(int argc, char *argv[])
 {
     test_stringValidation();
@@ -806,6 +851,7 @@ int main(int argc, char *argv[])
     test_complicated();
     test_alignment();
     test_arrayOfVariant();
+    test_realMessage();
     // TODO many more misuse tests for WriteCursor and maybe some for ReadCursor
     std::cout << "Passed!\n";
 }
