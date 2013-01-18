@@ -9,10 +9,6 @@
 
 using namespace std;
 
-void printArguments(ArgumentList::ReadCursor reader )
-{
-    // TODO - this is well-known though
-}
 
 void fillHelloMessage(Message *hello)
 {
@@ -31,7 +27,7 @@ class ReplyPrinter : public ITransceiverClient
 
 void ReplyPrinter::messageReceived(Message *m)
 {
-    cout << "Reply, pretty-printed:\n" << m->prettyPrint();
+    cout << "\nReceived:\n" << m->prettyPrint();
 }
 
 int main(int argc, char *argv[])
@@ -45,11 +41,26 @@ int main(int argc, char *argv[])
     {
         Message hello(1);
         fillHelloMessage(&hello);
+        cout << "Sending:\n" << hello.prettyPrint() << '\n';
         transceiver.sendAsync(&hello);
+
+        Message spyEnable(2);
+        spyEnable.setType(Message::MethodCallMessage);
+        spyEnable.setDestination(string("org.freedesktop.DBus"));
+        spyEnable.setInterface(string("org.freedesktop.DBus"));
+        spyEnable.setPath(string("/org/freedesktop/DBus"));
+        spyEnable.setMethod(string("AddMatch"));
+        ArgumentList argList;
+        ArgumentList::WriteCursor writer = argList.beginWrite();
+        writer.writeString(cstring("eavesdrop=true,type='method_call'"));
+        writer.finish();
+        spyEnable.setArgumentList(argList);
+        transceiver.sendAsync(&spyEnable);
         while (true) {
             dispatcher.poll();
         }
     }
+
 
     return 0;
 }
