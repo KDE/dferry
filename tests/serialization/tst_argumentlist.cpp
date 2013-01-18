@@ -57,6 +57,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
     ArgumentList::WriteCursor writer = copy.beginWrite();
 
     bool isDone = false;
+    int emptyNesting = 0;
     bool isFirstEntry = false;
 
     while (!isDone) {
@@ -110,6 +111,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
             bool isEmpty;
             reader.beginArray(&isEmpty);
             writer.beginArray(isEmpty);
+            emptyNesting += isEmpty ? 1 : 0;
             break; }
         case ArgumentList::NextArrayEntry:
             if (reader.nextArrayEntry()) {
@@ -123,12 +125,14 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
         case ArgumentList::EndArray:
             reader.endArray();
             writer.endArray();
+            emptyNesting = std::max(emptyNesting - 1, 0);
             break;
         case ArgumentList::BeginDict: {
             isFirstEntry = true;
             bool isEmpty;
             reader.beginDict(&isEmpty);
             writer.beginDict(isEmpty);
+            emptyNesting += isEmpty ? 1 : 0;
             break; }
         case ArgumentList::NextDictEntry:
             if (reader.nextDictEntry()) {
@@ -142,6 +146,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
         case ArgumentList::EndDict:
             reader.endDict();
             writer.endDict();
+            emptyNesting = std::max(emptyNesting - 1, 0);
             break;
         case ArgumentList::Byte:
             writer.writeByte(reader.readByte());
@@ -172,17 +177,29 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
             break;
         case ArgumentList::String: {
             cstring s = reader.readString();
-            TEST(ArgumentList::isStringValid(s));
+            if (emptyNesting) {
+                s = cstring("");
+            } else {
+                TEST(ArgumentList::isStringValid(s));
+            }
             writer.writeString(s);
             break; }
         case ArgumentList::ObjectPath: {
             cstring objectPath = reader.readObjectPath();
-            TEST(ArgumentList::isObjectPathValid(objectPath));
+            if (emptyNesting) {
+                objectPath = cstring("/");
+            } else {
+                TEST(ArgumentList::isObjectPathValid(objectPath));
+            }
             writer.writeObjectPath(objectPath);
             break; }
         case ArgumentList::Signature: {
             cstring signature = reader.readSignature();
-            TEST(ArgumentList::isSignatureValid(signature));
+            if (emptyNesting) {
+                signature = cstring("");
+            } else {
+                TEST(ArgumentList::isSignatureValid(signature));
+            }
             writer.writeSignature(signature);
             break; }
         case ArgumentList::UnixFd:
