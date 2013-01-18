@@ -435,7 +435,10 @@ bool ArgumentList::isSignatureValid(cstring signature, SignatureType type)
         return false;
     }
     if (type == VariantSignature) {
-        if (signature.length && !parseSingleCompleteType(&signature, &nest)) {
+        if (!signature.length) {
+            return false;
+        }
+        if (!parseSingleCompleteType(&signature, &nest)) {
             return false;
         }
         if (signature.length) {
@@ -834,10 +837,10 @@ void ArgumentList::ReadCursor::advanceState()
             if (unlikely(m_dataPosition > m_data.length)) {
                 goto out_needMoreData;
             }
+            VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature));
         }
         // do not clobber nesting before potentially going to out_needMoreData!
         VALID_IF(m_nesting->beginVariant());
-        VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature));
 
         aggregateInfo.aggregateType = BeginVariant;
         aggregateInfo.var.prevSignature.begin = m_signature.begin;
@@ -1310,6 +1313,11 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
         VALID_IF(!m_aggregateStack.empty());
         aggregateInfo = m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginVariant);
+        if (likely(!m_zeroLengthArrayNesting)) {
+            // apparently, empty variants are not allowed. as an exception, in zero length arrays they are
+            // suitable for writing a type signature like "av" in the shortest possible way.
+            VALID_IF(m_signaturePosition > 0);
+        }
         m_signature.begin[m_signaturePosition] = '\0';
         assert(aggregateInfo.var.signatureIndex < m_variantSignatures.size());
         m_variantSignatures[aggregateInfo.var.signatureIndex].length = m_signaturePosition;

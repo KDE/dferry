@@ -245,7 +245,7 @@ static void test_stringValidation()
 
         TEST(ArgumentList::isSignatureValid(emptyWithNull));
         TEST(!ArgumentList::isSignatureValid(emptyWithoutNull));
-        TEST(ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
+        TEST(!ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
         TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
     }
     {
@@ -532,6 +532,16 @@ static void test_writerMisuse()
         writer.writeByte(2);  // wrong, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(true);
+        writer.nextArrayEntry();
+        writer.beginVariant();
+        writer.endVariant(); // empty variants are okay if and only if inside an empty array
+        writer.endArray();
+        TEST(writer.state() != ArgumentList::InvalidData);
+    }
     // Dict
     {
         ArgumentList arg;
@@ -592,7 +602,7 @@ static void test_writerMisuse()
         ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginVariant();
         writer.endVariant();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
@@ -657,6 +667,7 @@ static void test_complicated()
             writer.nextDictEntry();
                 writer.writeByte(83);
                 writer.beginVariant();
+                writer.writeObjectPath(cstring("/foo/bar/object"));
                 writer.endVariant();
             writer.nextDictEntry();
                 writer.writeByte(234);
