@@ -527,6 +527,13 @@ static void test_writerMisuse()
     {
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
+        writer.beginArray(true);
+        writer.endArray(); // even with no elements it, must contain exactly one type
+        TEST(writer.state() == ArgumentList::InvalidData);
+    }
+    {
+        ArgumentList arg;
+        ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginArray(false);
         writer.writeByte(1); // in WriteCursor, calling nextArrayEntry() after beginArray() is optional
         writer.endArray();
@@ -536,7 +543,8 @@ static void test_writerMisuse()
         ArgumentList arg;
         ArgumentList::WriteCursor writer = arg.beginWrite();
         writer.beginArray(false);
-        writer.nextArrayEntry();
+        writer.nextArrayEntry();    // optional and may not trigger an error
+        TEST(writer.state() != ArgumentList::InvalidData);
         writer.endArray(); // wrong, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
