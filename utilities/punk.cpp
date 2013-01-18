@@ -6,6 +6,7 @@
 #include "transceiver.h"
 
 #include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -19,6 +20,22 @@ void fillHelloMessage(Message *hello)
     hello->setMethod(string("Hello"));
 }
 
+void fillEavesdropMessage(Message *spyEnable, const char *messageType)
+{
+    spyEnable->setType(Message::MethodCallMessage);
+    spyEnable->setDestination(string("org.freedesktop.DBus"));
+    spyEnable->setInterface(string("org.freedesktop.DBus"));
+    spyEnable->setPath(string("/org/freedesktop/DBus"));
+    spyEnable->setMethod(string("AddMatch"));
+    ArgumentList argList;
+    ArgumentList::WriteCursor writer = argList.beginWrite();
+    std::string str = "eavesdrop=true,type=";
+    str += messageType;
+    writer.writeString(cstring(str.c_str()));
+    writer.finish();
+    spyEnable->setArgumentList(argList);
+}
+
 class ReplyPrinter : public ITransceiverClient
 {
     // reimplemented from ITransceiverClient
@@ -27,7 +44,7 @@ class ReplyPrinter : public ITransceiverClient
 
 void ReplyPrinter::messageReceived(Message *m)
 {
-    cout << "\nReceived:\n" << m->prettyPrint();
+    cout << '\n' << m->prettyPrint();
     delete m;
 }
 
@@ -37,31 +54,31 @@ int main(int argc, char *argv[])
     EpollEventDispatcher dispatcher;
 
     Transceiver transceiver(&dispatcher);
+    int serial = 1;
     ReplyPrinter receiver;
     transceiver.setClient(&receiver);
     {
-        Message hello(1);
-        fillHelloMessage(&hello);
-        cout << "Sending:\n" << hello.prettyPrint() << '\n';
-        transceiver.sendAsync(&hello);
+        Message *hello = new Message(serial++);
+        fillHelloMessage(hello);
+        transceiver.sendAsync(hello);
 
-        Message spyEnable(2);
-        spyEnable.setType(Message::MethodCallMessage);
-        spyEnable.setDestination(string("org.freedesktop.DBus"));
-        spyEnable.setInterface(string("org.freedesktop.DBus"));
-        spyEnable.setPath(string("/org/freedesktop/DBus"));
-        spyEnable.setMethod(string("AddMatch"));
-        ArgumentList argList;
-        ArgumentList::WriteCursor writer = argList.beginWrite();
-        writer.writeString(cstring("eavesdrop=true,type='method_call'"));
-        writer.finish();
-        spyEnable.setArgumentList(argList);
-        transceiver.sendAsync(&spyEnable);
-        while (true) {
-            dispatcher.poll();
+        static const int messageTypeCount = 4;
+        const char *messageType[messageTypeCount] = {
+            "signal",
+            "method_call",
+            "method_return",
+            "error"
+        };
+        for (int i = 0; i < messageTypeCount; i++) {
+            Message *spyEnable = new Message(serial++);
+            fillEavesdropMessage(spyEnable, messageType[i]);
+            transceiver.sendAsync(spyEnable);
         }
     }
 
+    while (true) {
+        dispatcher.poll();
+    }
 
     return 0;
 }
