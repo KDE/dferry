@@ -93,6 +93,32 @@ ArgumentList::ArgumentList(cstring signature, array data, bool isByteSwapped)
 {
 }
 
+template<typename T>
+std::string printMaybeNil(bool isNil, T value, const char *typeName)
+{
+    std::stringstream ret;
+    ret << typeName << ": ";
+    if (isNil) {
+        ret << "<nil>\n";
+    } else {
+        ret << value << '\n';
+    }
+    return ret.str();
+}
+
+template<>
+std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeName)
+{
+    std::stringstream ret;
+    ret << typeName << ": ";
+    if (isNil) {
+        ret << "<nil>\n";
+    } else {
+        ret << '"' << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
+    }
+    return ret.str();
+}
+
 std::string ArgumentList::prettyPrint() const
 {
     ReadCursor reader = const_cast<ArgumentList*>(this)->beginRead();
@@ -103,7 +129,7 @@ std::string ArgumentList::prettyPrint() const
     std::string nestingPrefix;
 
     bool isDone = false;
-    bool isFirstEntry = false;
+    int emptyNesting = 0;
 
     while (!isDone) {
         switch(reader.state()) {
@@ -132,9 +158,9 @@ std::string ArgumentList::prettyPrint() const
             ret << nestingPrefix << "end variant\n";
             break;
         case ArgumentList::BeginArray: {
-            isFirstEntry = true;
             bool isEmpty;
             reader.beginArray(&isEmpty);
+            emptyNesting += isEmpty ? 1 : 0;
             ret << nestingPrefix << "begin array\n";
             nestingPrefix += "[ ";
             break; }
@@ -143,13 +169,14 @@ std::string ArgumentList::prettyPrint() const
             break;
         case ArgumentList::EndArray:
             reader.endArray();
+            emptyNesting = std::max(emptyNesting - 1, 0);
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end array\n";
             break;
         case ArgumentList::BeginDict: {
-            isFirstEntry = true;
-            bool isEmpty;
+            bool isEmpty = false;
             reader.beginDict(&isEmpty);
+            emptyNesting += isEmpty ? 1 : 0;
             ret << nestingPrefix << "begin dict\n";
             nestingPrefix += "{ ";
             break; }
@@ -158,51 +185,53 @@ std::string ArgumentList::prettyPrint() const
             break;
         case ArgumentList::EndDict:
             reader.endDict();
+            emptyNesting = std::max(emptyNesting - 1, 0);
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end dict\n";
             break;
         case ArgumentList::Byte:
-            ret << nestingPrefix << "byte: " << int(reader.readByte()) << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, int(reader.readByte()), "byte");
             break;
-        case ArgumentList::Boolean:
-            ret << nestingPrefix << "bool: " << (reader.readBoolean() ? "true" : "false") << '\n';
-            break;
+        case ArgumentList::Boolean: {
+            bool b = reader.readBoolean();
+            ret << nestingPrefix << "bool: ";
+            if (emptyNesting) {
+                ret << "<nil>";
+            } else {
+                ret << (b ? "true" : "false");
+            }
+            ret << '\n';
+            break; }
         case ArgumentList::Int16:
-            ret << nestingPrefix << "int16: " << reader.readInt16() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt16(), "int16");
             break;
         case ArgumentList::Uint16:
-            ret << nestingPrefix << "uint16: " << reader.readUint16() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint16(), "uint16");
             break;
         case ArgumentList::Int32:
-            ret << nestingPrefix << "int32: " << reader.readInt32() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt32(), "int32");
             break;
         case ArgumentList::Uint32:
-            ret << nestingPrefix << "uint32: " << reader.readUint32() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint32(), "uint32");
             break;
         case ArgumentList::Int64:
-            ret << nestingPrefix << "int64: " << reader.readInt64() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt64(), "int64");
             break;
         case ArgumentList::Uint64:
-            ret << nestingPrefix << "uint64: " << reader.readUint64() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint64(), "uint64");
             break;
         case ArgumentList::Double:
-            ret << nestingPrefix << "double: " << reader.readDouble() << '\n';
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readDouble(), "double");
             break;
-        case ArgumentList::String: {
-            cstring cstr = reader.readString();
-            ret << nestingPrefix << "string: \""
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
-            break; }
-        case ArgumentList::ObjectPath: {
-            cstring cstr = reader.readObjectPath();
-            ret << nestingPrefix << "object path: \""
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
-            break; }
-        case ArgumentList::Signature: {
-            cstring cstr = reader.readSignature();
-            ret << nestingPrefix << "signature: \""
-                << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
-            break; }
+        case ArgumentList::String:
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readString(), "string");
+            break;
+        case ArgumentList::ObjectPath:
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readObjectPath(), "object path");
+            break;
+        case ArgumentList::Signature:
+            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readSignature(), "type signature");
+            break;
         case ArgumentList::UnixFd:
             // TODO
             break;
