@@ -936,8 +936,11 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
 
     if (unlikely(m_zeroLengthArrayNesting)) {
         if (m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
-            // do one iteration to read the types
-            return true;
+            // do one iteration to read the types; read the next type...
+            advanceState();
+            // theoretically, nothing can go wrong: the signature is pre-validated and we are not going
+            // to read any data. also theoretically, there are no bugs in advanceState() :)
+            return m_state != InvalidData;
         } else {
             // second iteration or skipping an empty array
             m_zeroLengthArrayNesting--;
