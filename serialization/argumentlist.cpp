@@ -980,6 +980,9 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
     } else {
         if (m_dataPosition < aggregateInfo.arr.dataEnd) {
             // rewind to start of contained type and read the data there
+            if (isDict) {
+                m_dataPosition = align(m_dataPosition, 8); // align to dict entry
+            }
             m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
             advanceState();
             return m_state != InvalidData;
@@ -1425,6 +1428,7 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
         } else if (isDict) {
             // a dict must have a key and value
             VALID_IF(m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
+            m_elements.push_back(ElementInfo(8, 0)); // align to dict entry
         }
         // array case: we are not at start of contained type's signature, the array is at top of stack
         // -> we *are* at the end of a single complete type inside the array, syntax check passed
