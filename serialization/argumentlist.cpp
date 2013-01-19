@@ -1345,8 +1345,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
         m_elements.push_back(ElementInfo(4, ElementInfo::ArrayLengthField));
         if (m_state == BeginDict) {
-            m_dataPosition = align(m_dataPosition, 8);
-            m_elements.push_back(ElementInfo(8, 0)); // align only
+            m_elements.push_back(ElementInfo(8, 0)); // align to dict entry
             m_state = DictKey;
             return;
         }

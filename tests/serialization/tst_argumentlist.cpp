@@ -683,6 +683,7 @@ static void test_complicated()
         addSomeVariantStuff(&writer);
 
         writer.writeInt64(234234);
+        writer.writeByte(115);
         writer.beginVariant();
             writer.beginDict(false);
                 writer.writeByte(23);
