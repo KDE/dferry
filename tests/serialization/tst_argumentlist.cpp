@@ -830,9 +830,6 @@ static void test_realMessage()
         writer.finish();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
-    printArray(arg.data());
-    std::cout << arg.prettyPrint() << endl;
-    std::cout << arg.prettyPrint() << endl;
     doRoundtrip(arg);
 }
 
