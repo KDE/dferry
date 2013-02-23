@@ -565,7 +565,8 @@ bool Message::fillOutBuffer()
     // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
     // the original dbus code aligns based on address in the final data stream
     // (offset s_properFixedHeaderLength == 12), we align based on address in the ArgumentList's buffer
-    // (offset 0) - note that this keeps the stream valid because length is measured from end of padding
+    // (offset 0) - note that our modification keeps the stream valid because length is measured from end
+    // of padding
 
     assert(headerArgs.data().length > 0); // if this fails the headerLength hack will break down
 
