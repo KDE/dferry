@@ -1164,8 +1164,10 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
 
     m_dataPosition = align(m_dataPosition, lengthPrefixSize);
     const uint32 newDataPosition = m_dataPosition + lengthPrefixSize + m_String.length + 1;
-    while (unlikely(newDataPosition > m_dataCapacity)) {
-        m_dataCapacity *= 2;
+    if (unlikely(newDataPosition > m_dataCapacity)) {
+        while (newDataPosition > m_dataCapacity) {
+            m_dataCapacity *= 2;
+        }
         m_data = reinterpret_cast<byte *>(realloc(m_data, m_dataCapacity));
     }
 
