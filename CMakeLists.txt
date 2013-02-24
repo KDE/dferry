@@ -1,11 +1,12 @@
 project(d-sel)
 
 cmake_minimum_required(VERSION 2.6.2 FATAL_ERROR)
-#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-#include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/connection
                     ${CMAKE_SOURCE_DIR}/serialization)
@@ -45,10 +46,8 @@ set(DSEL_HEADERS
     serialization/message.h
     serialization/types.h)
 
-# other subdirs for later: connection, authentication, bus
-
 add_library(dsel SHARED ${DSEL_SOURCES} ${DSEL_HEADERS})
-
+install(TARGETS dsel LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
 
 add_subdirectory(tests)
 add_subdirectory(utilities)

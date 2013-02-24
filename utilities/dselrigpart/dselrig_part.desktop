@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=D-Bus inspector
+X-KDE-ServiceTypes=KParts/ReadOnlyPart
+# ,KParts/ReadWritePart
+X-KDE-Library=dselrigpart
+Type=Service

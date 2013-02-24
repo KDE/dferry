@@ -50,7 +50,6 @@ void ReplyPrinter::messageReceived(Message *m)
 
 int main(int argc, char *argv[])
 {
-
     EpollEventDispatcher dispatcher;
 
     Transceiver transceiver(&dispatcher);
