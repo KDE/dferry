@@ -39,6 +39,11 @@ void EpollEventDispatcher::poll(int timeout)
     }
 }
 
+FileDescriptor EpollEventDispatcher::pollDescriptor() const
+{
+    return m_epollFd;
+}
+
 bool EpollEventDispatcher::addConnection(IConnection *connection)
 {
     if (!IEventDispatcher::addConnection(connection)) {

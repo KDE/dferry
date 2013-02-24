@@ -12,6 +12,8 @@ public:
     virtual ~EpollEventDispatcher();
     virtual void poll(int timeout = -1);
 
+    FileDescriptor pollDescriptor() const;
+
 protected:
     // reimplemented from IEventDispatcher
     bool addConnection(IConnection *conn);

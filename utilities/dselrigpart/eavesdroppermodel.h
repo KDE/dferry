@@ -19,6 +19,9 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     int columnCount(const QModelIndex &parent = QModelIndex()) const;
 
+private slots:
+    void fileDescriptorReady(int fd);
+
 private:
     void addMessage(Message *message);
 

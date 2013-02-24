@@ -1,9 +1,40 @@
 #include "eavesdroppermodel.h"
 
-#include "message.h"
+#include "argumentlist.h"
+#include "epolleventdispatcher.h"
 #include "itransceiverclient.h"
+#include "localsocket.h"
+#include "message.h"
+#include "transceiver.h"
+
+#include <QSocketNotifier>
 
 #include <vector>
+
+static void fillHelloMessage(Message *hello)
+{
+    hello->setType(Message::MethodCallMessage);
+    hello->setDestination(std::string("org.freedesktop.DBus"));
+    hello->setInterface(std::string("org.freedesktop.DBus"));
+    hello->setPath(std::string("/org/freedesktop/DBus"));
+    hello->setMethod(std::string("Hello"));
+}
+
+static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
+{
+    spyEnable->setType(Message::MethodCallMessage);
+    spyEnable->setDestination(std::string("org.freedesktop.DBus"));
+    spyEnable->setInterface(std::string("org.freedesktop.DBus"));
+    spyEnable->setPath(std::string("/org/freedesktop/DBus"));
+    spyEnable->setMethod(std::string("AddMatch"));
+    ArgumentList argList;
+    ArgumentList::WriteCursor writer = argList.beginWrite();
+    std::string str = "eavesdrop=true,type=";
+    str += messageType;
+    writer.writeString(cstring(str.c_str()));
+    writer.finish();
+    spyEnable->setArgumentList(argList);
+}
 
 class EavesdropperModel::Private : public ITransceiverClient
 {
@@ -16,17 +47,23 @@ public:
 
     EavesdropperModel *q;
     std::vector<Message *> messages;
+
+    EpollEventDispatcher *dispatcher;
+    Transceiver *transceiver;
 };
 
 EavesdropperModel::Private::Private(EavesdropperModel *model)
     : q(model)
-{}
+{
+}
 
 EavesdropperModel::Private::~Private()
 {
     for (int i = 0; i < messages.size(); i++) {
         delete messages[i];
     }
+    delete dispatcher;
+    delete transceiver;
 }
 
 void EavesdropperModel::Private::messageReceived(Message *message)
@@ -37,6 +74,38 @@ void EavesdropperModel::Private::messageReceived(Message *message)
 EavesdropperModel::EavesdropperModel()
    : d(new Private(this))
 {
+    d->dispatcher = new EpollEventDispatcher;
+
+    d->transceiver = new Transceiver(d->dispatcher);
+    int serial = 1;
+    d->transceiver->setClient(d);
+    {
+        Message *hello = new Message(serial++);
+        fillHelloMessage(hello);
+        d->transceiver->sendAsync(hello);
+
+        static const int messageTypeCount = 4;
+        const char *messageType[messageTypeCount] = {
+            "signal",
+            "method_call",
+            "method_return",
+            "error"
+        };
+        for (int i = 0; i < messageTypeCount; i++) {
+            Message *spyEnable = new Message(serial++);
+            fillEavesdropMessage(spyEnable, messageType[i]);
+            d->transceiver->sendAsync(spyEnable);
+        }
+    }
+
+    QSocketNotifier *notifier = new QSocketNotifier(d->dispatcher->pollDescriptor(),
+                                                    QSocketNotifier::Read, this);
+    connect(notifier, SIGNAL(activated(int)), this, SLOT(fileDescriptorReady(int)));
+}
+
+void EavesdropperModel::fileDescriptorReady(int fd)
+{
+    d->dispatcher->poll();
 }
 
 EavesdropperModel::~EavesdropperModel()
