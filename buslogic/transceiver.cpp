@@ -73,20 +73,20 @@ void Transceiver::notifyCompletion(void *task)
         assert(task == m_authNegotiator);
         delete m_authNegotiator;
         m_authNegotiator = 0;
-        cout << "Authenticated.\n";
+        // cout << "Authenticated.\n";
         if (!m_sendQueue.empty()) {
             m_sendQueue.front()->writeTo(m_connection);
         }
         receiveNextMessage();
     } else {
         if (!m_sendQueue.empty() && task == m_sendQueue.front()) {
-            cout << "Sent message.\n";
+            // cout << "Sent message.\n";
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
                 m_sendQueue.front()->writeTo(m_connection);
             }
         } else {
-            cout << "Received message.\n";
+            // cout << "Received message.\n";
             assert(task == m_receivingMessage);
             Message *const receivedMessage = m_receivingMessage;
             receiveNextMessage();
