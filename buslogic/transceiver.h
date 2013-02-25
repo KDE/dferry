@@ -61,6 +61,7 @@ private:
 
     ITransceiverClient *m_client;
     Message *m_receivingMessage;
+    int m_sendSerial; // TODO handle recycling of serials
     std::deque<Message *> m_sendQueue; // waiting to be sent
     std::deque<Message *> m_receiveQueue; // waiting for event loop to run and notify the receiver
 

@@ -14,6 +14,7 @@ using namespace std;
 Transceiver::Transceiver(IEventDispatcher *dispatcher)
    : m_client(0),
      m_receivingMessage(0),
+     m_sendSerial(0),
      m_connection(0),
      m_mainThreadTransceiver(0),
      m_authNegotiator(0),
@@ -28,6 +29,15 @@ Transceiver::Transceiver(IEventDispatcher *dispatcher)
     cout << "connection is " << (m_connection->isOpen() ? "open" : "closed") << ".\n";
     m_authNegotiator = new AuthNegotiator(m_connection);
     m_authNegotiator->setCompletionClient(this);
+
+    // Announce our presence to the bus and have it send some introductory information of its own
+    Message *hello = new Message();
+    hello->setType(Message::MethodCallMessage);
+    hello->setDestination(std::string("org.freedesktop.DBus"));
+    hello->setInterface(std::string("org.freedesktop.DBus"));
+    hello->setPath(std::string("/org/freedesktop/DBus"));
+    hello->setMethod(std::string("Hello"));
+    sendAsync(hello);
 }
 
 Transceiver::~Transceiver()
@@ -45,6 +55,7 @@ Message *Transceiver::sendAndAwaitReply(Message *m)
 
 void Transceiver::sendAsync(Message *m)
 {
+    m->setSerial(++m_sendSerial);
     m_sendQueue.push_back(m);
     m->setCompletionClient(this);
     if (!m_authNegotiator && m_sendQueue.size() == 1) {
@@ -74,9 +85,8 @@ void Transceiver::notifyCompletion(void *task)
         delete m_authNegotiator;
         m_authNegotiator = 0;
         // cout << "Authenticated.\n";
-        if (!m_sendQueue.empty()) {
-            m_sendQueue.front()->writeTo(m_connection);
-        }
+        assert(!m_sendQueue.empty()); // the hello message should be in the queue
+        m_sendQueue.front()->writeTo(m_connection);
         receiveNextMessage();
     } else {
         if (!m_sendQueue.empty() && task == m_sendQueue.front()) {
@@ -97,7 +107,7 @@ void Transceiver::notifyCompletion(void *task)
 
 void Transceiver::receiveNextMessage()
 {
-    m_receivingMessage = new Message(/*invalid serial*/ 0);
+    m_receivingMessage = new Message;
     m_receivingMessage->setCompletionClient(this);
     m_receivingMessage->readFrom(m_connection);
 }

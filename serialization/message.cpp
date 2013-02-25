@@ -17,18 +17,6 @@ static const byte thisMachineEndianness = 'l';
 
 // TODO think of copying signature from and to output!
 
-Message::Message(int serial)
-   : m_state(Empty),
-     m_isByteSwapped(false),
-     m_messageType(InvalidMessage),
-     m_flags(0),
-     m_protocolVersion(1),
-     m_bodyLength(0),
-     m_serial(serial),
-     m_completionClient(0)
-{
-}
-
 Message::Message()
    : m_state(Empty),
      m_isByteSwapped(false),
@@ -127,7 +115,12 @@ uint32 Message::protocolVersion() const
     return m_protocolVersion;
 }
 
-int Message::serial() const
+void Message::setSerial(uint32 serial)
+{
+    m_serial = serial;
+}
+
+uint32 Message::serial() const
 {
     return m_serial;
 }

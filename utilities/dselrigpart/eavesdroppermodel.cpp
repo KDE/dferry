@@ -11,15 +11,6 @@
 
 #include <vector>
 
-static void fillHelloMessage(Message *hello)
-{
-    hello->setType(Message::MethodCallMessage);
-    hello->setDestination(std::string("org.freedesktop.DBus"));
-    hello->setInterface(std::string("org.freedesktop.DBus"));
-    hello->setPath(std::string("/org/freedesktop/DBus"));
-    hello->setMethod(std::string("Hello"));
-}
-
 static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
 {
     spyEnable->setType(Message::MethodCallMessage);
@@ -77,13 +68,8 @@ EavesdropperModel::EavesdropperModel()
     d->dispatcher = new EpollEventDispatcher;
 
     d->transceiver = new Transceiver(d->dispatcher);
-    int serial = 1;
     d->transceiver->setClient(d);
     {
-        Message *hello = new Message(serial++);
-        fillHelloMessage(hello);
-        d->transceiver->sendAsync(hello);
-
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {
             "signal",
@@ -92,7 +78,7 @@ EavesdropperModel::EavesdropperModel()
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            Message *spyEnable = new Message(serial++);
+            Message *spyEnable = new Message;
             fillEavesdropMessage(spyEnable, messageType[i]);
             d->transceiver->sendAsync(spyEnable);
         }

@@ -18,8 +18,6 @@ public:
     // this class contains header data in deserialized form (maybe also serialized) and the payload
     // in serialized form
 
-    Message(int serial); // constructs a new message (to be serialized later, usually)
-
     Message(); // constructs an invalid message (to be filled in later, usually)
 
     std::string prettyPrint() const;
@@ -36,7 +34,8 @@ public:
     Type type() const;
     void setType(Type type);
     uint32 protocolVersion() const;
-    int serial() const;
+    void setSerial(uint32 serial);
+    uint32 serial() const;
 
     // more convenient access to headers
     void setPath(const std::string &path);

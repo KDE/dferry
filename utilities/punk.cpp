@@ -10,16 +10,6 @@
 
 using namespace std;
 
-
-void fillHelloMessage(Message *hello)
-{
-    hello->setType(Message::MethodCallMessage);
-    hello->setDestination(string("org.freedesktop.DBus"));
-    hello->setInterface(string("org.freedesktop.DBus"));
-    hello->setPath(string("/org/freedesktop/DBus"));
-    hello->setMethod(string("Hello"));
-}
-
 void fillEavesdropMessage(Message *spyEnable, const char *messageType)
 {
     spyEnable->setType(Message::MethodCallMessage);
@@ -53,14 +43,9 @@ int main(int argc, char *argv[])
     EpollEventDispatcher dispatcher;
 
     Transceiver transceiver(&dispatcher);
-    int serial = 1;
     ReplyPrinter receiver;
     transceiver.setClient(&receiver);
     {
-        Message *hello = new Message(serial++);
-        fillHelloMessage(hello);
-        transceiver.sendAsync(hello);
-
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {
             "signal",
@@ -69,7 +54,7 @@ int main(int argc, char *argv[])
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            Message *spyEnable = new Message(serial++);
+            Message *spyEnable = new Message;
             fillEavesdropMessage(spyEnable, messageType[i]);
             transceiver.sendAsync(spyEnable);
         }
