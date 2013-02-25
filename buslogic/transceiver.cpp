@@ -91,6 +91,7 @@ void Transceiver::notifyCompletion(void *task)
     } else {
         if (!m_sendQueue.empty() && task == m_sendQueue.front()) {
             // cout << "Sent message.\n";
+            delete m_sendQueue.front();
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
                 m_sendQueue.front()->writeTo(m_connection);
