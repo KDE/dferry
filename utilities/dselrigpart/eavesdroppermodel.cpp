@@ -135,16 +135,37 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             const std::string iface = m->interface();
             return QString::fromUtf8(iface.c_str(), iface.length());
         }
+        case 2: {
+            const std::string sender = m->sender();
+            return QString::fromUtf8(sender.c_str(), sender.length());
+        }
+        case 3: {
+            const std::string destination = m->destination();
+            return QString::fromUtf8(destination.c_str(), destination.length());
+        }
         default:
             break;
         }
     }
     return QVariant();
-
 }
 
 QVariant EavesdropperModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
+    if (role == Qt::DisplayRole && orientation == Qt::Horizontal) {
+        switch (section) {
+        case 0:
+            return tr("Method");
+        case 1:
+            return tr("Interface");
+        case 2:
+            return tr("Sender");
+        case 3:
+            return tr("Destination");
+        default:
+            break;
+        }
+    }
     return QVariant();
 }
 
@@ -155,6 +176,11 @@ QModelIndex EavesdropperModel::index(int row, int column, const QModelIndex &par
         return QModelIndex();
     }
     return createIndex(row, column);
+}
+
+bool EavesdropperModel::hasChildren (const QModelIndex &parent) const
+{
+    return !parent.isValid();
 }
 
 QModelIndex EavesdropperModel::parent(const QModelIndex &child) const
@@ -170,5 +196,5 @@ int EavesdropperModel::rowCount(const QModelIndex &parent) const
 
 int EavesdropperModel::columnCount(const QModelIndex &parent) const
 {
-    return 1;
+    return 4;
 }

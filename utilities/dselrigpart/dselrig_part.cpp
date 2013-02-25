@@ -5,7 +5,7 @@
 #include <kparts/genericfactory.h>
 
 #include <QLabel>
-#include <QListView>
+#include <QTreeView>
 #include <QVBoxLayout>
 
 K_PLUGIN_FACTORY(DselRigPartFactory, registerPlugin<DselRigPart>();)  // produce a factory
@@ -31,7 +31,7 @@ DselRigPart::DselRigPart(QWidget *parentWidget, QObject *parent, const QVariantL
     QLabel *label = new QLabel("I am DselRig");
     mainLayout->addWidget(label);
 
-    QListView *messageList = new QListView;
+    QTreeView *messageList = new QTreeView;
     mainLayout->addWidget(messageList);
     EavesdropperModel *model = new EavesdropperModel();
     messageList->setModel(model);
