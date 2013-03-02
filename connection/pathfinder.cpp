@@ -32,10 +32,18 @@ static string homeDir()
 
 static string sessionInfoFile()
 {
-    static const char *machineUuidFilename = "/var/lib/dbus/machine-id";
-    ifstream uuidFile(machineUuidFilename);
+    static const int numMachineUuidFilenames = 2;
+    static const char *machineUuidFilenames[numMachineUuidFilenames] = {
+        "/var/lib/dbus/machine-id",
+        "/etc/machine-id"
+    };
+
     string uuid;
-    uuidFile >> uuid; // TODO check that uuid consists of lowercase hex chars
+    for (int i = 0; i < numMachineUuidFilenames && uuid.empty(); i++) {
+        ifstream uuidFile(machineUuidFilenames[i]);
+        uuidFile >> uuid;
+        // TODO check that uuid consists of lowercase hex chars
+    }
     if (uuid.length() != 32) {
         return string();
     }
