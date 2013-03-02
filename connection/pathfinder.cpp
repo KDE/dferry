@@ -123,14 +123,22 @@ SessionBusInfo PathFinder::sessionBusInfo()
     ifstream infoFile(sessionInfoFile().c_str());
 
     string line;
-    string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
 
-    while (getline(infoFile, line)) {
-        // TODO do we need any of the other information in the file?
-        if (line.find(busAddressPrefix) == 0 ) {
-            return SessionBusInfo(line.substr(busAddressPrefix.length()));
+    // try the environment variable
+    const char *envAddress = getenv("DBUS_SESSION_BUS_ADDRESS");
+    if (envAddress) {
+        line = envAddress;
+    } else {
+        // try it using a byzantine system involving files...
+        string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
+        while (getline(infoFile, line)) {
+            // TODO do we need any of the other information in the file?
+            if (line.find(busAddressPrefix) == 0 ) {
+                line = line.substr(busAddressPrefix.length());
+                break;
+            }
         }
     }
 
-    return SessionBusInfo();
+    return SessionBusInfo(line);
 }
