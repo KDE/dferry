@@ -124,6 +124,8 @@ SessionBusInfo PathFinder::sessionBusInfo()
 
     string line;
 
+    // TODO: on X, the spec requires a special way to find the session bus
+
     // try the environment variable
     const char *envAddress = getenv("DBUS_SESSION_BUS_ADDRESS");
     if (envAddress) {
