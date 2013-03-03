@@ -1,6 +1,11 @@
 include_directories(${KDE4_INCLUDES})
 
-set(dselrigpart_SOURCES dselrig_part.cpp eavesdroppermodel.cpp)
+set(dselrigpart_SOURCES
+    dselrig_part.cpp
+    eavesdroppermodel.cpp
+    eavesdropperthread.cpp
+    messagesortfilter.cpp)
+
 kde4_add_plugin(dselrigpart ${dselrigpart_SOURCES})
 target_link_libraries(dselrigpart ${KDE4_KPARTS_LIBS} dsel)
 

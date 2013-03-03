@@ -1,31 +1,7 @@
 #include "eavesdroppermodel.h"
 
 #include "argumentlist.h"
-#include "epolleventdispatcher.h"
-#include "itransceiverclient.h"
-#include "localsocket.h"
 #include "message.h"
-#include "transceiver.h"
-
-#include <QDateTime>
-#include <QSocketNotifier>
-
-#include <vector>
-
-struct MessageRecord
-{
-    MessageRecord(Message *msg)
-       : message(msg),
-         timestamp(QDateTime::currentDateTime())
-    {}
-    QString type() const;
-    // the serial of the "conversation", i.e. request-response pair
-    uint32 conversationSerial() const;
-    uint latency() const; // ## do this here or in some proxy model?
-
-    Message *message;
-    QDateTime timestamp;
-};
 
 QString MessageRecord::type() const
 {
@@ -53,121 +29,89 @@ uint32 MessageRecord::conversationSerial() const
     return message->serial();
 }
 
-static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
+QString MessageRecord::conversationMethod(const std::vector<MessageRecord> &container) const
 {
-    spyEnable->setType(Message::MethodCallMessage);
-    spyEnable->setDestination(std::string("org.freedesktop.DBus"));
-    spyEnable->setInterface(std::string("org.freedesktop.DBus"));
-    spyEnable->setPath(std::string("/org/freedesktop/DBus"));
-    spyEnable->setMethod(std::string("AddMatch"));
-    ArgumentList argList;
-    ArgumentList::WriteCursor writer = argList.beginWrite();
-    std::string str = "eavesdrop=true,type=";
-    str += messageType;
-    writer.writeString(cstring(str.c_str()));
-    writer.finish();
-    spyEnable->setArgumentList(argList);
-}
-
-class EavesdropperModel::Private : public ITransceiverClient
-{
-public:
-    Private(EavesdropperModel *model);
-    ~Private();
-
-    // reimplemented ITransceiverClient method
-    void messageReceived(Message *message);
-
-    EavesdropperModel *q;
-    std::vector<MessageRecord> messages;
-
-    EpollEventDispatcher *dispatcher;
-    Transceiver *transceiver;
-};
-
-EavesdropperModel::Private::Private(EavesdropperModel *model)
-    : q(model)
-{
-}
-
-EavesdropperModel::Private::~Private()
-{
-    for (int i = 0; i < messages.size(); i++) {
-        delete messages[i].message;
+    std::string method;
+    if (message->type() == Message::MethodReturnMessage) {
+        if (otherMessageIndex >= 0) {
+            method = container[otherMessageIndex].message->method();
+        }
+    } else {
+         method = message->method();
     }
-    delete dispatcher;
-    delete transceiver;
+    return QString::fromUtf8(method.c_str(), method.length());
 }
 
-void EavesdropperModel::Private::messageReceived(Message *message)
+QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
-    q->addMessage(message);
+    std::string method = message->sender();
+    if (message->type() == Message::MethodReturnMessage && otherMessageIndex >= 0) {
+        method += " (";
+        method += container[otherMessageIndex].message->destination();
+        method += ')';
+    }
+    return QString::fromUtf8(method.c_str(), method.length());
 }
 
 EavesdropperModel::EavesdropperModel()
-   : d(new Private(this))
+   : m_worker(this)
 {
-    d->dispatcher = new EpollEventDispatcher;
-
-    d->transceiver = new Transceiver(d->dispatcher);
-    d->transceiver->setClient(d);
-    {
-        static const int messageTypeCount = 4;
-        const char *messageType[messageTypeCount] = {
-            "signal",
-            "method_call",
-            "method_return",
-            "error"
-        };
-        for (int i = 0; i < messageTypeCount; i++) {
-            Message *spyEnable = new Message;
-            fillEavesdropMessage(spyEnable, messageType[i]);
-            d->transceiver->sendAsync(spyEnable);
-        }
-    }
-
-    QSocketNotifier *notifier = new QSocketNotifier(d->dispatcher->pollDescriptor(),
-                                                    QSocketNotifier::Read, this);
-    connect(notifier, SIGNAL(activated(int)), this, SLOT(fileDescriptorReady(int)));
-}
-
-void EavesdropperModel::fileDescriptorReady(int fd)
-{
-    d->dispatcher->poll();
 }
 
 EavesdropperModel::~EavesdropperModel()
 {
-    delete d;
-    d = 0;
+    for (int i = 0; i < m_messages.size(); i++) {
+        delete m_messages[i].message;
+    }
 }
 
-void EavesdropperModel::addMessage(Message *message)
+#include <iostream>
+
+void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
 {
-    beginInsertRows(QModelIndex(), d->messages.size(), d->messages.size());
-    d->messages.push_back(MessageRecord(message));
+    beginInsertRows(QModelIndex(), m_messages.size(), m_messages.size());
+    m_messages.push_back(MessageRecord(message, timestamp));
+
+    const uint currentMessageIndex = m_messages.size() - 1;
+
+    if (message->type() == Message::MethodCallMessage) {
+        // the NO_REPLY_EXPECTED flag does *not* forbid a reply, so we disregard the flag
+        // ### it would be nice to clean up m_callsAwaitingResponse periodically, but we allocate
+        //     memory that is not freed before shutdown left and right so it doesn't make much of
+        //     a difference
+        m_callsAwaitingResponse[message->serial()] = currentMessageIndex;
+    } else if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
+        std::map<uint32, uint32>::iterator it = m_callsAwaitingResponse.find(message->replySerial());
+        // we could have missed the initial call because it happened before we connected to the bus...
+        // theoretically we could assert the presence of the call after one d-bus timeout has passed
+        if (it != m_callsAwaitingResponse.end()) {
+            std::cerr << "matched up response to request!\n";
+            const uint originalMessageIndex = it->second;
+            m_messages.back().otherMessageIndex = originalMessageIndex;
+            m_messages[originalMessageIndex].otherMessageIndex = currentMessageIndex;
+            m_callsAwaitingResponse.erase(it);
+        }
+    }
     endInsertRows();
 }
 
 QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
 {
     if (role == Qt::DisplayRole) {
-        Q_ASSERT(index.row() < d->messages.size());
-        const MessageRecord &mr = d->messages[index.row()];
+        Q_ASSERT(index.row() < m_messages.size());
+        const MessageRecord &mr = m_messages[index.row()];
         switch (index.column()) {
         case 0:
             return mr.type();
         case 1: {
-            const std::string method = mr.message->method();
-            return QString::fromUtf8(method.c_str(), method.length());
+            return mr.conversationMethod(m_messages);
         }
         case 2: {
             const std::string iface = mr.message->interface();
             return QString::fromUtf8(iface.c_str(), iface.length());
         }
         case 3: {
-            const std::string sender = mr.message->sender();
-            return QString::fromUtf8(sender.c_str(), sender.length());
+            return mr.niceSender(m_messages);
         }
         case 4: {
             const std::string destination = mr.message->destination();
@@ -223,7 +167,7 @@ QModelIndex EavesdropperModel::parent(const QModelIndex &child) const
 
 int EavesdropperModel::rowCount(const QModelIndex &parent) const
 {
-    return d->messages.size();
+    return m_messages.size();
 }
 
 int EavesdropperModel::columnCount(const QModelIndex &parent) const
