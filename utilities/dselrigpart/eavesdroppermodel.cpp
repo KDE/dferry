@@ -65,8 +65,6 @@ EavesdropperModel::~EavesdropperModel()
     }
 }
 
-#include <iostream>
-
 void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
 {
     beginInsertRows(QModelIndex(), m_messages.size(), m_messages.size());
@@ -85,7 +83,6 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
         // we could have missed the initial call because it happened before we connected to the bus...
         // theoretically we could assert the presence of the call after one d-bus timeout has passed
         if (it != m_callsAwaitingResponse.end()) {
-            std::cerr << "matched up response to request!\n";
             const uint originalMessageIndex = it->second;
             m_messages.back().otherMessageIndex = originalMessageIndex;
             m_messages[originalMessageIndex].otherMessageIndex = currentMessageIndex;
