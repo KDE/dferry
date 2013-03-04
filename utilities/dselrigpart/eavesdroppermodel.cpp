@@ -44,13 +44,13 @@ QString MessageRecord::conversationMethod(const std::vector<MessageRecord> &cont
 
 QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
-    std::string method = message->sender();
+    std::string sender = message->sender();
     if (message->type() == Message::MethodReturnMessage && otherMessageIndex >= 0) {
-        method += " (";
-        method += container[otherMessageIndex].message->destination();
-        method += ')';
+        sender += " (";
+        sender += container[otherMessageIndex].message->destination();
+        sender += ')';
     }
-    return QString::fromUtf8(method.c_str(), method.length());
+    return QString::fromUtf8(sender.c_str(), sender.length());
 }
 
 EavesdropperModel::EavesdropperModel()
