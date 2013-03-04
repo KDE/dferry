@@ -53,6 +53,26 @@ QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) c
     return QString::fromUtf8(sender.c_str(), sender.length());
 }
 
+bool MessageRecord::couldHaveNicerDestination() const
+{
+    if (message->type() != Message::MethodCallMessage || otherMessageIndex < 0) {
+        return false;
+    }
+    const std::string dest = message->destination();
+    return !dest.empty() && dest[0] != ':';
+}
+
+QString MessageRecord::niceDestination(const std::vector<MessageRecord> &container) const
+{
+    std::string dest = message->destination();
+    if (couldHaveNicerDestination()) {
+        dest += " (";
+        dest += container[otherMessageIndex].message->sender();
+        dest += ')';
+    }
+    return QString::fromUtf8(dest.c_str(), dest.length());
+}
+
 EavesdropperModel::EavesdropperModel()
    : m_worker(this)
 {
@@ -72,6 +92,8 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
 
     const uint currentMessageIndex = m_messages.size() - 1;
 
+    // connect responses with previously spotted calls because information from one is useful for the other
+
     if (message->type() == Message::MethodCallMessage) {
         // the NO_REPLY_EXPECTED flag does *not* forbid a reply, so we disregard the flag
         // ### it would be nice to clean up m_callsAwaitingResponse periodically, but we allocate
@@ -87,6 +109,10 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
             m_messages.back().otherMessageIndex = originalMessageIndex;
             m_messages[originalMessageIndex].otherMessageIndex = currentMessageIndex;
             m_callsAwaitingResponse.erase(it);
+            if (m_messages[originalMessageIndex].couldHaveNicerDestination()) {
+                const QModelIndex index = createIndex(originalMessageIndex, 4); // TODO no magic numbers
+                emit dataChanged(index, index);
+            }
         }
     }
     endInsertRows();
@@ -111,8 +137,7 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             return mr.niceSender(m_messages);
         }
         case 4: {
-            const std::string destination = mr.message->destination();
-            return QString::fromUtf8(destination.c_str(), destination.length());
+            return mr.niceDestination(m_messages);
         }
         default:
             break;

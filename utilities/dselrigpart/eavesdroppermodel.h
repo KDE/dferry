@@ -26,6 +26,8 @@ struct MessageRecord
     // either the method name, or if this is a response the request's method name
     QString conversationMethod(const std::vector<MessageRecord> &container) const;
     QString niceSender(const std::vector<MessageRecord> &container) const;
+    bool couldHaveNicerDestination() const;
+    QString niceDestination(const std::vector<MessageRecord> &container) const;
     uint latency() const; // ## do this here or in some proxy model?
 
     Message *message;
