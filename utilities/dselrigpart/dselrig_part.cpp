@@ -32,6 +32,7 @@ DselRigPart::DselRigPart(QWidget *parentWidget, QObject *parent, const QVariantL
     mainLayout->addWidget(messageList);
     EavesdropperModel *model = new EavesdropperModel();
     messageList->setModel(model);
+    messageList->setAlternatingRowColors(true);
 
     setWidget(d->mainWidget);
 }
