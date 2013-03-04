@@ -28,9 +28,6 @@ DselRigPart::DselRigPart(QWidget *parentWidget, QObject *parent, const QVariantL
     QVBoxLayout *mainLayout = new QVBoxLayout;
     d->mainWidget->setLayout(mainLayout);
 
-    QLabel *label = new QLabel("I am DselRig");
-    mainLayout->addWidget(label);
-
     QTreeView *messageList = new QTreeView;
     mainLayout->addWidget(messageList);
     EavesdropperModel *model = new EavesdropperModel();
