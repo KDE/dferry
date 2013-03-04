@@ -3,6 +3,15 @@
 #include "argumentlist.h"
 #include "message.h"
 
+enum {
+    TypeColumn = 0,
+    MethodColumn,
+    InterfaceColumn,
+    SenderColumn,
+    DestinationColumn,
+    ColumnCount
+};
+
 QString MessageRecord::type() const
 {
     switch (message->type()) {
@@ -110,7 +119,7 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
             m_messages[originalMessageIndex].otherMessageIndex = currentMessageIndex;
             m_callsAwaitingResponse.erase(it);
             if (m_messages[originalMessageIndex].couldHaveNicerDestination()) {
-                const QModelIndex index = createIndex(originalMessageIndex, 4); // TODO no magic numbers
+                const QModelIndex index = createIndex(originalMessageIndex, DestinationColumn);
                 emit dataChanged(index, index);
             }
         }
@@ -124,19 +133,19 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
         Q_ASSERT(index.row() < m_messages.size());
         const MessageRecord &mr = m_messages[index.row()];
         switch (index.column()) {
-        case 0:
+        case TypeColumn:
             return mr.type();
-        case 1: {
+        case MethodColumn: {
             return mr.conversationMethod(m_messages);
         }
-        case 2: {
+        case InterfaceColumn: {
             const std::string iface = mr.message->interface();
             return QString::fromUtf8(iface.c_str(), iface.length());
         }
-        case 3: {
+        case SenderColumn: {
             return mr.niceSender(m_messages);
         }
-        case 4: {
+        case DestinationColumn: {
             return mr.niceDestination(m_messages);
         }
         default:
@@ -150,15 +159,15 @@ QVariant EavesdropperModel::headerData(int section, Qt::Orientation orientation,
 {
     if (role == Qt::DisplayRole && orientation == Qt::Horizontal) {
         switch (section) {
-        case 0:
+        case TypeColumn:
             return tr("Type");
-        case 1:
+        case MethodColumn:
             return tr("Method");
-        case 2:
+        case InterfaceColumn:
             return tr("Interface");
-        case 3:
+        case SenderColumn:
             return tr("Sender");
-        case 4:
+        case DestinationColumn:
             return tr("Destination");
         default:
             break;
@@ -194,5 +203,5 @@ int EavesdropperModel::rowCount(const QModelIndex &parent) const
 
 int EavesdropperModel::columnCount(const QModelIndex &parent) const
 {
-    return 5;
+    return ColumnCount;
 }
