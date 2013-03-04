@@ -98,7 +98,7 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
         // the NO_REPLY_EXPECTED flag does *not* forbid a reply, so we disregard the flag
         // ### it would be nice to clean up m_callsAwaitingResponse periodically, but we allocate
         //     memory that is not freed before shutdown left and right so it doesn't make much of
-        //     a difference
+        //     a difference. it does make a difference when serials overflow.
         m_callsAwaitingResponse[message->serial()] = currentMessageIndex;
     } else if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
         std::map<uint32, uint32>::iterator it = m_callsAwaitingResponse.find(message->replySerial());
