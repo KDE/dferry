@@ -25,10 +25,11 @@ struct MessageRecord
     uint32 conversationSerial() const;
     // either the method name, or if this is a response the request's method name
     QString conversationMethod(const std::vector<MessageRecord> &container) const;
+    QDateTime conversationStartTime(const std::vector<MessageRecord> &container) const;
     QString niceSender(const std::vector<MessageRecord> &container) const;
     bool couldHaveNicerDestination() const;
     QString niceDestination(const std::vector<MessageRecord> &container) const;
-    uint latency() const; // ## do this here or in some proxy model?
+    uint latency() const; // TODO which time units? - also consider moving away from QDateTime altogether
 
     Message *message;
     int otherMessageIndex;
@@ -39,7 +40,7 @@ class EavesdropperModel : public QAbstractItemModel
 {
     Q_OBJECT
 public:
-    EavesdropperModel();
+    EavesdropperModel(QObject *parent = 0);
     ~EavesdropperModel();
 
     QVariant data(const QModelIndex &index, int role) const;

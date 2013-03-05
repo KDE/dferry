@@ -12,10 +12,6 @@ public:
     ~DselRigPart();
 
     bool openFile() { return true; };
-
-private:
-    class Private;
-    Private *d;
 };
 
 #endif // DSELRIG_PART_H

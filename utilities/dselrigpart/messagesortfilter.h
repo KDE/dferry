@@ -10,11 +10,13 @@ public:
     MessageSortFilter();
     // reimp
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const;
+    bool filterAcceptsRow (int sourceRow, const QModelIndex &sourceParent) const;
 
-    bool isGroupingConversations() const;
+public slots:
+    void setFilterString(const QString &);
 
 private:
-    bool m_isGroupingConversations;
+    QString m_filterString;
 };
 
 #endif // MESSAGESORTFILTER_H

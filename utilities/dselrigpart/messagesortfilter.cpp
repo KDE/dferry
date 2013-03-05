@@ -1,28 +1,39 @@
 #include "messagesortfilter.h"
-
-// TODO actually implement those columns and define the constanst over there
-
-static const int ConversationSerialColumn = 10;
+#include "eavesdroppermodel.h"
 
 MessageSortFilter::MessageSortFilter()
 {
     setDynamicSortFilter(true);
 }
 
+bool MessageSortFilter::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
+{
+    if (m_filterString.isEmpty() || sourceParent.isValid()) {
+        return true;
+    }
+    EavesdropperModel *model = static_cast<EavesdropperModel *>(sourceModel());
+
+    const std::vector<MessageRecord> &msgList = model->m_messages;
+    const MessageRecord &msg = msgList[sourceRow];
+    return msg.conversationMethod(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
+           msg.niceSender(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
+           msg.niceDestination(msgList).contains(m_filterString, Qt::CaseInsensitive);
+}
+
 bool MessageSortFilter::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
-    if (m_isGroupingConversations && !left.parent().isValid()) {
-        Q_ASSERT(!right.parent().isValid());
-        QVariant leftConvoSerial = left.sibling(left.row(), ConversationSerialColumn).data();
-        QVariant rightConvoSerial = right.sibling(right.row(), ConversationSerialColumn).data();
-        return leftConvoSerial.toUInt() < rightConvoSerial.toUInt();
-    }
-    // we assume that the only indices we get are those of the active sorting column
-    Q_ASSERT(left.column() == right.column());
-    switch (left.column()) {
-    case ConversationSerialColumn:
-        break;
-    }
+    Q_ASSERT(!left.parent().isValid());
+    Q_ASSERT(!right.parent().isValid());
+    EavesdropperModel *model = static_cast<EavesdropperModel *>(sourceModel());
+    const std::vector<MessageRecord> &msgList = model->m_messages;
+    const MessageRecord &leftMsg = msgList[left.row()];
+    const MessageRecord &rightMsg = msgList[right.row()];
 
-    return false; // HACK
+    return leftMsg.conversationStartTime(msgList) < rightMsg.conversationStartTime(msgList);
+}
+
+void MessageSortFilter::setFilterString(const QString &s)
+{
+    m_filterString = s;
+    invalidateFilter();
 }

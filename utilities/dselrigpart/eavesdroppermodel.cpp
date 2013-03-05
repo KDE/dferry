@@ -51,6 +51,14 @@ QString MessageRecord::conversationMethod(const std::vector<MessageRecord> &cont
     return QString::fromUtf8(method.c_str(), method.length());
 }
 
+QDateTime MessageRecord::conversationStartTime(const std::vector<MessageRecord> &container) const
+{
+    if (message->type() == Message::MethodReturnMessage && otherMessageIndex >= 0) {
+        return container[otherMessageIndex].timestamp;
+    }
+    return timestamp;
+}
+
 QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
     std::string sender = message->sender();
@@ -82,8 +90,9 @@ QString MessageRecord::niceDestination(const std::vector<MessageRecord> &contain
     return QString::fromUtf8(dest.c_str(), dest.length());
 }
 
-EavesdropperModel::EavesdropperModel()
-   : m_worker(this)
+EavesdropperModel::EavesdropperModel(QObject *parent)
+   : QAbstractItemModel(parent),
+     m_worker(this)
 {
 }
 
