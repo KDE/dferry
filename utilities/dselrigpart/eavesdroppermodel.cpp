@@ -7,6 +7,7 @@ enum {
     TypeColumn = 0,
     MethodColumn,
     InterfaceColumn,
+    PathColumn,
     SenderColumn,
     DestinationColumn,
     ColumnCount
@@ -152,6 +153,8 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             return mr.conversationMethod(m_messages);
         case InterfaceColumn:
             return QString::fromStdString(mr.message->interface());
+        case PathColumn:
+            return QString::fromStdString(mr.message->path());
         case SenderColumn:
             return mr.niceSender(m_messages);
         case DestinationColumn:
@@ -173,6 +176,8 @@ QVariant EavesdropperModel::headerData(int section, Qt::Orientation orientation,
             return tr("Method");
         case InterfaceColumn:
             return tr("Interface");
+        case PathColumn:
+            return tr("Path");
         case SenderColumn:
             return tr("Sender");
         case DestinationColumn:
