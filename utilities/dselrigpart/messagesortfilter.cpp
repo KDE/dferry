@@ -1,6 +1,8 @@
 #include "messagesortfilter.h"
 #include "eavesdroppermodel.h"
 
+#include "message.h"
+
 MessageSortFilter::MessageSortFilter()
 {
     setDynamicSortFilter(true);
@@ -17,7 +19,9 @@ bool MessageSortFilter::filterAcceptsRow(int sourceRow, const QModelIndex &sourc
     const MessageRecord &msg = msgList[sourceRow];
     return msg.conversationMethod(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
            msg.niceSender(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
-           msg.niceDestination(msgList).contains(m_filterString, Qt::CaseInsensitive);
+           msg.niceDestination(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
+           QString::fromStdString(msg.message->interface()).contains(m_filterString, Qt::CaseInsensitive) ||
+           QString::fromStdString(msg.message->path()).contains(m_filterString, Qt::CaseInsensitive);
 }
 
 bool MessageSortFilter::lessThan(const QModelIndex &left, const QModelIndex &right) const
