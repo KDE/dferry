@@ -48,7 +48,7 @@ QString MessageRecord::conversationMethod(const std::vector<MessageRecord> &cont
     } else {
          method = message->method();
     }
-    return QString::fromUtf8(method.c_str(), method.length());
+    return QString::fromStdString(method);
 }
 
 QDateTime MessageRecord::conversationStartTime(const std::vector<MessageRecord> &container) const
@@ -67,7 +67,7 @@ QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) c
         sender += container[otherMessageIndex].message->destination();
         sender += ')';
     }
-    return QString::fromUtf8(sender.c_str(), sender.length());
+    return QString::fromStdString(sender);
 }
 
 bool MessageRecord::couldHaveNicerDestination() const
@@ -87,7 +87,7 @@ QString MessageRecord::niceDestination(const std::vector<MessageRecord> &contain
         dest += container[otherMessageIndex].message->sender();
         dest += ')';
     }
-    return QString::fromUtf8(dest.c_str(), dest.length());
+    return QString::fromStdString(dest);
 }
 
 EavesdropperModel::EavesdropperModel(QObject *parent)
@@ -150,10 +150,8 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             return mr.type();
         case MethodColumn:
             return mr.conversationMethod(m_messages);
-        case InterfaceColumn: {
-            const std::string iface = mr.message->interface();
-            return QString::fromUtf8(iface.c_str(), iface.length());
-        }
+        case InterfaceColumn:
+            return QString::fromStdString(mr.message->interface());
         case SenderColumn:
             return mr.niceSender(m_messages);
         case DestinationColumn:
