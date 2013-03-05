@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+class MainWidget;
 class Message;
 class MessageSortFilter;
 
@@ -56,6 +57,8 @@ private slots:
     void addMessage(Message *message, QDateTime timestamp);
 
 private:
+    // for access to Message pointers to read arguments
+    friend class MainWidget;
     // for direct access to MessageRecords to speed up filtering
     friend class MessageSortFilter;
 

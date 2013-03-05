@@ -5,7 +5,9 @@
 
 #include "ui_mainwidget.h"
 
+class EavesdropperModel;
 class MessageSortFilter;
+class QModelIndex;
 
 class MainWidget : public QWidget
 {
@@ -15,9 +17,11 @@ public:
 
 private slots:
     void setGrouping(bool enable);
+    void itemClicked(const QModelIndex &index);
 
 private:
     Ui::MainWidget m_ui;
+    EavesdropperModel *m_model;
     MessageSortFilter *m_sortFilter;
 };
 
