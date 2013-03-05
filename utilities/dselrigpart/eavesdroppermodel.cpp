@@ -148,19 +148,16 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
         switch (index.column()) {
         case TypeColumn:
             return mr.type();
-        case MethodColumn: {
+        case MethodColumn:
             return mr.conversationMethod(m_messages);
-        }
         case InterfaceColumn: {
             const std::string iface = mr.message->interface();
             return QString::fromUtf8(iface.c_str(), iface.length());
         }
-        case SenderColumn: {
+        case SenderColumn:
             return mr.niceSender(m_messages);
-        }
-        case DestinationColumn: {
+        case DestinationColumn:
             return mr.niceDestination(m_messages);
-        }
         default:
             break;
         }
