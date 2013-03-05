@@ -17,6 +17,7 @@ MainWidget::MainWidget()
 
     m_ui.messageList->setModel(m_sortFilter);
     m_ui.messageList->setAlternatingRowColors(true);
+    m_ui.messageList->setUniformRowHeights(true);
 }
 
 void MainWidget::setGrouping(bool enable)
