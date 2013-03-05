@@ -3,10 +3,6 @@
 #include "eavesdroppermodel.h"
 #include "messagesortfilter.h"
 
-#include <QLineEdit>
-#include <QTreeView>
-#include <QVBoxLayout>
-
 MainWidget::MainWidget()
 {
     m_ui.setupUi(this);
