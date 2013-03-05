@@ -110,16 +110,20 @@ void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
 
     const uint currentMessageIndex = m_messages.size() - 1;
 
-    // connect responses with previously spotted calls because information from one is useful for the other
+    // Connect responses with previously spotted calls because information from one is useful for the other.
+    // We must match the call sender with the reply receiver, instead of the call receiver with the reply
+    // sender, because calls can go to well-known addresses that are only resolved to a concrete endpoint
+    // by the bus daemon.
 
     if (message->type() == Message::MethodCallMessage) {
         // the NO_REPLY_EXPECTED flag does *not* forbid a reply, so we disregard the flag
         // ### it would be nice to clean up m_callsAwaitingResponse periodically, but we allocate
         //     memory that is not freed before shutdown left and right so it doesn't make much of
         //     a difference. it does make a difference when serials overflow.
-        m_callsAwaitingResponse[message->serial()] = currentMessageIndex;
+        m_callsAwaitingResponse[Call(message->serial(), message->sender())] = currentMessageIndex;
     } else if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
-        std::map<uint32, uint32>::iterator it = m_callsAwaitingResponse.find(message->replySerial());
+        Call key(message->replySerial(), message->destination());
+        std::map<Call, uint32>::iterator it = m_callsAwaitingResponse.find(key);
         // we could have missed the initial call because it happened before we connected to the bus...
         // theoretically we could assert the presence of the call after one d-bus timeout has passed
         if (it != m_callsAwaitingResponse.end()) {

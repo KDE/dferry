@@ -7,8 +7,9 @@
 #include <QAbstractItemModel>
 #include <QDateTime>
 
-#include <vector>
 #include <map>
+#include <string>
+#include <vector>
 
 class Message;
 class MessageSortFilter;
@@ -59,7 +60,23 @@ private:
     friend class MessageSortFilter;
 
     EavesdropperThread m_worker;
-    std::map<uint32, uint32> m_callsAwaitingResponse;
+
+    struct Call {
+        Call(uint32 s, const std::string &e)
+           : serial(s), endpoint(e) {}
+
+        bool operator<(const Call &other) const
+        {
+            if (serial != other.serial) {
+                return serial < other.serial;
+            }
+            return endpoint < other.endpoint;
+        }
+
+        uint32 serial;
+        std::string endpoint;
+    };
+    std::map<Call, uint32> m_callsAwaitingResponse; // the value is an index in m_messages
     std::vector<MessageRecord> m_messages;
 };
 
