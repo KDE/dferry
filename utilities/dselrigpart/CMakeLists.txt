@@ -1,6 +1,7 @@
 include_directories(${KDE4_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR})
 
 set(dselrigpart_SOURCES
+    argumentsmodel.cpp
     dselrig_part.cpp
     eavesdroppermodel.cpp
     eavesdropperthread.cpp
