@@ -389,7 +389,8 @@ void Message::notifyConnectionReadyRead()
             array data(&m_buffer.front() + m_headerLength, m_bodyLength);
             m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), data, m_isByteSwapped);
             assert(!isError);
-            notifyCompletionClient();
+            connection()->removeClient(this);
+            notifyCompletionClient(); // do not access members after this because it might delete us!
             break;
         }
         if (!connection()->isOpen()) {
@@ -402,6 +403,7 @@ void Message::notifyConnectionReadyRead()
         setIsReadNotificationEnabled(false);
         m_state = Empty;
         m_buffer.clear();
+        connection()->removeClient(this);
         notifyCompletionClient();
         // TODO reset other data members
     }
@@ -420,6 +422,8 @@ void Message::notifyConnectionReadyWrite()
         m_buffer.clear();
 
     } while (written > 0);
+    connection()->removeClient(this);
+    assert(connection() == 0);
     notifyCompletionClient();
 }
 
