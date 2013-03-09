@@ -26,7 +26,7 @@
 
 #include "itransceiverclient.h"
 
-#include <QDateTime>
+#include <QElapsedTimer>
 #include <QThread>
 
 class EavesdropperModel;
@@ -48,14 +48,14 @@ public:
     void messageReceived(Message *message);
 
 signals:
-    void messageReceived(Message *message, QDateTime timestamp);
+    void messageReceived(Message *message, qint64 timestamp);
 
 private slots:
     void run();
 
 private:
     QThread m_thread;
-
+    QElapsedTimer m_timer;
     EpollEventDispatcher *m_dispatcher;
     Transceiver *m_transceiver;
 };

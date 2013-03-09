@@ -28,7 +28,6 @@
 #include "types.h"
 
 #include <QAbstractItemModel>
-#include <QDateTime>
 
 #include <map>
 #include <string>
@@ -40,7 +39,7 @@ class MessageSortFilter;
 
 struct MessageRecord
 {
-    MessageRecord(Message *msg, QDateTime time)
+    MessageRecord(Message *msg, qint64 time)
        : message(msg),
          otherMessageIndex(-1),
          timestamp(time)
@@ -50,15 +49,19 @@ struct MessageRecord
     uint32 conversationSerial() const;
     // either the method name, or if this is a response the request's method name
     QString conversationMethod(const std::vector<MessageRecord> &container) const;
-    QDateTime conversationStartTime(const std::vector<MessageRecord> &container) const;
+    // time unit is nanoseconds
+    qint64 conversationStartTime(const std::vector<MessageRecord> &container) const;
+    qint64 roundtripTime(const std::vector<MessageRecord> &container) const;
     QString niceSender(const std::vector<MessageRecord> &container) const;
     bool couldHaveNicerDestination() const;
     QString niceDestination(const std::vector<MessageRecord> &container) const;
-    uint latency() const; // TODO which time units? - also consider moving away from QDateTime altogether
 
     Message *message;
     int otherMessageIndex;
-    QDateTime timestamp;
+    qint64 timestamp;
+
+private:
+    bool isReplyToKnownCall() const;
 };
 
 class EavesdropperModel : public QAbstractItemModel
@@ -77,7 +80,7 @@ public:
     int columnCount(const QModelIndex &parent = QModelIndex()) const;
 
 private slots:
-    void addMessage(Message *message, QDateTime timestamp);
+    void addMessage(Message *message, qint64 timestamp);
 
 private:
     // for access to Message pointers to read arguments

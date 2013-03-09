@@ -34,8 +34,8 @@ EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
     // do not parent this to the model; it doesn't work across threads
     moveToThread(&m_thread);
     // ### verify that the connection is a QueuedConnection
-    connect(this, SIGNAL(messageReceived(Message *, QDateTime)),
-            model, SLOT(addMessage(Message *, QDateTime)));
+    connect(this, SIGNAL(messageReceived(Message *, qint64)),
+            model, SLOT(addMessage(Message *, qint64)));
     connect(&m_thread, SIGNAL(started()), SLOT(run()));
     m_thread.start();
 }
@@ -58,6 +58,7 @@ static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
 
 void EavesdropperThread::run()
 {
+    m_timer.start();
     m_dispatcher = new EpollEventDispatcher;
 
     m_transceiver = new Transceiver(m_dispatcher);
@@ -84,5 +85,5 @@ void EavesdropperThread::run()
 
 void EavesdropperThread::messageReceived(Message *message)
 {
-    emit messageReceived(message, QDateTime::currentDateTime());
+    emit messageReceived(message, m_timer.nsecsElapsed());
 }

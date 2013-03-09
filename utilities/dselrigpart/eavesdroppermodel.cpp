@@ -28,6 +28,7 @@
 
 enum {
     TypeColumn = 0,
+    RoundtripTimeColumn,
     MethodColumn,
     InterfaceColumn,
     PathColumn,
@@ -54,6 +55,12 @@ QString MessageRecord::type() const
     return QString();
 }
 
+bool MessageRecord::isReplyToKnownCall() const
+{
+    return otherMessageIndex >= 0 && (message->type() == Message::MethodReturnMessage ||
+                                      message->type() == Message::ErrorMessage);
+}
+
 uint32 MessageRecord::conversationSerial() const
 {
     if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
@@ -65,28 +72,34 @@ uint32 MessageRecord::conversationSerial() const
 QString MessageRecord::conversationMethod(const std::vector<MessageRecord> &container) const
 {
     std::string method;
-    if (message->type() == Message::MethodReturnMessage) {
-        if (otherMessageIndex >= 0) {
-            method = container[otherMessageIndex].message->method();
-        }
+    if (isReplyToKnownCall()) {
+        method = container[otherMessageIndex].message->method();
     } else {
-         method = message->method();
+        method = message->method();
     }
     return QString::fromStdString(method);
 }
 
-QDateTime MessageRecord::conversationStartTime(const std::vector<MessageRecord> &container) const
+qint64 MessageRecord::conversationStartTime(const std::vector<MessageRecord> &container) const
 {
-    if (message->type() == Message::MethodReturnMessage && otherMessageIndex >= 0) {
+    if (isReplyToKnownCall()) {
         return container[otherMessageIndex].timestamp;
     }
     return timestamp;
 }
 
+qint64 MessageRecord::roundtripTime(const std::vector<MessageRecord> &container) const
+{
+    if (isReplyToKnownCall()) {
+        return timestamp - container[otherMessageIndex].timestamp;
+    }
+    return -1;
+}
+
 QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
     std::string sender = message->sender();
-    if (message->type() == Message::MethodReturnMessage && otherMessageIndex >= 0) {
+    if (isReplyToKnownCall()) {
         sender += " (";
         sender += container[otherMessageIndex].message->destination();
         sender += ')';
@@ -127,7 +140,7 @@ EavesdropperModel::~EavesdropperModel()
     }
 }
 
-void EavesdropperModel::addMessage(Message *message, QDateTime timestamp)
+void EavesdropperModel::addMessage(Message *message, qint64 timestamp)
 {
     beginInsertRows(QModelIndex(), m_messages.size(), m_messages.size());
     m_messages.push_back(MessageRecord(message, timestamp));
@@ -172,6 +185,14 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
         switch (index.column()) {
         case TypeColumn:
             return mr.type();
+        case RoundtripTimeColumn: {
+            qint64 rtt = mr.roundtripTime(m_messages);
+            Q_ASSERT(rtt >= -1); // QElapsedTimer should give us monotonic time
+            if (rtt == -1) {
+                break;  // no data for a message that doesn't or can't have a reply
+            }
+            return rtt / 1000; // nsecs / 1000 -> microseconds
+        }
         case MethodColumn:
             return mr.conversationMethod(m_messages);
         case InterfaceColumn:
@@ -195,6 +216,8 @@ QVariant EavesdropperModel::headerData(int section, Qt::Orientation orientation,
         switch (section) {
         case TypeColumn:
             return tr("Type");
+        case RoundtripTimeColumn:
+            return tr("Latency [us]");
         case MethodColumn:
             return tr("Method");
         case InterfaceColumn:
