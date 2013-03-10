@@ -117,7 +117,7 @@ public:
     bool isWriting() const;
 
     // for read or write completion (it should be clear which because reading and writing can't
-    // happen simultaneously
+    // happen simultaneously)
     void setCompletionClient(ICompletionClient *client);
 
 protected:
