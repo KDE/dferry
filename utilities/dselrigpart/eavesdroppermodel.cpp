@@ -98,28 +98,39 @@ qint64 MessageRecord::roundtripTime(const std::vector<MessageRecord> &container)
 
 QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
+    // this does something like ":1.2" -> ":1.2 (org.freedesktop.fooInterface)"
     std::string sender = message->sender();
     if (isReplyToKnownCall()) {
-        sender += " (";
-        sender += container[otherMessageIndex].message->destination();
-        sender += ')';
+        const std::string otherDest = container[otherMessageIndex].message->destination();
+        if (!otherDest.empty() && otherDest[0] != ':') {
+            sender += " (";
+            sender += otherDest;
+            sender += ')';
+        }
     }
     return QString::fromStdString(sender);
 }
 
-bool MessageRecord::couldHaveNicerDestination() const
+bool MessageRecord::couldHaveNicerDestination(const std::vector<MessageRecord> &container) const
 {
+    // see niceDestination; this returns true if the "raw" destination is *not* of the :n.m type
+    // and the other (i.e. reply) message's sender *is* o the :n.m type
     if (message->type() != Message::MethodCallMessage || otherMessageIndex < 0) {
         return false;
     }
     const std::string dest = message->destination();
-    return !dest.empty() && dest[0] != ':';
+    if (!dest.empty() && dest[0] == ':') {
+        return false;
+    }
+    const std::string otherSender = container[otherMessageIndex].message->sender();
+    return !otherSender.empty() && otherSender[0] == ':';
 }
 
 QString MessageRecord::niceDestination(const std::vector<MessageRecord> &container) const
 {
+    // this does something like "org.freedesktop.fooInterface" -> "org.freedesktop.fooInterface (:1.2)"
     std::string dest = message->destination();
-    if (couldHaveNicerDestination()) {
+    if (couldHaveNicerDestination(container)) {
         dest += " (";
         dest += container[otherMessageIndex].message->sender();
         dest += ')';
@@ -168,7 +179,7 @@ void EavesdropperModel::addMessage(Message *message, qint64 timestamp)
             m_messages.back().otherMessageIndex = originalMessageIndex;
             m_messages[originalMessageIndex].otherMessageIndex = currentMessageIndex;
             m_callsAwaitingResponse.erase(it);
-            if (m_messages[originalMessageIndex].couldHaveNicerDestination()) {
+            if (m_messages[originalMessageIndex].couldHaveNicerDestination(m_messages)) {
                 const QModelIndex index = createIndex(originalMessageIndex, DestinationColumn);
                 emit dataChanged(index, index);
             }

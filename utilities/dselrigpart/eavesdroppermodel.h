@@ -53,7 +53,7 @@ struct MessageRecord
     qint64 conversationStartTime(const std::vector<MessageRecord> &container) const;
     qint64 roundtripTime(const std::vector<MessageRecord> &container) const;
     QString niceSender(const std::vector<MessageRecord> &container) const;
-    bool couldHaveNicerDestination() const;
+    bool couldHaveNicerDestination(const std::vector<MessageRecord> &container) const;
     QString niceDestination(const std::vector<MessageRecord> &container) const;
 
     Message *message;
