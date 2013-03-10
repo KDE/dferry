@@ -249,6 +249,14 @@ string Message::stringHeader(VariableHeader header, bool *isPresent) const
 
 bool Message::setStringHeader(VariableHeader header, const string &value)
 {
+    if (header == SignatureHeader && value.empty()) {
+        // The spec allows no signature header when the signature is empty. Make use of that.
+        if (m_stringHeaders.erase(header)) {
+            m_buffer.clear();
+        }
+        return true;
+    }
+
     m_buffer.clear();
     m_stringHeaders[header] = value;
     // TODO error checking / validation
@@ -544,6 +552,9 @@ bool Message::deserializeVariableHeaders()
         case SignatureHeader: {
             assert(reader.state() == ArgumentList::Signature);
             cstring str = reader.readSignature();
+            // The spec allows having no signature header, which means "empty signature". However...
+            // We do not drop empty signature headers when deserializing, in order to preserve
+            // the original message contents. This could be useful for debugging and testing.
             m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
             break;
         }
