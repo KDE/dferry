@@ -27,13 +27,15 @@
 
 using namespace std;
 
-vector<string> split(const string &s, char delimiter)
+vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
 {
     vector<string> ret;
     stringstream ss(s);
     string part;
     while (getline(ss, part, delimiter)) {
-        ret.push_back(part);
+        if (keepEmptyParts || !part.empty()) {
+            ret.push_back(part);
+        }
     }
     return ret;
 }

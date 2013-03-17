@@ -29,7 +29,7 @@
 #include <string>
 #include <vector>
 
-std::vector<std::string> split(const std::string &s, char delimiter);
+std::vector<std::string> split(const std::string &s, char delimiter, bool keepEmptyParts = true);
 std::string hexEncode(const std::string &s);
 
 inline std::string toStdString(cstring cstr)

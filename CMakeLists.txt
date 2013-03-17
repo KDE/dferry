@@ -8,6 +8,7 @@ option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
+                    ${CMAKE_SOURCE_DIR}/client
                     ${CMAKE_SOURCE_DIR}/connection
                     ${CMAKE_SOURCE_DIR}/serialization)
 
@@ -49,6 +50,18 @@ set(DSEL_HEADERS
 add_library(dsel SHARED ${DSEL_SOURCES} ${DSEL_HEADERS})
 include(GNUInstallDirs)
 install(TARGETS dsel LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+
+find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dselclient
+
+set(DSELCLIENT_SOURCES
+    client/introspection.h)
+
+set(DSELCLIENT_HEADERS
+    client/introspection.cpp)
+
+add_library(dselclient SHARED ${DSELCLIENT_SOURCES} ${DSELCLIENT_HEADERS})
+target_link_libraries(dselclient dsel ${LIBTINYXML2_LIBRARIES})
 
 add_subdirectory(tests)
 add_subdirectory(utilities)
