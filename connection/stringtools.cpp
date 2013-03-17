@@ -43,7 +43,7 @@ string hexEncode(const string &s)
     stringstream ss;
     for (int i = 0; i < s.length(); i++) {
         const char c = s[i];
-        ss << std::hex << int(c >> 4) << int (c & 0xf);
+        ss << std::hex << int(c >> 4) << int(c & 0xf);
     }
     return ss.str();
 }
