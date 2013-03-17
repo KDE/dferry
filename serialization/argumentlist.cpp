@@ -24,6 +24,7 @@
 #include "argumentlist.h"
 
 #include "basictypeio.h"
+#include "stringtools.h"
 
 #include <algorithm>
 #include <cassert>
@@ -137,7 +138,7 @@ std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeNam
     if (isNil) {
         ret << "<nil>\n";
     } else {
-        ret << '"' << std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) << "\"\n";
+        ret << '"' << toStdString(cstr) << "\"\n";
     }
     return ret.str();
 }
@@ -261,9 +262,8 @@ std::string ArgumentList::prettyPrint() const
         case ArgumentList::InvalidData:
         case ArgumentList::NeedMoreData:
         default: {
-            cstring cstr = reader.stateString();
             return std::string("<error: ") +
-                   std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length) + ">\n";
+                   toStdString(reader.stateString()) + ">\n";
             break; }
         }
     }

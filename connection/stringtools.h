@@ -24,10 +24,17 @@
 #ifndef STRINGTOOLS_H
 #define STRINGTOOLS_H
 
+#include "types.h"
+
 #include <string>
 #include <vector>
 
 std::vector<std::string> split(const std::string &s, char delimiter);
 std::string hexEncode(const std::string &s);
+
+inline std::string toStdString(cstring cstr)
+{
+    return std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length);
+}
 
 #endif // STRINGTOOLS_H

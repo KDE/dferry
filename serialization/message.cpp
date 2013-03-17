@@ -26,6 +26,7 @@
 #include "basictypeio.h"
 #include "icompletionclient.h"
 #include "iconnection.h"
+#include "stringtools.h"
 
 #include <cassert>
 #include <cstring>
@@ -527,8 +528,7 @@ bool Message::deserializeVariableHeaders()
         // TODO: proper error handling instead of assertions
         case PathHeader: {
             assert(reader.state() == ArgumentList::ObjectPath);
-            cstring str = reader.readObjectPath();
-            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            m_stringHeaders[headerType] = toStdString(reader.readObjectPath());;
             break;
         }
         case InterfaceHeader:
@@ -537,8 +537,7 @@ bool Message::deserializeVariableHeaders()
         case DestinationHeader:
         case SenderHeader: {
             assert(reader.state() == ArgumentList::String);
-            cstring str = reader.readString();
-            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            m_stringHeaders[headerType] = toStdString(reader.readString());
             break;
         }
         case ReplySerialHeader:
@@ -551,11 +550,10 @@ bool Message::deserializeVariableHeaders()
             break;
         case SignatureHeader: {
             assert(reader.state() == ArgumentList::Signature);
-            cstring str = reader.readSignature();
             // The spec allows having no signature header, which means "empty signature". However...
             // We do not drop empty signature headers when deserializing, in order to preserve
             // the original message contents. This could be useful for debugging and testing.
-            m_stringHeaders[headerType] = string(reinterpret_cast<const char*>(str.begin), str.length);
+            m_stringHeaders[headerType] = toStdString(reader.readSignature());
             break;
         }
         default:
@@ -586,8 +584,7 @@ bool Message::fillOutBuffer()
     // ### can this be done more cleanly?
     cstring signature = m_mainArguments.signature();
     if (signature.length) {
-        m_stringHeaders[SignatureHeader] = string(reinterpret_cast<const char *>(signature.begin),
-                                                  signature.length);
+        m_stringHeaders[SignatureHeader] = toStdString(signature);
     }
 
     ArgumentList headerArgs;
