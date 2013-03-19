@@ -17,6 +17,30 @@ static bool strequal(const char *c1, const char *c2)
     return !strcmp(c1, c2);
 }
 
+// This function exists to avoid making the many copies that a naive recursive implementation would make.
+// That it makes it possible to reserve() is just a nice extra.
+static void introspectionNodePathHelper(const IntrospectionNode *node, int length,  std::string *out)
+{
+    if (node->parent) {
+        introspectionNodePathHelper(node->parent, length + 1 + node->name.length(), out);
+        *out += '/';
+        *out += node->name;
+    } else {
+        // root node; reserve just enough room in output string before we start filling it in
+        out->reserve(length);
+    }
+}
+
+std::string IntrospectionNode::path() const
+{
+    if (!parent) {
+        return std::string("/");
+    }
+    std::string ret;
+    introspectionNodePathHelper(this, 0, &ret);
+    return ret;
+}
+
 IntrospectionTree::IntrospectionTree()
    : m_rootNode(new IntrospectionNode)
 {
