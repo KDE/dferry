@@ -74,6 +74,8 @@ Transceiver::~Transceiver()
 
 Message *Transceiver::sendAndAwaitReply(Message *m)
 {
+    // TODO!
+    return 0;
 }
 
 void Transceiver::sendAsync(Message *m)
