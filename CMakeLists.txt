@@ -47,7 +47,8 @@ set(DSEL_HEADERS
     serialization/types.h)
 
 add_library(dsel SHARED ${DSEL_SOURCES} ${DSEL_HEADERS})
-install(TARGETS dsel LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+include(GNUInstallDirs)
+install(TARGETS dsel LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_subdirectory(tests)
 add_subdirectory(utilities)
