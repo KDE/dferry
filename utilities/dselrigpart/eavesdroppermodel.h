@@ -44,6 +44,7 @@ struct MessageRecord
          otherMessageIndex(-1),
          timestamp(time)
     {}
+
     QString type() const;
     // the serial of the "conversation", i.e. request-response pair
     uint32 conversationSerial() const;
@@ -79,10 +80,16 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     int columnCount(const QModelIndex &parent = QModelIndex()) const;
 
+public slots:
+    void setRecording(bool recording);
+    void clear();
+
 private slots:
     void addMessage(Message *message, qint64 timestamp);
 
 private:
+    void clearInternal();
+
     // for access to Message pointers to read arguments
     friend class MainWidget;
     // for direct access to MessageRecords to speed up filtering
@@ -105,6 +112,8 @@ private:
         uint32 serial;
         std::string endpoint;
     };
+
+    bool m_isRecording;
     std::map<Call, uint32> m_callsAwaitingResponse; // the value is an index in m_messages
     std::vector<MessageRecord> m_messages;
 };

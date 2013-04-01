@@ -39,6 +39,7 @@ public:
     MainWidget();
 
 private slots:
+    void clear();
     void setGrouping(bool enable);
     void itemClicked(const QModelIndex &index);
 

@@ -140,19 +140,21 @@ QString MessageRecord::niceDestination(const std::vector<MessageRecord> &contain
 
 EavesdropperModel::EavesdropperModel(QObject *parent)
    : QAbstractItemModel(parent),
-     m_worker(this)
+     m_worker(this),
+     m_isRecording(true)
 {
 }
 
 EavesdropperModel::~EavesdropperModel()
 {
-    for (int i = 0; i < m_messages.size(); i++) {
-        delete m_messages[i].message;
-    }
+    clearInternal();
 }
 
 void EavesdropperModel::addMessage(Message *message, qint64 timestamp)
 {
+    if (!m_isRecording) {
+        return;
+    }
     beginInsertRows(QModelIndex(), m_messages.size(), m_messages.size());
     m_messages.push_back(MessageRecord(message, timestamp));
 
@@ -274,4 +276,29 @@ int EavesdropperModel::rowCount(const QModelIndex &parent) const
 int EavesdropperModel::columnCount(const QModelIndex &parent) const
 {
     return ColumnCount;
+}
+
+void EavesdropperModel::setRecording(bool recording)
+{
+    // We could stop the eavesdropper thread when not recording, but it doesn't seem worth the effort.
+    m_isRecording = recording;
+}
+
+void EavesdropperModel::clear()
+{
+    beginResetModel();
+    clearInternal();
+    endResetModel();
+}
+
+void EavesdropperModel::clearInternal()
+{
+    m_callsAwaitingResponse.clear();
+    // This is easier than making MessageRecord clean up after itself - it would need refcounting in order
+    // to avoid accidentally deleting the message in many common situations.
+    for (int i = 0; i < m_messages.size(); i++) {
+        delete m_messages[i].message;
+        m_messages[i].message = 0;
+    }
+    m_messages.clear();
 }

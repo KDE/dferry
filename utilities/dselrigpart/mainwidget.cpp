@@ -36,6 +36,8 @@ MainWidget::MainWidget()
     m_sortFilter = new MessageSortFilter; // TODO parent
     m_sortFilter->setSourceModel(m_model);
 
+    connect(m_ui.captureButton, SIGNAL(toggled(bool)), m_model, SLOT(setRecording(bool)));
+    connect(m_ui.clearButton, SIGNAL(clicked()), this, SLOT(clear()));
     connect(m_ui.filterText, SIGNAL(textChanged(QString)), m_sortFilter, SLOT(setFilterString(QString)));
     connect(m_ui.groupCheckbox, SIGNAL(toggled(bool)), this, SLOT(setGrouping(bool)));
     connect(m_ui.messageList, SIGNAL(clicked(QModelIndex)), this, SLOT(itemClicked(QModelIndex)));
@@ -46,6 +48,12 @@ MainWidget::MainWidget()
 
     m_ui.argumentList->setModel(createArgumentsModel(0));
     m_ui.argumentList->resizeColumnToContents(0);
+}
+
+void MainWidget::clear()
+{
+    m_ui.argumentList->setModel(createArgumentsModel(0));
+    m_model->clear();
 }
 
 void MainWidget::setGrouping(bool enable)
