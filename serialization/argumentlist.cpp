@@ -332,8 +332,8 @@ bool ArgumentList::isObjectPathValid(cstring path)
     if (!path.begin || path.begin[path.length] != 0) {
         return false;
     }
-    byte lastLetter = path.begin[0];
-    if (lastLetter != '/') {
+    byte prevLetter = path.begin[0];
+    if (prevLetter != '/') {
         return false;
     }
     if (path.length == 1) {
@@ -341,7 +341,7 @@ bool ArgumentList::isObjectPathValid(cstring path)
     }
     for (int i = 1; i < path.length; i++) {
         byte currentLetter = path.begin[i];
-        if (lastLetter == '/') {
+        if (prevLetter == '/') {
             if (!isObjectNameLetter(currentLetter)) {
                 return false;
             }
@@ -350,9 +350,9 @@ bool ArgumentList::isObjectPathValid(cstring path)
                 return false;
             }
         }
-        lastLetter = currentLetter;
+        prevLetter = currentLetter;
     }
-    return lastLetter != '/';
+    return prevLetter != '/';
 }
 
 static bool parseBasicType(cstring *s)
