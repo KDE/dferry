@@ -37,8 +37,8 @@
  *
  * When sendAsync() is used, the same things minus the blocking happen.
  *
- * Question1: Does sendAndAwaitReply() send earlier queued messages first, or send messages
- * in order? The former seems less likely to cause "unplanned behavior", the latter might
+ * Question1: Does sendAndAwaitReply() send its argument right away, or enqueue it and send
+ * messages in order? The former seems less likely to cause "unplanned behavior", the latter might
  * deadlock more easily.
  * I think the second option is preferable because changing the order of calls is Evil.
  *
