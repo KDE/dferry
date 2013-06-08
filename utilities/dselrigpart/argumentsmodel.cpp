@@ -40,7 +40,7 @@ static void addKeyValue(QStandardItem *parent, const char *k, bool isEmpty, cons
 static void addKeyValue(QStandardItem *parent, const char *k, bool isEmpty, const byte *str)
 {
     addKeyValue(parent, k, isEmpty,
-                isEmpty ? QLatin1String("<nil>") : QString::fromUtf8(reinterpret_cast<const char *>(str)));
+                isEmpty ? QVariant() : QString::fromUtf8(reinterpret_cast<const char *>(str)));
 }
 
 static QStandardItem *ascend(QStandardItem *parent, QStandardItemModel *model)
