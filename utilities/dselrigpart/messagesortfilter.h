@@ -37,9 +37,11 @@ public:
 
 public slots:
     void setFilterString(const QString &);
+    void setOnlyUnanswered(bool);
 
 private:
     QString m_filterString;
+    bool m_onlyUnanswered;
 };
 
 #endif // MESSAGESORTFILTER_H

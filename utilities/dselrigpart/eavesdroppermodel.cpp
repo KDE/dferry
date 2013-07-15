@@ -55,6 +55,12 @@ QString MessageRecord::type() const
     return QString();
 }
 
+bool MessageRecord::isAwaitingReply() const
+{
+    return message->type() == Message::MethodCallMessage &&
+           message->expectsReply() && otherMessageIndex < 0;
+}
+
 bool MessageRecord::isReplyToKnownCall() const
 {
     return otherMessageIndex >= 0 && (message->type() == Message::MethodReturnMessage ||

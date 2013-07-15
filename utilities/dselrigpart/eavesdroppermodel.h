@@ -46,6 +46,10 @@ struct MessageRecord
     {}
 
     QString type() const;
+    // whether this is a call with no reply
+    bool isAwaitingReply() const;
+    // whether this is a reply that we've seen the call for
+    bool isReplyToKnownCall() const;
     // the serial of the "conversation", i.e. request-response pair
     uint32 conversationSerial() const;
     // either the method name, or if this is a response the request's method name
@@ -60,9 +64,6 @@ struct MessageRecord
     Message *message;
     int otherMessageIndex;
     qint64 timestamp;
-
-private:
-    bool isReplyToKnownCall() const;
 };
 
 class EavesdropperModel : public QAbstractItemModel

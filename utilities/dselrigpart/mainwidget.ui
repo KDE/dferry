@@ -73,6 +73,13 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QCheckBox" name="unansweredCheckbox">
+       <property name="text">
+        <string>Show only unanswered calls</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>

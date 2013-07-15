@@ -39,6 +39,7 @@ MainWidget::MainWidget()
     connect(m_ui.captureButton, SIGNAL(toggled(bool)), m_model, SLOT(setRecording(bool)));
     connect(m_ui.clearButton, SIGNAL(clicked()), this, SLOT(clear()));
     connect(m_ui.filterText, SIGNAL(textChanged(QString)), m_sortFilter, SLOT(setFilterString(QString)));
+    connect(m_ui.unansweredCheckbox, SIGNAL(toggled(bool)), m_sortFilter, SLOT(setOnlyUnanswered(bool)));
     connect(m_ui.groupCheckbox, SIGNAL(toggled(bool)), this, SLOT(setGrouping(bool)));
     connect(m_ui.messageList, SIGNAL(clicked(QModelIndex)), this, SLOT(itemClicked(QModelIndex)));
 

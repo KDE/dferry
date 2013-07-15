@@ -26,20 +26,41 @@
 
 #include "message.h"
 
+#include <QDebug>
+
 MessageSortFilter::MessageSortFilter()
+   : m_onlyUnanswered(false)
 {
     setDynamicSortFilter(true);
 }
 
 bool MessageSortFilter::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-    if (m_filterString.isEmpty() || sourceParent.isValid()) {
+    if (sourceParent.isValid() || (m_filterString.isEmpty() && !m_onlyUnanswered)) {
         return true;
     }
-    EavesdropperModel *model = static_cast<EavesdropperModel *>(sourceModel());
 
+    EavesdropperModel *model = static_cast<EavesdropperModel *>(sourceModel());
     const std::vector<MessageRecord> &msgList = model->m_messages;
     const MessageRecord &msg = msgList[sourceRow];
+
+    if (m_onlyUnanswered) {
+        if (msg.message->type() == Message::MethodCallMessage) {
+            if (!msg.isAwaitingReply()) {
+                return false;
+            }
+        } else if (msg.message->type() == Message::ErrorMessage) {
+            if (!msg.isReplyToKnownCall()) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if (m_filterString.isEmpty()) {
+        return true;
+    }
     return msg.conversationMethod(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
            msg.niceSender(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
            msg.niceDestination(msgList).contains(m_filterString, Qt::CaseInsensitive) ||
@@ -62,5 +83,11 @@ bool MessageSortFilter::lessThan(const QModelIndex &left, const QModelIndex &rig
 void MessageSortFilter::setFilterString(const QString &s)
 {
     m_filterString = s;
+    invalidateFilter();
+}
+
+void MessageSortFilter::setOnlyUnanswered(bool onlyUnanswered)
+{
+    m_onlyUnanswered = onlyUnanswered;
     invalidateFilter();
 }
