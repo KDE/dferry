@@ -968,21 +968,26 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
 
     if (unlikely(m_zeroLengthArrayNesting)) {
         if (!isEmpty) {
-            // need to move m_signaturePosition to the end of the array signature or it won't happen
-            cstring temp(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
-            // fix up nesting before and after we re-parse the beginning of the array signature
+            // need to move m_signaturePosition to the end of the array signature *here* or it won't happen
+
+            // fix up nesting and parse position before parsing the array signature
             if (isDict) {
                 m_nesting->endParen();
                 m_signaturePosition--; // it was moved ahead by one to skip the '{'
             }
             m_nesting->endArray();
-            // must have been too deep nesting if the following fails (assuming no bugs in the code)
-            VALID_IF(parseSingleCompleteType(&temp, m_nesting));
+
+            // parse the array signature in order to skip it
+            // barring bugs, must have been too deep nesting inside variants if parsing fails
+            cstring sigTail(m_signature.begin + m_signaturePosition, m_signature.length - m_signaturePosition);
+            VALID_IF(parseSingleCompleteType(&sigTail, m_nesting));
+            m_signaturePosition = m_signature.length - sigTail.length - 1;
+
+            // un-fix up nesting
             m_nesting->beginArray();
             if (isDict) {
                 m_nesting->beginParen();
             }
-            m_signaturePosition = m_signature.length - temp.length - 1; // TODO check/fix the indexing
         }
     }
     m_state = isDict ? NextDictEntry : NextArrayEntry;
@@ -1014,11 +1019,10 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
         }
     } else {
         if (m_dataPosition < aggregateInfo.arr.dataEnd) {
-            // rewind to start of contained type and read the data there
             if (isDict) {
-                // TODO beginParen() end Paren()?!!!
                 m_dataPosition = align(m_dataPosition, 8); // align to dict entry
             }
+            // rewind to start of contained type and read the type info there
             m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
             advanceState();
             return m_state != InvalidData;
@@ -1462,7 +1466,8 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
         VALID_IF(m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
     } else {
         if (m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
-            // TODO first iteration, anything to do? (look at the checks in advanceState - EndArray!)
+            // first iteration, nothing to do.
+            // this is due to the feature that nextFooEntry() is not required before the first element.
         } else if (isDict) {
             // a dict must have a key and value
             VALID_IF(m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
@@ -1474,8 +1479,6 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
         // -> we *are* at the end of a single complete type inside the array, syntax check passed
         m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
     }
-
-    // TODO need to touch the data? apply alignment?
 }
 
 void ArgumentList::WriteCursor::nextArrayEntry()
