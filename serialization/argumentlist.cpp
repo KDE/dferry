@@ -48,11 +48,11 @@ struct Nesting
     static const int totalMax = 64;
 
     bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
-    void endArray() { array--; }
+    void endArray() { array--; assert(array >= 0); }
     bool beginParen() { paren++; return likely(paren <= parenMax && total() <= totalMax); }
-    void endParen() { paren--; }
+    void endParen() { paren--; assert(paren >= 0); }
     bool beginVariant() { variant++; return likely(total() <= totalMax); }
-    void endVariant() { variant--; }
+    void endVariant() { variant--; assert(variant >= 0); }
     int total() { return array + paren + variant; }
 
     int array;
@@ -1522,6 +1522,7 @@ void ArgumentList::WriteCursor::finish()
     if (m_state == InvalidData) {
         return;
     }
+    assert(m_nesting->total() == 0);
     assert(!m_zeroLengthArrayNesting);
     assert(m_signaturePosition <= maxSignatureLength); // this should have been caught before
     m_signature.begin[m_signaturePosition] = '\0';
