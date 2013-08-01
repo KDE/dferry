@@ -31,6 +31,7 @@
 #include <vector>
 
 class Nesting; // TODO remove this when we've d-pointerized everything
+class NestingWithParenCounter;
 
 class ArgumentList
 {
@@ -358,7 +359,7 @@ public:
 
         ArgumentList *m_argList;
         CursorState m_state;
-        Nesting *m_nesting;
+        NestingWithParenCounter *m_nesting;
         cstring m_signature;
         int m_signaturePosition;
 

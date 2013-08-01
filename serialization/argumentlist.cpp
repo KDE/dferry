@@ -60,6 +60,16 @@ struct Nesting
     int variant;
 };
 
+struct NestingWithParenCounter : public Nesting
+{
+    NestingWithParenCounter() : parenCount(0) {}
+    // no need to be virtual, the type will be known statically
+    // theoretically it's unnecessary to check the return value: when it is false, the ArgumentList is
+    // already invalid so we could abandon all correctness.
+    bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
+    int parenCount;
+};
+
 static cstring printableState(ArgumentList::CursorState state)
 {
     if (state < ArgumentList::NotStarted || state > ArgumentList::UnixFd) {
@@ -100,6 +110,7 @@ static cstring printableState(ArgumentList::CursorState state)
 }
 
 const int ArgumentList::maxSignatureLength; // for the linker; technically this is required
+static const int structAlignment = 8;
 
 ArgumentList::ArgumentList()
    : m_isByteSwapped(false),
@@ -908,6 +919,7 @@ void ArgumentList::ReadCursor::advanceState()
         VALID_IF(m_nesting->beginArray());
         if (firstElementType == BeginDict) {
             m_signaturePosition++;
+            // not re-opened before each element: there is no observable difference for clients
             VALID_IF(m_nesting->beginParen());
         }
 
@@ -1004,6 +1016,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
         if (m_dataPosition < aggregateInfo.arr.dataEnd) {
             // rewind to start of contained type and read the data there
             if (isDict) {
+                // TODO beginParen() end Paren()?!!!
                 m_dataPosition = align(m_dataPosition, 8); // align to dict entry
             }
             m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
@@ -1092,7 +1105,7 @@ std::vector<ArgumentList::CursorState> ArgumentList::ReadCursor::aggregateStack(
 ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
    : m_argList(al),
      m_state(AnyData),
-     m_nesting(new Nesting),
+     m_nesting(new NestingWithParenCounter),
      m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
      m_signaturePosition(0),
      m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
@@ -1361,6 +1374,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     case BeginArray: {
         VALID_IF(m_nesting->beginArray());
         if (m_state == BeginDict) {
+            // not re-opened before each element: there is no observable difference for clients
             VALID_IF(m_nesting->beginParen());
         }
         aggregateInfo.aggregateType = m_state;
@@ -1370,7 +1384,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
 
         m_elements.push_back(ElementInfo(4, ElementInfo::ArrayLengthField));
         if (m_state == BeginDict) {
-            m_elements.push_back(ElementInfo(8, 0)); // align to dict entry
+            m_elements.push_back(ElementInfo(structAlignment, 0)); // align to dict entry
             m_state = DictKey;
             return;
         }
@@ -1452,7 +1466,9 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
         } else if (isDict) {
             // a dict must have a key and value
             VALID_IF(m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
-            m_elements.push_back(ElementInfo(8, 0)); // align to dict entry
+
+            m_nesting->parenCount += 1; // for alignment accounting
+            m_elements.push_back(ElementInfo(structAlignment, 0)); // align to dict entry
         }
         // array case: we are not at start of contained type's signature, the array is at top of stack
         // -> we *are* at the end of a single complete type inside the array, syntax check passed
@@ -1530,12 +1546,12 @@ void ArgumentList::WriteCursor::finish()
 
     m_dataPosition = 0;
 
-    // ### is this really always big enough? I think so because natural alignment can only bloat data
-    //     by slightly less than a factor of 2. the minimum of InitialDataCapacity is just there to avoid
-    //     allocating nothing, which might cause problems.
-    // ### FIXME it is NOT big enough, because variants are not naturally aligned but always 8 byte aligned.
-    // better calculated bounds on the maximum output size could also help performance somewhat
-    byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(InitialDataCapacity), m_dataCapacity * 2)));
+    // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
+    // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
+    // each (when they contain a byte).
+    // Those estimates are very conservative (but easy!), so some space optimization is possible.
+    const int bufferSize = m_dataCapacity * 2 + m_nesting->parenCount * 7;
+    byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(InitialDataCapacity), bufferSize)));
     int bufferPos = 0;
     uint32 count = m_elements.size();
     int variantSignatureIndex = 0;
