@@ -355,6 +355,20 @@ bool ArgumentList::isObjectPathValid(cstring path)
     return prevLetter != '/';
 }
 
+// static
+bool ArgumentList::isObjectPathElementValid(cstring pathElement)
+{
+    if (!pathElement.length) {
+        return false;
+    }
+    for (int i = 0; i < pathElement.length; i++) {
+        if (!isObjectNameLetter(pathElement.begin[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool parseBasicType(cstring *s)
 {
     // ### not checking if zero-terminated

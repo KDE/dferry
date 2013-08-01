@@ -62,6 +62,7 @@ public:
 
     static bool isStringValid(cstring string);
     static bool isObjectPathValid(cstring objectPath);
+    static bool isObjectPathElementValid(cstring pathElement);
     static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
 
     static const int maxSignatureLength = 255;
