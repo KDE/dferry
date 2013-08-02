@@ -811,10 +811,10 @@ void ArgumentList::ReadCursor::advanceState()
     if (likely(!m_zeroLengthArrayNesting)) {
         int padStart = m_dataPosition;
         m_dataPosition = align(m_dataPosition, alignment);
-        VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
         if (unlikely(m_dataPosition > m_data.length)) {
             goto out_needMoreData;
         }
+        VALID_IF(isPaddingZero(m_data, padStart, m_dataPosition));
 
         if (isPrimitiveType || isStringType) {
             if (unlikely(m_dataPosition + alignment > m_data.length)) {
