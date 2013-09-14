@@ -51,6 +51,7 @@ add_library(dsel SHARED ${DSEL_SOURCES} ${DSEL_HEADERS})
 
 
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dselclient
+include_directories(${LIBTINYXML2_INCLUDE_DIRS})
 
 set(DSELCLIENT_SOURCES
     client/introspection.h)
@@ -61,7 +62,7 @@ set(DSELCLIENT_HEADERS
 add_library(dselclient SHARED ${DSELCLIENT_SOURCES} ${DSELCLIENT_HEADERS})
 target_link_libraries(dselclient dsel ${LIBTINYXML2_LIBRARIES})
 
-install(TARGETS dsel dselclient LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS dsel dselclient LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
 
 add_subdirectory(tests)
 add_subdirectory(utilities)
