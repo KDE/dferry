@@ -7,8 +7,6 @@ option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-include(GNUInstallDirs)
-
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/client
                     ${CMAKE_SOURCE_DIR}/connection
