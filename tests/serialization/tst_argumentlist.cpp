@@ -29,30 +29,28 @@
 #include <cstring>
 #include <iostream>
 
-using namespace std;
-
 // Handy helpers
 
 static void printArray(array a)
 {
-    cout << "Array: ";
+    std::cout << "Array: ";
     for (int i = 0; i < a.length; i++) {
-        cout << int(a.begin[i]) << '|';
+        std::cout << int(a.begin[i]) << '|';
     }
-    cout << '\n';
+    std::cout << '\n';
 }
 
 static bool arraysEqual(array a1, array a2)
 {
     if (a1.length != a2.length) {
-        cout << "Different lengths.\n";
+        std::cout << "Different lengths.\n";
         printArray(a1);
         printArray(a2);
         return false;
     }
     for (int i = 0; i < a1.length; i++) {
         if (a1.begin[i] != a2.begin[i]) {
-            cout << "Different content.\n";
+            std::cout << "Different content.\n";
             printArray(a1);
             printArray(a2);
             return false;
@@ -86,7 +84,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
     while (!isDone) {
         TEST(writer.state() != ArgumentList::InvalidData);
         if (debugPrint) {
-            cout << "Reader state: " << reader.stateString().begin << '\n';
+            std::cout << "Reader state: " << reader.stateString().begin << '\n';
         }
 
         switch(reader.state()) {
