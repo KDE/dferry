@@ -3,6 +3,8 @@ project(d-sel)
 cmake_minimum_required(VERSION 2.6.2 FATAL_ERROR)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+add_definitions(-std=c++11)
+
 option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

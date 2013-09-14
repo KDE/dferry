@@ -30,9 +30,6 @@
 #include <string>
 #include <vector>
 
-class Nesting; // TODO remove this when we've d-pointerized everything
-class NestingWithParenCounter;
-
 class ArgumentList
 {
 public:
@@ -40,15 +37,21 @@ public:
      // constructs an argument list to deserialize data in @p data with signature @p signature
     ArgumentList(cstring signature, array data, bool isByteSwapped = false);
 
+    // copying needs special treatment due to the d-pointer
+    ArgumentList(const ArgumentList &other);
+    void operator=(const ArgumentList &other);
+
+    ~ArgumentList();
+
     std::string prettyPrint() const;
 
      // returns true when at least one read cursor is open, false otherwise
-    bool isReading() const { return m_readCursorCount; }
+    bool isReading() const;
     // returns true when a write cursor is open, false otherwise
-    bool isWriting() const { return m_hasWriteCursor; }
+    bool isWriting() const;
 
-    cstring signature() const { return m_signature; }
-    array data() const { return m_data; }
+    cstring signature() const;
+    array data() const;
 
     class ReadCursor;
     class WriteCursor;
@@ -110,22 +113,42 @@ public:
 
 private:
     struct podCstring // Same as cstring but without ctor.
-                       // Can't put the cstring type into a union because it has a constructor :/
+                      // Can't put the cstring type into a union because it has a constructor :/
     {
         byte *begin;
         uint32 length;
     };
 
+    typedef union
+    {
+        byte Byte;
+        bool Boolean;
+        int16 Int16;
+        uint16 Uint16;
+        int32 Int32;
+        uint32 Uint32;
+        int64 Int64;
+        uint64 Uint64;
+        double Double;
+        podCstring String; // also for ObjectPath and Signature
+    } DataUnion;
+
 public:
+
     // a cursor is similar to an iterator, but more tied to the underlying data structure
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
     class ReadCursor
     {
     public:
+        ReadCursor(ReadCursor &&other);
+        void operator=(ReadCursor &&other);
+        ReadCursor(const ReadCursor &other) = delete;
+        void operator=(const ReadCursor &other) = delete;
+
         ~ReadCursor();
 
-        bool isValid() const { return m_argList; }
+        bool isValid() const;
 
         CursorState state() const { return m_state; }
         cstring stateString() const;
@@ -163,21 +186,23 @@ public:
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
         // least return garbage.
-        byte readByte() { byte ret = m_Byte; advanceState(); return ret; }
-        bool readBoolean() { bool ret = m_Boolean; advanceState(); return ret; }
-        int16 readInt16() { int ret = m_Int16; advanceState(); return ret; }
-        uint16 readUint16() { uint16 ret = m_Uint16; advanceState(); return ret; }
-        int32 readInt32() { int32 ret = m_Int32; advanceState(); return ret; }
-        uint32 readUint32() { uint32 ret = m_Uint32; advanceState(); return ret; }
-        int64 readInt64() { int64 ret = m_Int64; advanceState(); return ret; }
-        uint64 readUint64() { uint64 ret = m_Uint64; advanceState(); return ret; }
-        double readDouble() { double ret = m_Double; advanceState(); return ret; }
-        cstring readString() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        cstring readObjectPath() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        cstring readSignature() { cstring ret(m_String.begin, m_String.length); advanceState(); return ret; }
-        uint32 readUnixFd() { uint32 ret = m_Uint32; advanceState(); return ret; }
+        byte readByte() { byte ret = m_u.Byte; advanceState(); return ret; }
+        bool readBoolean() { bool ret = m_u.Boolean; advanceState(); return ret; }
+        int16 readInt16() { int ret = m_u.Int16; advanceState(); return ret; }
+        uint16 readUint16() { uint16 ret = m_u.Uint16; advanceState(); return ret; }
+        int32 readInt32() { int32 ret = m_u.Int32; advanceState(); return ret; }
+        uint32 readUint32() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
+        int64 readInt64() { int64 ret = m_u.Int64; advanceState(); return ret; }
+        uint64 readUint64() { uint64 ret = m_u.Uint64; advanceState(); return ret; }
+        double readDouble() { double ret = m_u.Double; advanceState(); return ret; }
+        cstring readString() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
+        cstring readObjectPath() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
+        cstring readSignature() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
+        uint32 readUnixFd() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
 
     private:
+        class Private;
+        friend class Private;
         friend class ArgumentList;
         explicit ReadCursor(ArgumentList *al);
         CursorState doReadPrimitiveType();
@@ -187,64 +212,28 @@ public:
         void beginArrayOrDict(bool isDict, bool *isEmpty);
         bool nextArrayOrDictEntry(bool isDict);
 
-        struct ArrayInfo
-        {
-            uint32 dataEnd; // one past the last data byte of the array
-            uint32 containedTypeBegin; // to rewind when reading the next element
-        };
+        Private *d;
 
-        struct VariantInfo
-        {
-            podCstring prevSignature;     // a variant switches the currently parsed signature, so we
-            uint32 prevSignaturePosition; // need to store the old signature and parse position.
-        };
-
-        // for structs, we don't need to know more than that we are in a struct
-
-        struct AggregateInfo
-        {
-            CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
-            union {
-                ArrayInfo arr;
-                VariantInfo var;
-            };
-        };
-
-        ArgumentList *m_argList;
+        // two data members not behind d-pointer for performance reasons, especially inlining
         CursorState m_state;
-        Nesting *m_nesting;
-        cstring m_signature;
-        array m_data;
-        int m_signaturePosition;
-        int m_dataPosition;
-        int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
-
-        // this keeps track of which aggregates we are currently in
-        std::vector<AggregateInfo> m_aggregateStack;
 
         // it is more efficient, in code size and performance, to read the data in advanceState()
         // and store the result for later retrieval in readFoo()
-        union {
-            byte m_Byte;
-            bool m_Boolean;
-            int16 m_Int16;
-            uint16 m_Uint16;
-            int32 m_Int32;
-            uint32 m_Uint32;
-            int64 m_Int64;
-            uint64 m_Uint64;
-            double m_Double;
-            podCstring m_String; // also for ObjectPath and Signature
-        };
+        DataUnion m_u;
     };
 
     // TODO: try to share code with ReadIterator
     class WriteCursor
     {
     public:
+        WriteCursor(WriteCursor &&other);
+        void operator=(WriteCursor &&other);
+        WriteCursor(const WriteCursor &other) = delete;
+        void operator=(const WriteCursor &other) = delete;
+
         ~WriteCursor();
 
-        bool isValid() const { return m_argList; }
+        bool isValid() const;
 
         CursorState state() const { return m_state; }
         cstring stateString() const;
@@ -285,6 +274,8 @@ public:
 
     private:
         friend class ArgumentList;
+        class Private;
+        friend class Private;
         explicit WriteCursor(ArgumentList *al);
 
         CursorState doWritePrimitiveType(uint32 alignAndSize);
@@ -293,109 +284,18 @@ public:
         void beginArrayOrDict(bool isDict, bool isEmpty);
         void nextArrayOrDictEntry(bool isDict);
 
-        struct ArrayInfo
-        {
-            uint32 dataBegin; // one past the last data byte of the array
-            uint32 containedTypeBegin; // to rewind when reading the next element
-        };
+        Private *d;
 
-        struct VariantInfo
-        {
-            podCstring prevSignature;     // a variant switches the currently parsed signature, so we
-            uint32 prevSignaturePosition; // need to store the old signature and parse position.
-            uint32 signatureIndex; // index in m_variantSignatures
-        };
-
-        struct StructInfo
-        {
-            uint32 containedTypeBegin;
-        };
-
-        struct AggregateInfo
-        {
-            CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
-            union {
-                ArrayInfo arr;
-                VariantInfo var;
-                StructInfo sct;
-            };
-        };
-
-        // we don't know how long a variant signature is when starting the variant, but we have to
-        // insert the signature into the datastream before the data. for that reason, we need a
-        // postprocessing pass to insert the signatures when the stream is otherwise finished.
-
-        // - need to split up long string data: all unaligned, arbitrary length
-        // - need to fix up array length because even the length excluding the padding before and
-        //   after varies with alignment of the first byte - for that the alignment parameters as
-        //   described in plan.txt need to be solved (we can use a worst-case estimate at first)
-        struct ElementInfo
-        {
-            ElementInfo(byte alignment, byte size_)
-               : size(size_)
-            {
-                assert(alignment <= 8);
-                static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
-                alignmentExponent = alignLog[alignment];
-                assert(alignment < 2 || alignLog != 0);
-            }
-            byte alignment() { return 1 << alignmentExponent; }
-
-            uint32 alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
-            uint32 size : 6; // that's up to 63
-            enum SizeCode {
-                LargestSize = 60,
-                ArrayLengthField,
-                ArrayLengthEndMark,
-                VariantSignature
-            };
-        };
-
-        std::vector<ElementInfo> m_elements;
-        std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
-
-        int m_dataElementsCountBeforeZeroLengthArray;
-        int m_variantSignaturesCountBeforeZeroLengthArray;
-        int m_dataPositionBeforeZeroLengthArray;
-
-        ArgumentList *m_argList;
+        // two data members not behind d-pointer for performance reasons
         CursorState m_state;
-        NestingWithParenCounter *m_nesting;
-        cstring m_signature;
-        int m_signaturePosition;
 
-        enum {
-            // got a linker error with static const int...
-            InitialDataCapacity = 256
-        };
-        byte *m_data;
-        int m_dataCapacity;
-        int m_dataPosition;
-
-        int m_zeroLengthArrayNesting;
-        // this keeps track of which aggregates we are currently in
-        std::vector<AggregateInfo> m_aggregateStack;
-
-        union {
-            byte m_Byte;
-            bool m_Boolean;
-            int16 m_Int16;
-            uint16 m_Uint16;
-            int32 m_Int32;
-            uint32 m_Uint32;
-            int64 m_Int64;
-            uint64 m_Uint64;
-            double m_Double;
-            podCstring m_String; // also for ObjectPath and Signature
-        };
+        // ### check if it makes any performance difference to have this here (writeFoo() should benefit)
+        DataUnion m_u;
     };
 
 private:
-    int m_isByteSwapped;
-    int m_readCursorCount;
-    bool m_hasWriteCursor;
-    cstring m_signature;
-    array m_data;
+    class Private;
+    Private *d;
 };
 
 #endif // ARGUMENTLIST_H
