@@ -507,7 +507,7 @@ bool Message::deserializeVariableHeaders()
     cstring varHeadersSig("ia(yv)");
     ArgumentList argList(varHeadersSig, headerData, m_isByteSwapped);
 
-    ArgumentList::ReadCursor reader = argList.beginRead();
+    ArgumentList::Reader reader = argList.beginRead();
     assert(reader.isValid());
 
     if (reader.state() != ArgumentList::Int32) {
@@ -642,7 +642,7 @@ void Message::serializeFixedHeaders()
 
 void Message::serializeVariableHeaders(ArgumentList *headerArgs)
 {
-    ArgumentList::WriteCursor writer = headerArgs->beginWrite();
+    ArgumentList::Writer writer = headerArgs->beginWrite();
 
     // note that we don't have to deal with zero-length arrays because all valid message types require
     // at least one of the variable headers

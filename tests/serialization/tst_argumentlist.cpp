@@ -72,10 +72,10 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
 
     ArgumentList arg(signature, shortData);
 
-    ArgumentList::ReadCursor reader = arg.beginRead();
+    ArgumentList::Reader reader = arg.beginRead();
 
     ArgumentList copy;
-    ArgumentList::WriteCursor writer = copy.beginWrite();
+    ArgumentList::Writer writer = copy.beginWrite();
 
     bool isDone = false;
     int emptyNesting = 0;
@@ -94,7 +94,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
             break;
         case ArgumentList::NeedMoreData: {
             TEST(shortData.length < data.length);
-            // reallocate shortData to test that ReadCursor can handle the data moving around - and
+            // reallocate shortData to test that Reader can handle the data moving around - and
             // allocate the new one before destroying the old one to make sure that the pointer differs
             array oldData = shortData;
             shortData.length = std::min(shortData.length + dataIncrement, data.length);
@@ -236,7 +236,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
     TEST(ArgumentList::isSignatureValid(copySignature));
     TEST(stringsEqual(argSignature, copySignature));
 
-    // TODO when it's wired up between ReadCursor and ArgumentList: array argData = arg.data();
+    // TODO when it's wired up between Reader and ArgumentList: array argData = arg.data();
     array argData = arg_in.data();
 
     array copyData = copy.data();
@@ -367,34 +367,34 @@ static void test_readerWriterExclusion()
 {
     ArgumentList arg;
     {
-        ArgumentList::ReadCursor reader1 = arg.beginRead();
+        ArgumentList::Reader reader1 = arg.beginRead();
         {
-            ArgumentList::ReadCursor reader2 = arg.beginRead();
+            ArgumentList::Reader reader2 = arg.beginRead();
             TEST(reader2.isValid());
         }
         {
-            ArgumentList::WriteCursor writer1 = arg.beginWrite();
+            ArgumentList::Writer writer1 = arg.beginWrite();
             TEST(!writer1.isValid());
         }
     }
     {
-        ArgumentList::ReadCursor reader3 = arg.beginRead();
+        ArgumentList::Reader reader3 = arg.beginRead();
         TEST(reader3.isValid());
     }
     {
-        ArgumentList::WriteCursor writer2 = arg.beginWrite();
+        ArgumentList::Writer writer2 = arg.beginWrite();
         TEST(writer2.isValid());
         {
-            ArgumentList::ReadCursor reader4 = arg.beginRead();
+            ArgumentList::Reader reader4 = arg.beginRead();
             TEST(!reader4.isValid());
         }
         {
-            ArgumentList::ReadCursor writer3 = arg.beginRead();
+            ArgumentList::Reader writer3 = arg.beginRead();
             TEST(!writer3.isValid());
         }
     }
     {
-        ArgumentList::WriteCursor writer4 = arg.beginWrite();
+        ArgumentList::Writer writer4 = arg.beginWrite();
         TEST(writer4.isValid());
     }
 }
@@ -403,7 +403,7 @@ static void test_nesting()
 {
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         for (int i = 0; i < 32; i++) {
             writer.beginArray(false);
             writer.nextArrayEntry();
@@ -414,7 +414,7 @@ static void test_nesting()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
@@ -426,7 +426,7 @@ static void test_nesting()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
@@ -438,7 +438,7 @@ static void test_nesting()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         for (int i = 0; i < 64; i++) {
             writer.beginVariant();
         }
@@ -540,29 +540,29 @@ static void test_writerMisuse()
     // Array
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(false);
         writer.endArray(); // wrong,  must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(true);
         writer.endArray(); // even with no elements it, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(false);
-        writer.writeByte(1); // in WriteCursor, calling nextArrayEntry() after beginArray() is optional
+        writer.writeByte(1); // in Writer, calling nextArrayEntry() after beginArray() is optional
         writer.endArray();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(false);
         writer.nextArrayEntry();    // optional and may not trigger an error
         TEST(writer.state() != ArgumentList::InvalidData);
@@ -571,7 +571,7 @@ static void test_writerMisuse()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(false);
         writer.nextArrayEntry();
         writer.writeByte(1);
@@ -580,7 +580,7 @@ static void test_writerMisuse()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginArray(true);
         writer.nextArrayEntry();
         writer.beginVariant();
@@ -591,14 +591,14 @@ static void test_writerMisuse()
     // Dict
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginDict(false);
         writer.endDict(); // wrong, must contain exactly two types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
@@ -607,16 +607,16 @@ static void test_writerMisuse()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginDict(false);
-        writer.writeByte(1); // in WriteCursor, calling nextDictEntry() after beginDict() is optional
+        writer.writeByte(1); // in Writer, calling nextDictEntry() after beginDict() is optional
         writer.writeByte(2);
         writer.endDict();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
@@ -627,7 +627,7 @@ static void test_writerMisuse()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.beginVariant(); // wrong, key type must be basic
@@ -637,7 +637,7 @@ static void test_writerMisuse()
     {
         // this and the next are a baseline to make sure that the following test fails for a good reason
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginVariant();
         writer.writeByte(1);
         writer.endVariant();
@@ -645,14 +645,14 @@ static void test_writerMisuse()
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginVariant();
         writer.endVariant();
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
         ArgumentList arg;
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.beginVariant();
         writer.writeByte(1);
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
@@ -660,7 +660,7 @@ static void test_writerMisuse()
     }
 }
 
-void addSomeVariantStuff(ArgumentList::WriteCursor *writer)
+void addSomeVariantStuff(ArgumentList::Writer *writer)
 {
     writer->beginVariant();
         writer->beginVariant();
@@ -694,13 +694,13 @@ static void test_complicated()
 {
     ArgumentList arg;
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         // NeedMoreData-related bugs are less dangerous inside arrays, so we try to provoke one here;
         // the reason for arrays preventing failures is that they have a length prefix which enables
         // and encourages pre-fetching all the array's data before processing *anything* inside the
         // array. therefore no NeedMoreData state happens while really deserializing the array's
         // contents. but we exactly want NeedMoreData while in the middle of deserializing something
-        // meaty, specifically variants. see ReadCursor::replaceData().
+        // meaty, specifically variants. see Reader::replaceData().
         addSomeVariantStuff(&writer);
 
         writer.writeInt64(234234);
@@ -755,7 +755,7 @@ static void test_alignment()
 {
     ArgumentList arg;
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.writeByte(123);
         writer.beginArray(false);
         writer.writeByte(64);
@@ -771,7 +771,7 @@ static void test_alignment()
         doRoundtrip(arg);
     }
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.writeByte(123);
         writer.beginStruct();
         writer.writeByte(110);
@@ -787,7 +787,7 @@ static void test_arrayOfVariant()
     ArgumentList arg;
     // non-empty array
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.writeByte(123);
         writer.beginArray(false);
         writer.beginVariant();
@@ -803,7 +803,7 @@ static void test_arrayOfVariant()
     }
     // empty array
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
         writer.writeByte(123);
         writer.beginArray(true);
         writer.beginVariant();
@@ -823,7 +823,7 @@ static void test_realMessage()
     ArgumentList arg;
     // non-empty array
     {
-        ArgumentList::WriteCursor writer = arg.beginWrite();
+        ArgumentList::Writer writer = arg.beginWrite();
 
         writer.writeString(cstring("message"));
         writer.writeString(cstring("konversation"));
@@ -871,6 +871,6 @@ int main(int argc, char *argv[])
     test_alignment();
     test_arrayOfVariant();
     test_realMessage();
-    // TODO many more misuse tests for WriteCursor and maybe some for ReadCursor
+    // TODO many more misuse tests for Writer and maybe some for Reader
     std::cout << "Passed!\n";
 }

@@ -38,13 +38,13 @@ class ArgumentList::Private
 public:
     Private()
        : m_isByteSwapped(false),
-         m_readCursorCount(0),
-         m_hasWriteCursor(false)
+         m_readerCount(0),
+         m_hasWriter(false)
     {}
 
     int m_isByteSwapped;
-    int m_readCursorCount;
-    bool m_hasWriteCursor;
+    int m_readerCount;
+    bool m_hasWriter;
     cstring m_signature;
     array m_data;
 };
@@ -86,7 +86,7 @@ struct NestingWithParenCounter : public Nesting
     int parenCount;
 };
 
-static cstring printableState(ArgumentList::CursorState state)
+static cstring printableState(ArgumentList::IoState state)
 {
     if (state < ArgumentList::NotStarted || state > ArgumentList::UnixFd) {
         return cstring();
@@ -161,12 +161,12 @@ ArgumentList::~ArgumentList()
 
 bool ArgumentList::isReading() const
 {
-    return d->m_readCursorCount;
+    return d->m_readerCount;
 }
 
 bool ArgumentList::isWriting() const
 {
-    return d->m_hasWriteCursor;
+    return d->m_hasWriter;
 }
 
 cstring ArgumentList::signature() const
@@ -207,7 +207,7 @@ std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeNam
 
 std::string ArgumentList::prettyPrint() const
 {
-    ReadCursor reader = const_cast<ArgumentList*>(this)->beginRead();
+    Reader reader = const_cast<ArgumentList*>(this)->beginRead();
     if (!reader.isValid()) {
         return std::string();
     }
@@ -332,24 +332,24 @@ std::string ArgumentList::prettyPrint() const
     return ret.str();
 }
 
-ArgumentList::ReadCursor ArgumentList::beginRead()
+ArgumentList::Reader ArgumentList::beginRead()
 {
     ArgumentList *thisInstance = 0;
-    if (!d->m_hasWriteCursor) {
-        d->m_readCursorCount++;
+    if (!d->m_hasWriter) {
+        d->m_readerCount++;
         thisInstance = this;
     }
-    return ReadCursor(thisInstance);
+    return Reader(thisInstance);
 }
 
-ArgumentList::WriteCursor ArgumentList::beginWrite()
+ArgumentList::Writer ArgumentList::beginWrite()
 {
     ArgumentList *thisInstance = 0;
-    if (!d->m_readCursorCount && !d->m_hasWriteCursor) {
-        d->m_hasWriteCursor = true;
+    if (!d->m_readerCount && !d->m_hasWriter) {
+        d->m_hasWriter = true;
         thisInstance = this;
     }
-    return WriteCursor(thisInstance);
+    return Writer(thisInstance);
 }
 
 static void chopFirst(cstring *s)
@@ -557,7 +557,7 @@ bool ArgumentList::isSignatureValid(cstring signature, SignatureType type)
     return true;
 }
 
-class ArgumentList::ReadCursor::Private
+class ArgumentList::Reader::Private
 {
 public:
     Private()
@@ -591,7 +591,7 @@ public:
 
     struct AggregateInfo
     {
-        CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
         union {
             ArrayInfo arr;
             VariantInfo var;
@@ -602,7 +602,7 @@ public:
     std::vector<AggregateInfo> m_aggregateStack;
 };
 
-ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
+ArgumentList::Reader::Reader(ArgumentList *al)
    : d(new Private),
      m_state(NotStarted)
 {
@@ -615,7 +615,7 @@ ArgumentList::ReadCursor::ReadCursor(ArgumentList *al)
     advanceState();
 }
 
-ArgumentList::ReadCursor::ReadCursor(ReadCursor &&other)
+ArgumentList::Reader::Reader(Reader &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -623,7 +623,7 @@ ArgumentList::ReadCursor::ReadCursor(ReadCursor &&other)
     other.d = 0;
 }
 
-void ArgumentList::ReadCursor::operator=(ReadCursor &&other)
+void ArgumentList::Reader::operator=(Reader &&other)
 {
     if (&other == this) {
         return;
@@ -636,26 +636,26 @@ void ArgumentList::ReadCursor::operator=(ReadCursor &&other)
     other.d = 0;
 }
 
-ArgumentList::ReadCursor::~ReadCursor()
+ArgumentList::Reader::~Reader()
 {
     if (d->m_argList) {
-        d->m_argList->d->m_readCursorCount -= 1;
+        d->m_argList->d->m_readerCount -= 1;
     }
     delete d;
     d = 0;
 }
 
-bool ArgumentList::ReadCursor::isValid() const
+bool ArgumentList::Reader::isValid() const
 {
     return d->m_argList;
 }
 
-cstring ArgumentList::ReadCursor::stateString() const
+cstring ArgumentList::Reader::stateString() const
 {
     return printableState(m_state);
 }
 
-void ArgumentList::ReadCursor::replaceData(array data)
+void ArgumentList::Reader::replaceData(array data)
 {
     VALID_IF(data.length >= d->m_dataPosition);
 
@@ -683,10 +683,10 @@ void ArgumentList::ReadCursor::replaceData(array data)
     }
 }
 
-static void getTypeInfo(byte letterCode, ArgumentList::CursorState *typeState, uint32 *alignment,
+static void getTypeInfo(byte letterCode, ArgumentList::IoState *typeState, uint32 *alignment,
                         bool *isPrimitiveType, bool *isStringType)
 {
-    ArgumentList::CursorState state = ArgumentList::InvalidData;
+    ArgumentList::IoState state = ArgumentList::InvalidData;
     bool isPrimitive = true;
     bool isString = false;
     int align = 4;
@@ -792,7 +792,7 @@ static void getTypeInfo(byte letterCode, ArgumentList::CursorState *typeState, u
     }
 }
 
-ArgumentList::CursorState ArgumentList::ReadCursor::doReadPrimitiveType()
+ArgumentList::IoState ArgumentList::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
     case Byte:
@@ -838,7 +838,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadPrimitiveType()
     return m_state;
 }
 
-ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefixSize)
+ArgumentList::IoState ArgumentList::Reader::doReadString(int lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
@@ -868,7 +868,7 @@ ArgumentList::CursorState ArgumentList::ReadCursor::doReadString(int lengthPrefi
     return m_state;
 }
 
-void ArgumentList::ReadCursor::advanceState()
+void ArgumentList::Reader::advanceState()
 {
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
@@ -1031,7 +1031,7 @@ void ArgumentList::ReadCursor::advanceState()
             d->m_dataPosition += 4;
         }
 
-        CursorState firstElementType;
+        IoState firstElementType;
         uint32 firstElementAlignment;
         getTypeInfo(d->m_signature.begin[d->m_signaturePosition + 1],
                     &firstElementType, &firstElementAlignment, 0, 0);
@@ -1082,7 +1082,7 @@ out_needMoreData:
     d->m_dataPosition = savedDataPosition;
 }
 
-void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
+void ArgumentList::Reader::advanceStateFrom(IoState expectedState)
 {
     // Calling this method could be replaced with using VALID_IF in the callers, but it currently
     // seems more conventient like this.
@@ -1090,7 +1090,7 @@ void ArgumentList::ReadCursor::advanceStateFrom(CursorState expectedState)
     advanceState();
 }
 
-void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
+void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
 {
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -1131,13 +1131,13 @@ void ArgumentList::ReadCursor::beginArrayOrDict(bool isDict, bool *isEmpty)
 }
 
 // TODO introduce an error state different from InvalidData when the wrong method is called
-void ArgumentList::ReadCursor::beginArray(bool *isEmpty)
+void ArgumentList::Reader::beginArray(bool *isEmpty)
 {
     VALID_IF(m_state == BeginArray);
     beginArrayOrDict(false, isEmpty);
 }
 
-bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
+bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
 {
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -1177,7 +1177,7 @@ bool ArgumentList::ReadCursor::nextArrayOrDictEntry(bool isDict)
     return false;
 }
 
-bool ArgumentList::ReadCursor::nextArrayEntry()
+bool ArgumentList::Reader::nextArrayEntry()
 {
     if (m_state == NextArrayEntry) {
         return nextArrayOrDictEntry(false);
@@ -1187,18 +1187,18 @@ bool ArgumentList::ReadCursor::nextArrayEntry()
     }
 }
 
-void ArgumentList::ReadCursor::endArray()
+void ArgumentList::Reader::endArray()
 {
     advanceStateFrom(EndArray);
 }
 
-void ArgumentList::ReadCursor::beginDict(bool *isEmpty)
+void ArgumentList::Reader::beginDict(bool *isEmpty)
 {
     VALID_IF(m_state == BeginDict);
     beginArrayOrDict(true, isEmpty);
 }
 
-bool ArgumentList::ReadCursor::nextDictEntry()
+bool ArgumentList::Reader::nextDictEntry()
 {
     if (m_state == NextDictEntry) {
         return nextArrayOrDictEntry(true);
@@ -1208,42 +1208,42 @@ bool ArgumentList::ReadCursor::nextDictEntry()
     }
 }
 
-void ArgumentList::ReadCursor::endDict()
+void ArgumentList::Reader::endDict()
 {
     advanceStateFrom(EndDict);
 }
 
-void ArgumentList::ReadCursor::beginStruct()
+void ArgumentList::Reader::beginStruct()
 {
     advanceStateFrom(BeginStruct);
 }
 
-void ArgumentList::ReadCursor::endStruct()
+void ArgumentList::Reader::endStruct()
 {
     advanceStateFrom(EndStruct);
 }
 
-void ArgumentList::ReadCursor::beginVariant()
+void ArgumentList::Reader::beginVariant()
 {
     advanceStateFrom(BeginVariant);
 }
 
-void ArgumentList::ReadCursor::endVariant()
+void ArgumentList::Reader::endVariant()
 {
     advanceStateFrom(EndVariant);
 }
 
-std::vector<ArgumentList::CursorState> ArgumentList::ReadCursor::aggregateStack() const
+std::vector<ArgumentList::IoState> ArgumentList::Reader::aggregateStack() const
 {
     const int count = d->m_aggregateStack.size();
-    std::vector<CursorState> ret;
+    std::vector<IoState> ret;
     for (int i = 0; i < count; i++) {
         ret.push_back(d->m_aggregateStack[i].aggregateType);
     }
     return ret;
 }
 
-class ArgumentList::WriteCursor::Private
+class ArgumentList::Writer::Private
 {
 public:
     Private()
@@ -1276,7 +1276,7 @@ public:
 
     struct AggregateInfo
     {
-        CursorState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
         union {
             ArrayInfo arr;
             VariantInfo var;
@@ -1339,14 +1339,14 @@ public:
     std::vector<AggregateInfo> m_aggregateStack;
 };
 
-ArgumentList::WriteCursor::WriteCursor(ArgumentList *al)
+ArgumentList::Writer::Writer(ArgumentList *al)
    : d(new Private),
      m_state(AnyData)
 {
     d->m_argList = al;
 }
 
-ArgumentList::WriteCursor::WriteCursor(WriteCursor &&other)
+ArgumentList::Writer::Writer(Writer &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -1354,7 +1354,7 @@ ArgumentList::WriteCursor::WriteCursor(WriteCursor &&other)
     other.d = 0;
 }
 
-void ArgumentList::WriteCursor::operator=(WriteCursor &&other)
+void ArgumentList::Writer::operator=(Writer &&other)
 {
     if (&other == this) {
         return;
@@ -1366,11 +1366,11 @@ void ArgumentList::WriteCursor::operator=(WriteCursor &&other)
     other.d = 0;
 }
 
-ArgumentList::WriteCursor::~WriteCursor()
+ArgumentList::Writer::~Writer()
 {
     if (d->m_argList) {
-        assert(d->m_argList->d->m_hasWriteCursor);
-        d->m_argList->d->m_hasWriteCursor = false;
+        assert(d->m_argList->d->m_hasWriter);
+        d->m_argList->d->m_hasWriter = false;
     }
     free(d->m_data);
     d->m_data = 0;
@@ -1378,17 +1378,17 @@ ArgumentList::WriteCursor::~WriteCursor()
     d = 0;
 }
 
-bool ArgumentList::WriteCursor::isValid() const
+bool ArgumentList::Writer::isValid() const
 {
     return d->m_argList;
 }
 
-cstring ArgumentList::WriteCursor::stateString() const
+cstring ArgumentList::Writer::stateString() const
 {
     return printableState(m_state);
 }
 
-ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32 alignAndSize)
+ArgumentList::IoState ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
 {
     d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
     const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
@@ -1440,7 +1440,7 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWritePrimitiveType(uint32
     return m_state;
 }
 
-ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPrefixSize)
+ArgumentList::IoState ArgumentList::Writer::doWriteString(int lengthPrefixSize)
 {
     bool isValidString = false;
     if (m_state == String) {
@@ -1482,7 +1482,7 @@ ArgumentList::CursorState ArgumentList::WriteCursor::doWriteString(int lengthPre
     return m_state;
 }
 
-void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorState newState)
+void ArgumentList::Writer::advanceState(array signatureFragment, IoState newState)
 {
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
@@ -1682,7 +1682,7 @@ void ArgumentList::WriteCursor::advanceState(array signatureFragment, CursorStat
     m_state = AnyData;
 }
 
-void ArgumentList::WriteCursor::beginArrayOrDict(bool isDict, bool isEmpty)
+void ArgumentList::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
 {
     isEmpty = isEmpty || d->m_zeroLengthArrayNesting;
     if (isEmpty) {
@@ -1703,12 +1703,12 @@ void ArgumentList::WriteCursor::beginArrayOrDict(bool isDict, bool isEmpty)
     }
 }
 
-void ArgumentList::WriteCursor::beginArray(bool isEmpty)
+void ArgumentList::Writer::beginArray(bool isEmpty)
 {
     beginArrayOrDict(false, isEmpty);
 }
 
-void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
+void ArgumentList::Writer::nextArrayOrDictEntry(bool isDict)
 {
     // TODO sanity / syntax checks, data length check too?
 
@@ -1736,47 +1736,47 @@ void ArgumentList::WriteCursor::nextArrayOrDictEntry(bool isDict)
     }
 }
 
-void ArgumentList::WriteCursor::nextArrayEntry()
+void ArgumentList::Writer::nextArrayEntry()
 {
     nextArrayOrDictEntry(false);
 }
 
-void ArgumentList::WriteCursor::endArray()
+void ArgumentList::Writer::endArray()
 {
     advanceState(array(), EndArray);
 }
 
-void ArgumentList::WriteCursor::beginDict(bool isEmpty)
+void ArgumentList::Writer::beginDict(bool isEmpty)
 {
     beginArrayOrDict(true, isEmpty);
 }
 
-void ArgumentList::WriteCursor::nextDictEntry()
+void ArgumentList::Writer::nextDictEntry()
 {
     nextArrayOrDictEntry(true);
 }
 
-void ArgumentList::WriteCursor::endDict()
+void ArgumentList::Writer::endDict()
 {
     advanceState(array("}", strlen("}")), EndDict);
 }
 
-void ArgumentList::WriteCursor::beginStruct()
+void ArgumentList::Writer::beginStruct()
 {
     advanceState(array("(", strlen("(")), BeginStruct);
 }
 
-void ArgumentList::WriteCursor::endStruct()
+void ArgumentList::Writer::endStruct()
 {
     advanceState(array(")", strlen(")")), EndStruct);
 }
 
-void ArgumentList::WriteCursor::beginVariant()
+void ArgumentList::Writer::beginVariant()
 {
     advanceState(array("v", strlen("v")), BeginVariant);
 }
 
-void ArgumentList::WriteCursor::endVariant()
+void ArgumentList::Writer::endVariant()
 {
     advanceState(array(), EndVariant);
 }
@@ -1787,7 +1787,7 @@ struct ArrayLengthField
     uint32 dataStartPosition;
 };
 
-void ArgumentList::WriteCursor::finish()
+void ArgumentList::Writer::finish()
 {
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
@@ -1865,92 +1865,92 @@ void ArgumentList::WriteCursor::finish()
     d->m_argList->d->m_data = array(buffer, bufferPos);
 }
 
-std::vector<ArgumentList::CursorState> ArgumentList::WriteCursor::aggregateStack() const
+std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
 {
     const int count = d->m_aggregateStack.size();
-    std::vector<CursorState> ret;
+    std::vector<IoState> ret;
     for (int i = 0; i < count; i++) {
         ret.push_back(d->m_aggregateStack[i].aggregateType);
     }
     return ret;
 }
 
-void ArgumentList::WriteCursor::writeByte(byte b)
+void ArgumentList::Writer::writeByte(byte b)
 {
     m_u.Byte = b;
     advanceState(array("y", strlen("y")), Byte);
 }
 
-void ArgumentList::WriteCursor::writeBoolean(bool b)
+void ArgumentList::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;
     advanceState(array("b", strlen("b")), Boolean);
 }
 
-void ArgumentList::WriteCursor::writeInt16(int16 i)
+void ArgumentList::Writer::writeInt16(int16 i)
 {
     m_u.Int16 = i;
     advanceState(array("n", strlen("n")), Int16);
 }
 
-void ArgumentList::WriteCursor::writeUint16(uint16 i)
+void ArgumentList::Writer::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
     advanceState(array("q", strlen("q")), Uint16);
 }
 
-void ArgumentList::WriteCursor::writeInt32(int32 i)
+void ArgumentList::Writer::writeInt32(int32 i)
 {
     m_u.Int32 = i;
     advanceState(array("i", strlen("i")), Int32);
 }
 
-void ArgumentList::WriteCursor::writeUint32(uint32 i)
+void ArgumentList::Writer::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
     advanceState(array("u", strlen("u")), Uint32);
 }
 
-void ArgumentList::WriteCursor::writeInt64(int64 i)
+void ArgumentList::Writer::writeInt64(int64 i)
 {
     m_u.Int64 = i;
     advanceState(array("x", strlen("x")), Int64);
 }
 
-void ArgumentList::WriteCursor::writeUint64(uint64 i)
+void ArgumentList::Writer::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
     advanceState(array("t", strlen("t")), Uint64);
 }
 
-void ArgumentList::WriteCursor::writeDouble(double d)
+void ArgumentList::Writer::writeDouble(double d)
 {
     m_u.Double = d;
     advanceState(array("d", strlen("d")), Double);
 }
 
-void ArgumentList::WriteCursor::writeString(cstring string)
+void ArgumentList::Writer::writeString(cstring string)
 {
     m_u.String.begin = string.begin;
     m_u.String.length = string.length;
     advanceState(array("s", strlen("s")), String);
 }
 
-void ArgumentList::WriteCursor::writeObjectPath(cstring objectPath)
+void ArgumentList::Writer::writeObjectPath(cstring objectPath)
 {
     m_u.String.begin = objectPath.begin;
     m_u.String.length = objectPath.length;
     advanceState(array("o", strlen("o")), ObjectPath);
 }
 
-void ArgumentList::WriteCursor::writeSignature(cstring signature)
+void ArgumentList::Writer::writeSignature(cstring signature)
 {
     m_u.String.begin = signature.begin;
     m_u.String.length = signature.length;
     advanceState(array("g", strlen("g")), Signature);
 }
 
-void ArgumentList::WriteCursor::writeUnixFd(uint32 fd)
+void ArgumentList::Writer::writeUnixFd(uint32 fd)
 {
     m_u.Uint32 = fd;
     advanceState(array("h", strlen("h")), UnixFd);

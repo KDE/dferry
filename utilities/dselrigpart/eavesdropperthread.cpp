@@ -48,7 +48,7 @@ static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
     spyEnable->setPath(std::string("/org/freedesktop/DBus"));
     spyEnable->setMethod(std::string("AddMatch"));
     ArgumentList argList;
-    ArgumentList::WriteCursor writer = argList.beginWrite();
+    ArgumentList::Writer writer = argList.beginWrite();
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));

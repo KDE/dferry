@@ -45,18 +45,18 @@ public:
 
     std::string prettyPrint() const;
 
-     // returns true when at least one read cursor is open, false otherwise
+     // returns true when at least one reader, false otherwise
     bool isReading() const;
-    // returns true when a write cursor is open, false otherwise
+    // returns true when a writer is open, false otherwise
     bool isWriting() const;
 
     cstring signature() const;
     array data() const;
 
-    class ReadCursor;
-    class WriteCursor;
-    ReadCursor beginRead();
-    WriteCursor beginWrite();
+    class Reader;
+    class Writer;
+    Reader beginRead();
+    Writer beginWrite();
 
     enum SignatureType {
         MethodSignature = 0,
@@ -70,18 +70,18 @@ public:
 
     static const int maxSignatureLength = 255;
 
-    enum CursorState {
+    enum IoState {
         // "exceptional" states
         NotStarted = 0,
         Finished,
         NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
         InvalidData, // non-recoverable
-        // WriteCursor states when the next type is still open (not iterating in an array or dict)
-        AnyData, // occurs in WriteCursor when you are free to add any type
-        DictKey, // occurs in WriteCursor when the next type must be suitable for a dict key -
+        // Writer states when the next type is still open (not iterating in an array or dict)
+        AnyData, // occurs in Writer when you are free to add any type
+        DictKey, // occurs in Writer when the next type must be suitable for a dict key -
                  // a simple string or numeric type.
 
-        // the following occur in ReadCursor, and in WriteCursor when in the second or higher iteration
+        // the following occur in Reader, and in Writer when in the second or higher iteration
         // of an array or dict where the types must match the first iteration (except inside variants).
 
         // states pertaining to aggregates
@@ -135,22 +135,21 @@ private:
 
 public:
 
-    // a cursor is similar to an iterator, but more tied to the underlying data structure
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
-    class ReadCursor
+    class Reader
     {
     public:
-        ReadCursor(ReadCursor &&other);
-        void operator=(ReadCursor &&other);
-        ReadCursor(const ReadCursor &other) = delete;
-        void operator=(const ReadCursor &other) = delete;
+        Reader(Reader &&other);
+        void operator=(Reader &&other);
+        Reader(const Reader &other) = delete;
+        void operator=(const Reader &other) = delete;
 
-        ~ReadCursor();
+        ~Reader();
 
         bool isValid() const;
 
-        CursorState state() const { return m_state; }
+        IoState state() const { return m_state; }
         cstring stateString() const;
          // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
          // ### will need to fix up any VariantInfo::prevSignature on the stack where prevSignature
@@ -182,7 +181,7 @@ public:
         void beginVariant();
         void endVariant(); // like endArray()
 
-        std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
+        std::vector<IoState> aggregateStack() const; // the aggregates the reader is currently in
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
         // least return garbage.
@@ -204,18 +203,18 @@ public:
         class Private;
         friend class Private;
         friend class ArgumentList;
-        explicit ReadCursor(ArgumentList *al);
-        CursorState doReadPrimitiveType();
-        CursorState doReadString(int lengthPrefixSize);
+        explicit Reader(ArgumentList *al);
+        IoState doReadPrimitiveType();
+        IoState doReadString(int lengthPrefixSize);
         void advanceState();
-        void advanceStateFrom(CursorState expectedState);
+        void advanceStateFrom(IoState expectedState);
         void beginArrayOrDict(bool isDict, bool *isEmpty);
         bool nextArrayOrDictEntry(bool isDict);
 
         Private *d;
 
         // two data members not behind d-pointer for performance reasons, especially inlining
-        CursorState m_state;
+        IoState m_state;
 
         // it is more efficient, in code size and performance, to read the data in advanceState()
         // and store the result for later retrieval in readFoo()
@@ -223,19 +222,19 @@ public:
     };
 
     // TODO: try to share code with ReadIterator
-    class WriteCursor
+    class Writer
     {
     public:
-        WriteCursor(WriteCursor &&other);
-        void operator=(WriteCursor &&other);
-        WriteCursor(const WriteCursor &other) = delete;
-        void operator=(const WriteCursor &other) = delete;
+        Writer(Writer &&other);
+        void operator=(Writer &&other);
+        Writer(const Writer &other) = delete;
+        void operator=(const Writer &other) = delete;
 
-        ~WriteCursor();
+        ~Writer();
 
         bool isValid() const;
 
-        CursorState state() const { return m_state; }
+        IoState state() const { return m_state; }
         cstring stateString() const;
 
         void beginArray(bool isEmpty);
@@ -256,7 +255,7 @@ public:
 
         void finish();
 
-        std::vector<CursorState> aggregateStack() const; // the aggregates the cursor is currently in
+        std::vector<IoState> aggregateStack() const; // the aggregates the writer is currently in
 
         void writeByte(byte b);
         void writeBoolean(bool b);
@@ -276,18 +275,18 @@ public:
         friend class ArgumentList;
         class Private;
         friend class Private;
-        explicit WriteCursor(ArgumentList *al);
+        explicit Writer(ArgumentList *al);
 
-        CursorState doWritePrimitiveType(uint32 alignAndSize);
-        CursorState doWriteString(int lengthPrefixSize);
-        void advanceState(array signatureFragment, CursorState newState);
+        IoState doWritePrimitiveType(uint32 alignAndSize);
+        IoState doWriteString(int lengthPrefixSize);
+        void advanceState(array signatureFragment, IoState newState);
         void beginArrayOrDict(bool isDict, bool isEmpty);
         void nextArrayOrDictEntry(bool isDict);
 
         Private *d;
 
         // two data members not behind d-pointer for performance reasons
-        CursorState m_state;
+        IoState m_state;
 
         // ### check if it makes any performance difference to have this here (writeFoo() should benefit)
         DataUnion m_u;
