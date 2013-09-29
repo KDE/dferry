@@ -210,7 +210,7 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             if (rtt == -1) {
                 break;  // no data for a message that doesn't or can't have a reply
             }
-            return rtt / 1000; // nsecs / 1000 -> microseconds
+            return static_cast<double>(rtt) / 10000000.0; // nsecs / 1E6 -> milliseconds
         }
         case MethodColumn:
             return mr.conversationMethod(m_messages);
@@ -236,7 +236,7 @@ QVariant EavesdropperModel::headerData(int section, Qt::Orientation orientation,
         case TypeColumn:
             return tr("Type");
         case RoundtripTimeColumn:
-            return tr("Latency [us]");
+            return tr("Latency [ms]");
         case MethodColumn:
             return tr("Method");
         case InterfaceColumn:
