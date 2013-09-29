@@ -67,6 +67,7 @@ static tx2::XMLElement *addElement(tx2::XMLNode *xmlNode, const char *type, cons
     tx2::XMLElement *el = xmlNode->GetDocument()->NewElement(type);
     el->SetAttribute("name", name.c_str());
     xmlNode->InsertEndChild(el);
+    return el;
 }
 
 static void xmlizeNode(tx2::XMLNode *el, const IntrospectionNode *node)
