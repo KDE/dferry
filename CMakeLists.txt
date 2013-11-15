@@ -7,6 +7,8 @@ add_definitions(-std=c++11)
 
 option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
 
+include(GNUInstallDirs)
+
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
@@ -64,7 +66,7 @@ set(DSELCLIENT_HEADERS
 add_library(dselclient SHARED ${DSELCLIENT_SOURCES} ${DSELCLIENT_HEADERS})
 target_link_libraries(dselclient dsel ${LIBTINYXML2_LIBRARIES})
 
-install(TARGETS dsel dselclient LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(TARGETS dsel dselclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
 
 add_subdirectory(tests)
 add_subdirectory(utilities)
