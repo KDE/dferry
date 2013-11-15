@@ -51,7 +51,8 @@ RigMainWindow::RigMainWindow()
     KService::Ptr service = KService::serviceByDesktopPath("dselrig_part.desktop");
  
     if (service) {
-        m_part = service->createInstance<KParts::ReadOnlyPart>(0);
+        QString errorMsg;
+        m_part = service->createInstance<KParts::ReadOnlyPart>(0, QVariantList(), &errorMsg);
         if (m_part) {
             // tell the KParts::MainWindow that this is indeed
             // the main widget
@@ -63,7 +64,7 @@ RigMainWindow::RigMainWindow()
             // and integrate the part's GUI with the shell's
             createGUI(m_part);
         } else {
-            qDebug() << "service->createInstance() failed!";
+            qDebug() << "service->createInstance() failed:" << errorMsg;
             return;
         }
     } else {
