@@ -210,7 +210,7 @@ QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
             if (rtt == -1) {
                 break;  // no data for a message that doesn't or can't have a reply
             }
-            return static_cast<double>(rtt) / 10000000.0; // nsecs / 1E6 -> milliseconds
+            return static_cast<double>(rtt) / 1000000.0; // nsecs / 1E6 -> milliseconds
         }
         case MethodColumn:
             return mr.conversationMethod(m_messages);
