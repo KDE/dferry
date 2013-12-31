@@ -41,9 +41,9 @@ public:
     ~LocalSocket();
 
     // pure virtuals from IConnection
-    virtual int write(array data);
+    virtual int write(chunk data);
     virtual int availableBytesForReading();
-    virtual array read(byte *buffer, int maxSize);
+    virtual chunk read(byte *buffer, int maxSize);
     virtual void close();
     virtual bool isOpen();
     virtual int fileDescriptor() const;

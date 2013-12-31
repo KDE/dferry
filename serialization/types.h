@@ -36,12 +36,12 @@ typedef unsigned int uint32;
 typedef long long int int64;
 typedef unsigned long long int uint64;
 
-struct array
+struct chunk
 {
-    array() : begin(0), length(0) {}
-    array(byte *b, int l) : begin(b), length(l) {}
-    array(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
-    array(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
+    chunk() : begin(0), length(0) {}
+    chunk(byte *b, int l) : begin(b), length(l) {}
+    chunk(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
+    chunk(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
     byte *begin;
     int length;
 };
@@ -54,7 +54,7 @@ struct cstring
     cstring(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
     cstring(const char *b);
     byte *begin;
-    // length does not include terminating null! (this is okay because array does not
+    // length does not include terminating null! (this is okay because cstring does not
     // own the memory, so the accounting usually doesn't get screwed up)
     int length;
 };

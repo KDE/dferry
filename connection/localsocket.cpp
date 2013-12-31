@@ -85,7 +85,7 @@ void LocalSocket::close()
     m_fd = -1;
 }
 
-int LocalSocket::write(array a)
+int LocalSocket::write(chunk a)
 {
     if (m_fd < 0) {
         return 0; // TODO -1?
@@ -167,9 +167,9 @@ int LocalSocket::availableBytesForReading()
     return available;
 }
 
-array LocalSocket::read(byte *buffer, int maxSize)
+chunk LocalSocket::read(byte *buffer, int maxSize)
 {
-    array ret;
+    chunk ret;
     if (maxSize <= 0) {
         return ret;
     }

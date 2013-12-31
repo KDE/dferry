@@ -46,7 +46,7 @@ public:
     int m_readerCount;
     bool m_hasWriter;
     cstring m_signature;
-    array m_data;
+    chunk m_data;
 };
 
 // Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
@@ -133,7 +133,7 @@ ArgumentList::ArgumentList()
 {
 }
 
-ArgumentList::ArgumentList(cstring signature, array data, bool isByteSwapped)
+ArgumentList::ArgumentList(cstring signature, chunk data, bool isByteSwapped)
    : d(new Private)
 {
     d->m_isByteSwapped = isByteSwapped;
@@ -174,7 +174,7 @@ cstring ArgumentList::signature() const
     return d->m_signature;
 }
 
-array ArgumentList::data() const
+chunk ArgumentList::data() const
 {
     return d->m_data;
 }
@@ -570,7 +570,7 @@ public:
     ArgumentList *m_argList;
     Nesting m_nesting;
     cstring m_signature;
-    array m_data;
+    chunk m_data;
     int m_signaturePosition;
     int m_dataPosition;
     int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
@@ -655,7 +655,7 @@ cstring ArgumentList::Reader::stateString() const
     return printableState(m_state);
 }
 
-void ArgumentList::Reader::replaceData(array data)
+void ArgumentList::Reader::replaceData(chunk data)
 {
     VALID_IF(data.length >= d->m_dataPosition);
 
@@ -1482,7 +1482,7 @@ ArgumentList::IoState ArgumentList::Writer::doWriteString(int lengthPrefixSize)
     return m_state;
 }
 
-void ArgumentList::Writer::advanceState(array signatureFragment, IoState newState)
+void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newState)
 {
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
@@ -1697,9 +1697,9 @@ void ArgumentList::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
         }
     }
     if (isDict) {
-        advanceState(array("a{", strlen("a{")), BeginDict);
+        advanceState(chunk("a{", strlen("a{")), BeginDict);
     } else {
-        advanceState(array("a", strlen("a")), BeginArray);
+        advanceState(chunk("a", strlen("a")), BeginArray);
     }
 }
 
@@ -1743,7 +1743,7 @@ void ArgumentList::Writer::nextArrayEntry()
 
 void ArgumentList::Writer::endArray()
 {
-    advanceState(array(), EndArray);
+    advanceState(chunk(), EndArray);
 }
 
 void ArgumentList::Writer::beginDict(bool isEmpty)
@@ -1758,27 +1758,27 @@ void ArgumentList::Writer::nextDictEntry()
 
 void ArgumentList::Writer::endDict()
 {
-    advanceState(array("}", strlen("}")), EndDict);
+    advanceState(chunk("}", strlen("}")), EndDict);
 }
 
 void ArgumentList::Writer::beginStruct()
 {
-    advanceState(array("(", strlen("(")), BeginStruct);
+    advanceState(chunk("(", strlen("(")), BeginStruct);
 }
 
 void ArgumentList::Writer::endStruct()
 {
-    advanceState(array(")", strlen(")")), EndStruct);
+    advanceState(chunk(")", strlen(")")), EndStruct);
 }
 
 void ArgumentList::Writer::beginVariant()
 {
-    advanceState(array("v", strlen("v")), BeginVariant);
+    advanceState(chunk("v", strlen("v")), BeginVariant);
 }
 
 void ArgumentList::Writer::endVariant()
 {
-    advanceState(array(), EndVariant);
+    advanceState(chunk(), EndVariant);
 }
 
 struct ArrayLengthField
@@ -1862,7 +1862,7 @@ void ArgumentList::Writer::finish()
     d->m_variantSignatures.clear();
 
     d->m_argList->d->m_signature = d->m_signature;
-    d->m_argList->d->m_data = array(buffer, bufferPos);
+    d->m_argList->d->m_data = chunk(buffer, bufferPos);
 }
 
 std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
@@ -1878,80 +1878,80 @@ std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
 void ArgumentList::Writer::writeByte(byte b)
 {
     m_u.Byte = b;
-    advanceState(array("y", strlen("y")), Byte);
+    advanceState(chunk("y", strlen("y")), Byte);
 }
 
 void ArgumentList::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;
-    advanceState(array("b", strlen("b")), Boolean);
+    advanceState(chunk("b", strlen("b")), Boolean);
 }
 
 void ArgumentList::Writer::writeInt16(int16 i)
 {
     m_u.Int16 = i;
-    advanceState(array("n", strlen("n")), Int16);
+    advanceState(chunk("n", strlen("n")), Int16);
 }
 
 void ArgumentList::Writer::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
-    advanceState(array("q", strlen("q")), Uint16);
+    advanceState(chunk("q", strlen("q")), Uint16);
 }
 
 void ArgumentList::Writer::writeInt32(int32 i)
 {
     m_u.Int32 = i;
-    advanceState(array("i", strlen("i")), Int32);
+    advanceState(chunk("i", strlen("i")), Int32);
 }
 
 void ArgumentList::Writer::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
-    advanceState(array("u", strlen("u")), Uint32);
+    advanceState(chunk("u", strlen("u")), Uint32);
 }
 
 void ArgumentList::Writer::writeInt64(int64 i)
 {
     m_u.Int64 = i;
-    advanceState(array("x", strlen("x")), Int64);
+    advanceState(chunk("x", strlen("x")), Int64);
 }
 
 void ArgumentList::Writer::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
-    advanceState(array("t", strlen("t")), Uint64);
+    advanceState(chunk("t", strlen("t")), Uint64);
 }
 
 void ArgumentList::Writer::writeDouble(double d)
 {
     m_u.Double = d;
-    advanceState(array("d", strlen("d")), Double);
+    advanceState(chunk("d", strlen("d")), Double);
 }
 
 void ArgumentList::Writer::writeString(cstring string)
 {
     m_u.String.begin = string.begin;
     m_u.String.length = string.length;
-    advanceState(array("s", strlen("s")), String);
+    advanceState(chunk("s", strlen("s")), String);
 }
 
 void ArgumentList::Writer::writeObjectPath(cstring objectPath)
 {
     m_u.String.begin = objectPath.begin;
     m_u.String.length = objectPath.length;
-    advanceState(array("o", strlen("o")), ObjectPath);
+    advanceState(chunk("o", strlen("o")), ObjectPath);
 }
 
 void ArgumentList::Writer::writeSignature(cstring signature)
 {
     m_u.String.begin = signature.begin;
     m_u.String.length = signature.length;
-    advanceState(array("g", strlen("g")), Signature);
+    advanceState(chunk("g", strlen("g")), Signature);
 }
 
 void ArgumentList::Writer::writeUnixFd(uint32 fd)
 {
     m_u.Uint32 = fd;
-    advanceState(array("h", strlen("h")), UnixFd);
+    advanceState(chunk("h", strlen("h")), UnixFd);
 }

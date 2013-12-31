@@ -31,7 +31,7 @@
 
 // Handy helpers
 
-static void printArray(array a)
+static void printChunk(chunk a)
 {
     std::cout << "Array: ";
     for (int i = 0; i < a.length; i++) {
@@ -40,19 +40,19 @@ static void printArray(array a)
     std::cout << '\n';
 }
 
-static bool arraysEqual(array a1, array a2)
+static bool chunksEqual(chunk a1, chunk a2)
 {
     if (a1.length != a2.length) {
         std::cout << "Different lengths.\n";
-        printArray(a1);
-        printArray(a2);
+        printChunk(a1);
+        printChunk(a2);
         return false;
     }
     for (int i = 0; i < a1.length; i++) {
         if (a1.begin[i] != a2.begin[i]) {
             std::cout << "Different content.\n";
-            printArray(a1);
-            printArray(a2);
+            printChunk(a1);
+            printChunk(a2);
             return false;
         }
     }
@@ -61,14 +61,14 @@ static bool arraysEqual(array a1, array a2)
 
 static bool stringsEqual(cstring s1, cstring s2)
 {
-    return arraysEqual(array(s1.begin, s1.length), array(s2.begin, s2.length));
+    return chunksEqual(chunk(s1.begin, s1.length), chunk(s2.begin, s2.length));
 }
 
 static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int dataIncrement, bool debugPrint)
 {
     cstring signature = arg_in.signature();
-    array data = arg_in.data();
-    array shortData;
+    chunk data = arg_in.data();
+    chunk shortData;
 
     ArgumentList arg(signature, shortData);
 
@@ -96,7 +96,7 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
             TEST(shortData.length < data.length);
             // reallocate shortData to test that Reader can handle the data moving around - and
             // allocate the new one before destroying the old one to make sure that the pointer differs
-            array oldData = shortData;
+            chunk oldData = shortData;
             shortData.length = std::min(shortData.length + dataIncrement, data.length);
             shortData.begin = reinterpret_cast<byte *>(malloc(shortData.length));
             for (int i = 0; i < shortData.length; i++) {
@@ -236,16 +236,16 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
     TEST(ArgumentList::isSignatureValid(copySignature));
     TEST(stringsEqual(argSignature, copySignature));
 
-    // TODO when it's wired up between Reader and ArgumentList: array argData = arg.data();
-    array argData = arg_in.data();
+    // TODO when it's wired up between Reader and ArgumentList: chunk argData = arg.data();
+    chunk argData = arg_in.data();
 
-    array copyData = copy.data();
+    chunk copyData = copy.data();
     TEST(argData.length == copyData.length);
-    if (debugPrint && !arraysEqual(argData, copyData)) {
-        printArray(argData);
-        printArray(copyData);
+    if (debugPrint && !chunksEqual(argData, copyData)) {
+        printChunk(argData);
+        printChunk(copyData);
     }
-    TEST(arraysEqual(argData, copyData));
+    TEST(chunksEqual(argData, copyData));
 
     if (shortData.begin) {
         free(shortData.begin);
@@ -456,25 +456,25 @@ struct LengthPrefixedData
 
 static void test_roundtrip()
 {
-    doRoundtrip(ArgumentList(cstring(""), array()));
+    doRoundtrip(ArgumentList(cstring(""), chunk()));
     {
         byte data[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-        doRoundtrip(ArgumentList(cstring("i"), array(data, 4)));
-        doRoundtrip(ArgumentList(cstring("yyyy"), array(data, 4)));
-        doRoundtrip(ArgumentList(cstring("iy"), array(data, 5)));
-        doRoundtrip(ArgumentList(cstring("iiy"), array(data, 9)));
-        doRoundtrip(ArgumentList(cstring("nquy"), array(data, 9)));
-        doRoundtrip(ArgumentList(cstring("unqy"), array(data, 9)));
-        doRoundtrip(ArgumentList(cstring("nqy"), array(data, 5)));
-        doRoundtrip(ArgumentList(cstring("qny"), array(data, 5)));
-        doRoundtrip(ArgumentList(cstring("yyny"), array(data, 5)));
-        doRoundtrip(ArgumentList(cstring("qyyy"), array(data, 5)));
-        doRoundtrip(ArgumentList(cstring("d"), array(data, 8)));
-        doRoundtrip(ArgumentList(cstring("dy"), array(data, 9)));
-        doRoundtrip(ArgumentList(cstring("x"), array(data, 8)));
-        doRoundtrip(ArgumentList(cstring("xy"), array(data, 9)));
-        doRoundtrip(ArgumentList(cstring("t"), array(data, 8)));
-        doRoundtrip(ArgumentList(cstring("ty"), array(data, 9)));
+        doRoundtrip(ArgumentList(cstring("i"), chunk(data, 4)));
+        doRoundtrip(ArgumentList(cstring("yyyy"), chunk(data, 4)));
+        doRoundtrip(ArgumentList(cstring("iy"), chunk(data, 5)));
+        doRoundtrip(ArgumentList(cstring("iiy"), chunk(data, 9)));
+        doRoundtrip(ArgumentList(cstring("nquy"), chunk(data, 9)));
+        doRoundtrip(ArgumentList(cstring("unqy"), chunk(data, 9)));
+        doRoundtrip(ArgumentList(cstring("nqy"), chunk(data, 5)));
+        doRoundtrip(ArgumentList(cstring("qny"), chunk(data, 5)));
+        doRoundtrip(ArgumentList(cstring("yyny"), chunk(data, 5)));
+        doRoundtrip(ArgumentList(cstring("qyyy"), chunk(data, 5)));
+        doRoundtrip(ArgumentList(cstring("d"), chunk(data, 8)));
+        doRoundtrip(ArgumentList(cstring("dy"), chunk(data, 9)));
+        doRoundtrip(ArgumentList(cstring("x"), chunk(data, 8)));
+        doRoundtrip(ArgumentList(cstring("xy"), chunk(data, 9)));
+        doRoundtrip(ArgumentList(cstring("t"), chunk(data, 8)));
+        doRoundtrip(ArgumentList(cstring("ty"), chunk(data, 9)));
     }
     {
         LengthPrefixedData testArray = {0};
@@ -484,19 +484,19 @@ static void test_roundtrip()
         byte *testData = reinterpret_cast<byte *>(&testArray);
 
         testArray.length = 1;
-        doRoundtrip(ArgumentList(cstring("ay"), array(testData, 5)));
+        doRoundtrip(ArgumentList(cstring("ay"), chunk(testData, 5)));
         testArray.length = 4;
-        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 8)));
+        doRoundtrip(ArgumentList(cstring("ai"), chunk(testData, 8)));
         testArray.length = 8;
-        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 12)));
+        doRoundtrip(ArgumentList(cstring("ai"), chunk(testData, 12)));
         testArray.length = 64;
-        doRoundtrip(ArgumentList(cstring("ai"), array(testData, 68)));
-        doRoundtrip(ArgumentList(cstring("an"), array(testData, 68)));
+        doRoundtrip(ArgumentList(cstring("ai"), chunk(testData, 68)));
+        doRoundtrip(ArgumentList(cstring("an"), chunk(testData, 68)));
 
         testArray.data[0] = 0; testArray.data[1] = 0; // zero out padding
         testArray.data[2] = 0; testArray.data[3] = 0;
         testArray.length = 56;
-        doRoundtrip(ArgumentList(cstring("ad"), array(testData, 64)));
+        doRoundtrip(ArgumentList(cstring("ad"), chunk(testData, 64)));
     }
     {
         LengthPrefixedData testString;
@@ -506,7 +506,7 @@ static void test_roundtrip()
         testString.data[200] = '\0';
         testString.length = 200;
         byte *testData = reinterpret_cast<byte *>(&testString);
-        doRoundtrip(ArgumentList(cstring("s"), array(testData, 205)));
+        doRoundtrip(ArgumentList(cstring("s"), chunk(testData, 205)));
     }
     {
         LengthPrefixedData testDict;
@@ -517,7 +517,7 @@ static void test_roundtrip()
         testDict.data[4] = 23;
         testDict.data[6] = 42;
         byte *testData = reinterpret_cast<byte *>(&testDict);
-        doRoundtrip(ArgumentList(cstring("a{yy}"), array(testData, 10)));
+        doRoundtrip(ArgumentList(cstring("a{yy}"), chunk(testData, 10)));
     }
     {
         byte testData[36] = {
@@ -531,7 +531,7 @@ static void test_roundtrip()
             1, 2, 3, 4, 5, 6, 7, 8, // the double
             20, 21, 22, 23 // the int (not part of the variant)
         };
-        doRoundtrip(ArgumentList(cstring("vi"), array(testData, 36)));
+        doRoundtrip(ArgumentList(cstring("vi"), chunk(testData, 36)));
     }
 }
 

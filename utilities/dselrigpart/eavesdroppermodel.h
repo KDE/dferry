@@ -46,7 +46,7 @@ struct MessageRecord
     {}
 
     QString type() const;
-    // whether this is a call with no reply
+    // whether this is a call that should get a reply, with no reply
     bool isAwaitingReply() const;
     // whether this is a reply that we've seen the call for
     bool isReplyToKnownCall() const;

@@ -43,7 +43,7 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     connection->addClient(this);
     setIsReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
-    connection->write(array(nullBuf, 1));
+    connection->write(chunk(nullBuf, 1));
 
     // no idea why the uid is first encoded to ascii and the ascii to hex...
     uid_t uid = geteuid();
@@ -51,7 +51,7 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     uidDecimal << uid;
     string extLine = "AUTH EXTERNAL " + hexEncode(uidDecimal.str()) + "\r\n";
     cout << extLine;
-    connection->write(array(extLine.c_str(), extLine.length()));
+    connection->write(chunk(extLine.c_str(), extLine.length()));
     m_state = ExpectOkState;
 }
 
@@ -89,7 +89,7 @@ bool AuthNegotiator::readLine()
     }
     while (connection()->availableBytesForReading()) {
         byte readBuf[1];
-        array in = connection()->read(readBuf, 1);
+        chunk in = connection()->read(readBuf, 1);
         assert(in.length == 1);
         m_line += in.begin[0];
 
@@ -119,14 +119,14 @@ void AuthNegotiator::advanceState()
         // TODO check the OK
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
         cout << negotiateLine.begin;
-        connection()->write(array(negotiateLine.begin, negotiateLine.length));
+        connection()->write(chunk(negotiateLine.begin, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
         cout << beginLine.begin;
-        connection()->write(array(beginLine.begin, beginLine.length));
+        connection()->write(chunk(beginLine.begin, beginLine.length));
         m_state = AuthenticatedState;
         break; }
     default:

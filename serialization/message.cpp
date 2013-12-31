@@ -358,7 +358,7 @@ void Message::notifyConnectionReadyRead()
     }
     bool isError = false;
     byte buffer[4096];
-    array in;
+    chunk in;
     do {
         int readMax = 4096;
         if (!m_headerLength) {
@@ -372,7 +372,7 @@ void Message::notifyConnectionReadyRead()
 
         const bool headersDone = m_headerLength > 0 && m_buffer.size() >= m_headerLength;
 
-        array in = connection()->read(buffer, readMax);
+        chunk in = connection()->read(buffer, readMax);
         assert(in.length > 0);
 
         for (int i = 0; i < in.length; i++) {
@@ -395,7 +395,7 @@ void Message::notifyConnectionReadyRead()
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
             std::string sig = signature();
-            array data(&m_buffer.front() + m_headerLength, m_bodyLength);
+            chunk data(&m_buffer.front() + m_headerLength, m_bodyLength);
             m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), data, m_isByteSwapped);
             assert(!isError);
             connection()->removeClient(this);
@@ -425,7 +425,7 @@ void Message::notifyConnectionReadyWrite()
     }
     int written = 0;
     do {
-        written = connection()->write(array(&m_buffer.front(), m_buffer.size())); // HACK
+        written = connection()->write(chunk(&m_buffer.front(), m_buffer.size())); // HACK
         setIsWriteNotificationEnabled(false);
         m_state = Serialized;
         m_buffer.clear();
@@ -503,7 +503,7 @@ bool Message::deserializeVariableHeaders()
     // use ArgumentList to parse the variable header fields
     // HACK: the fake first int argument is there to start the ArgumentList's data 8 byte aligned
     byte *base = &m_buffer.front() + s_properFixedHeaderLength - sizeof(int32);
-    array headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
+    chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
     cstring varHeadersSig("ia(yv)");
     ArgumentList argList(varHeadersSig, headerData, m_isByteSwapped);
 

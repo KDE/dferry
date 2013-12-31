@@ -43,8 +43,8 @@ public:
     void removeClient(IConnectionClient *client);
 
     virtual int availableBytesForReading() = 0;
-    virtual array read(byte *buffer, int maxSize) = 0;
-    virtual int write(array data) = 0;
+    virtual chunk read(byte *buffer, int maxSize) = 0;
+    virtual int write(chunk data) = 0;
     virtual void close() = 0;
 
     virtual bool isOpen() = 0;

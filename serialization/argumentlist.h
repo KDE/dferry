@@ -35,7 +35,7 @@ class ArgumentList
 public:
     ArgumentList(); // constructs an empty argument list
      // constructs an argument list to deserialize data in @p data with signature @p signature
-    ArgumentList(cstring signature, array data, bool isByteSwapped = false);
+    ArgumentList(cstring signature, chunk data, bool isByteSwapped = false);
 
     // copying needs special treatment due to the d-pointer
     ArgumentList(const ArgumentList &other);
@@ -51,7 +51,7 @@ public:
     bool isWriting() const;
 
     cstring signature() const;
-    array data() const;
+    chunk data() const;
 
     class Reader;
     class Writer;
@@ -154,7 +154,7 @@ public:
          // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
          // ### will need to fix up any VariantInfo::prevSignature on the stack where prevSignature
          //     is inside m_data; length will still work but begin will be outdated.
-        void replaceData(array data); // TODO move this to ArgumentList
+        void replaceData(chunk data); // TODO move this to ArgumentList
 
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
@@ -279,7 +279,7 @@ public:
 
         IoState doWritePrimitiveType(uint32 alignAndSize);
         IoState doWriteString(int lengthPrefixSize);
-        void advanceState(array signatureFragment, IoState newState);
+        void advanceState(chunk signatureFragment, IoState newState);
         void beginArrayOrDict(bool isDict, bool isEmpty);
         void nextArrayOrDictEntry(bool isDict);
 
