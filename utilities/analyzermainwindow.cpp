@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "rigmainwindow.h"
+#include "analyzermainwindow.h"
 
 #include <kaction.h>
 #include <kactioncollection.h>
@@ -40,7 +40,7 @@
 
 #include <QDebug>
 
-RigMainWindow::RigMainWindow()
+AnalyzerMainWindow::AnalyzerMainWindow()
    : KParts::MainWindow()
 {
  
@@ -48,7 +48,7 @@ RigMainWindow::RigMainWindow()
     setupActions();
  
     //query the .desktop file to load the requested Part
-    KService::Ptr service = KService::serviceByDesktopPath("dselrig_part.desktop");
+    KService::Ptr service = KService::serviceByDesktopPath("dferanalyzer_part.desktop");
  
     if (service) {
         QString errorMsg;
@@ -70,7 +70,7 @@ RigMainWindow::RigMainWindow()
     } else {
         // if we couldn't find our Part, we exit since the Shell by
         // itself can't do anything useful
-        KMessageBox::error(this, "service dselrig_part.desktop not found");
+        KMessageBox::error(this, "service dferanalyzer_part.desktop not found");
         qApp->quit();
         // we return here, cause qApp->quit() only means "exit the
         // next time we enter the event loop...
@@ -78,22 +78,22 @@ RigMainWindow::RigMainWindow()
     }
 }
  
-RigMainWindow::~RigMainWindow()
+AnalyzerMainWindow::~AnalyzerMainWindow()
 {
 }
  
-void RigMainWindow::load(const KUrl& url)
+void AnalyzerMainWindow::load(const KUrl& url)
 {
     m_part->openUrl(url);
 }
  
-void RigMainWindow::setupActions()
+void AnalyzerMainWindow::setupActions()
 {
     KStandardAction::open(this, SLOT(load()), actionCollection());
     KStandardAction::quit(qApp, SLOT(closeAllWindows()), actionCollection());
 }
  
-void RigMainWindow::load()
+void AnalyzerMainWindow::load()
 {
     load(KFileDialog::getOpenUrl());
 }

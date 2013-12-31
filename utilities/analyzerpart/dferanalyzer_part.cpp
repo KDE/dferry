@@ -21,34 +21,26 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef RIGMAINWINDOW_H
-#define RIGMAINWINDOW_H
- 
-#include <kparts/mainwindow.h>  
- 
-class RigMainWindow : public KParts::MainWindow
+#include "dferanalyzer_part.h"
+
+#include "mainwidget.h"
+
+#include <kdemacros.h>
+#include <kparts/genericfactory.h>
+
+K_PLUGIN_FACTORY(DferAnalyzerPartFactory, registerPlugin<DferAnalyzerPart>();)  // produce a factory
+K_EXPORT_PLUGIN(DferAnalyzerPartFactory("DferAnalyzer", "DferAnalyzer"))
+
+DferAnalyzerPart::DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &)
+   : KParts::ReadOnlyPart(parent)
 {
-    Q_OBJECT
-public:
-    RigMainWindow();
-    virtual ~RigMainWindow();
- 
-public slots:
-    /**
-     * Use this method to load whatever file/URL you have
-     */
-    void load(const KUrl& url);
- 
-    /**
-     * Use this method to display an openUrl dialog and
-     * load the URL that gets entered
-     */
-    void load();
- 
-private:
-    void setupActions();
- 
-    KParts::ReadOnlyPart *m_part;
-};
- 
-#endif // RIGMAINWINDOW_H
+    KGlobal::locale()->insertCatalog("DferAnalyzer");
+    setComponentData(DferAnalyzerPartFactory::componentData());
+
+    QWidget *mainWidget = new MainWidget();
+    setWidget(mainWidget);
+}
+
+DferAnalyzerPart::~DferAnalyzerPart()
+{
+}

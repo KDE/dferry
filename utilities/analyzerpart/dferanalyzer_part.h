@@ -21,25 +21,20 @@
    http://www.mozilla.org/MPL/
 */
 
-#include <KApplication>
-#include <KAboutData>
-#include <KCmdLineArgs>
-#include <KUrl>
+#ifndef DFERANALYZER_PART_H
+#define DFERANALYZER_PART_H
 
-#include "rigmainwindow.h"
+#include <kparts/part.h>
+#include <kparts/factory.h>
 
-int main (int argc, char *argv[])
+class DferAnalyzerPart : public KParts::ReadOnlyPart
 {
-    KAboutData aboutData("dselrig", "dselrig", ki18n("DselRig"), "0.4",
-                         ki18n("A MainWindow for a DselRigPart."),
-                         KAboutData::License_GPL,
-                         ki18n("Copyright 2013 Andreas Hartmetz"));
-    KCmdLineArgs::init(argc, argv, &aboutData);
+    Q_OBJECT
+public:
+    DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &);
+    ~DferAnalyzerPart();
 
-    KApplication app;
+    bool openFile() { return true; };
+};
 
-    RigMainWindow *mw = new RigMainWindow();
-    mw->show();
-
-    return app.exec();
-}
+#endif // DFERANALYZER_PART_H

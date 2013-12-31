@@ -21,26 +21,26 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "dselrig_part.h"
+#include <KApplication>
+#include <KAboutData>
+#include <KCmdLineArgs>
+#include <KUrl>
 
-#include "mainwidget.h"
+#include "analyzermainwindow.h"
 
-#include <kdemacros.h>
-#include <kparts/genericfactory.h>
-
-K_PLUGIN_FACTORY(DselRigPartFactory, registerPlugin<DselRigPart>();)  // produce a factory
-K_EXPORT_PLUGIN(DselRigPartFactory("DselRig", "DselRig"))
-
-DselRigPart::DselRigPart(QWidget *parentWidget, QObject *parent, const QVariantList &)
-   : KParts::ReadOnlyPart(parent)
+int main (int argc, char *argv[])
 {
-    KGlobal::locale()->insertCatalog("DselRig");
-    setComponentData(DselRigPartFactory::componentData());
+    KAboutData aboutData("dfer-analyzer", "dfer-analyzer",
+                         ki18n("Dferry Analyzer"), "0.4",
+                         ki18n("A MainWindow for a DferAnalyzerPart."),
+                         KAboutData::License_GPL,
+                         ki18n("Copyright 2013 Andreas Hartmetz"));
+    KCmdLineArgs::init(argc, argv, &aboutData);
 
-    QWidget *mainWidget = new MainWidget();
-    setWidget(mainWidget);
-}
+    KApplication app;
 
-DselRigPart::~DselRigPart()
-{
+    AnalyzerMainWindow *mw = new AnalyzerMainWindow();
+    mw->show();
+
+    return app.exec();
 }

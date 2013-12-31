@@ -21,20 +21,34 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef DSELRIG_PART_H
-#define DSELRIG_PART_H
-
-#include <kparts/part.h>
-#include <kparts/factory.h>
-
-class DselRigPart : public KParts::ReadOnlyPart
+#ifndef ANALYZERMAINWINDOW_H
+#define ANALYZERMAINWINDOW_H
+ 
+#include <kparts/mainwindow.h>  
+ 
+class AnalyzerMainWindow : public KParts::MainWindow
 {
     Q_OBJECT
 public:
-    DselRigPart(QWidget *parentWidget, QObject *parent, const QVariantList &);
-    ~DselRigPart();
-
-    bool openFile() { return true; };
+    AnalyzerMainWindow();
+    virtual ~AnalyzerMainWindow();
+ 
+public slots:
+    /**
+     * Use this method to load whatever file/URL you have
+     */
+    void load(const KUrl& url);
+ 
+    /**
+     * Use this method to display an openUrl dialog and
+     * load the URL that gets entered
+     */
+    void load();
+ 
+private:
+    void setupActions();
+ 
+    KParts::ReadOnlyPart *m_part;
 };
-
-#endif // DSELRIG_PART_H
+ 
+#endif // ANALYZERMAINWINDOW_H

@@ -1,11 +1,11 @@
-project(d-sel)
+project(dferry)
 
 cmake_minimum_required(VERSION 2.6.2 FATAL_ERROR)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 add_definitions(-std=c++11)
 
-option(DSEL_BUILD_DSELRIG "Build the dselrig bus monitor GUI" TRUE)
+option(DFERRY_BUILD_ANALYZER "Build the dfer-analyzer bus analyzer GUI" TRUE)
 
 include(GNUInstallDirs)
 
@@ -16,7 +16,7 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/connection
                     ${CMAKE_SOURCE_DIR}/serialization)
 
-set(DSEL_SOURCES
+set(DFER_SOURCES
     buslogic/itransceiverclient.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
@@ -32,7 +32,7 @@ set(DSEL_SOURCES
     serialization/message.cpp
     serialization/types.cpp)
 
-set(DSEL_HEADERS
+set(DFER_HEADERS
     buslogic/itransceiverclient.h
     buslogic/transceiver.h
     connection/authnegotiator.h
@@ -51,22 +51,22 @@ set(DSEL_HEADERS
     serialization/message.h
     serialization/types.h)
 
-add_library(dsel SHARED ${DSEL_SOURCES} ${DSEL_HEADERS})
+add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 
 
-find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dselclient
+find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
 include_directories(${LIBTINYXML2_INCLUDE_DIRS})
 
-set(DSELCLIENT_SOURCES
+set(DFERCLIENT_SOURCES
     client/introspection.h)
 
-set(DSELCLIENT_HEADERS
+set(DFERCLIENT_HEADERS
     client/introspection.cpp)
 
-add_library(dselclient SHARED ${DSELCLIENT_SOURCES} ${DSELCLIENT_HEADERS})
-target_link_libraries(dselclient dsel ${LIBTINYXML2_LIBRARIES})
+add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
+target_link_libraries(dferclient dfer ${LIBTINYXML2_LIBRARIES})
 
-install(TARGETS dsel dselclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
+install(TARGETS dfer dferclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
 
 add_subdirectory(tests)
 add_subdirectory(utilities)

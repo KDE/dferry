@@ -1,7 +1,7 @@
 MACRO(SERIALIZATIONTESTS)
     FOREACH(_testname ${ARGN})
         add_executable(tst_${_testname} tst_${_testname}.cpp)
-        target_link_libraries(tst_${_testname} testutil dsel)
+        target_link_libraries(tst_${_testname} testutil dfer)
     ENDFOREACH(_testname)
 ENDMACRO(SERIALIZATIONTESTS)
 
