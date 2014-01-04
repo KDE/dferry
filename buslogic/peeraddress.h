@@ -21,31 +21,47 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef PATHFINDER_H
-#define PATHFINDER_H
+#ifndef PEERADDRESS_H
+#define PEERADDRESS_H
 
 #include <string>
 
-struct SessionBusInfo
-{
-    SessionBusInfo();
-    explicit SessionBusInfo(std::string spec);
+// I think we don't need to bother with subclasses, which will add boilerplate
+// while on the other hand all-in-one isn't particularly easy to misuse.
 
-    enum AddressType {
-        InvalidAddress = 0,
-        LocalSocketFile,
-        AbstractLocalSocket
-        // TODO more
-    };
-    AddressType addressType;
-    std::string path;
-};
-
-// this class knows fixed server addresses and finds variable ones
-class PathFinder
+class PeerAddress
 {
 public:
-    static SessionBusInfo sessionBusInfo();
+    enum PeerType
+    {
+        NoPeer = 0,
+        SystemBus,
+        SessionBus,
+        DirectConnection
+    };
+
+    enum SocketType
+    {
+        NoSocket = 0,
+        UnixSocket,
+        AbstractUnixSocket,
+        TcpSocket
+    };
+
+    PeerAddress();
+    // Intentionally not explicit; it resolves the details of a bus address
+    PeerAddress(PeerType bus);
+    ~PeerAddress();
+
+    PeerType peerType() const;
+    SocketType socketType() const;
+    std::string path() const;
+    int port() const; // only for TcpSocket
+    std::string guid() const;
+
+private:
+    class Private;
+    Private *d;
 };
 
 #endif

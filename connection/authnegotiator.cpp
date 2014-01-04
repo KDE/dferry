@@ -25,7 +25,6 @@
 
 #include "icompletionclient.h"
 #include "iconnection.h"
-#include "pathfinder.h"
 #include "stringtools.h"
 
 #include <cassert>

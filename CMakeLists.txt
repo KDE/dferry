@@ -18,6 +18,7 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
 
 set(DFER_SOURCES
     buslogic/itransceiverclient.cpp
+    buslogic/peeraddress.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
     connection/epolleventdispatcher.cpp
@@ -25,7 +26,6 @@ set(DFER_SOURCES
     connection/iconnectionclient.cpp
     connection/ieventdispatcher.cpp
     connection/localsocket.cpp
-    connection/pathfinder.cpp
     connection/stringtools.cpp
     serialization/argumentlist.cpp
     serialization/icompletionclient.cpp
@@ -34,6 +34,7 @@ set(DFER_SOURCES
 
 set(DFER_HEADERS
     buslogic/itransceiverclient.h
+    buslogic/peeraddress.h
     buslogic/transceiver.h
     connection/authnegotiator.h
     connection/epolleventdispatcher.h
@@ -42,7 +43,6 @@ set(DFER_HEADERS
     connection/iconnectionclient.h
     connection/ieventdispatcher.h
     connection/localsocket.h
-    connection/pathfinder.h
     connection/platform.h
     connection/stringtools.h
     serialization/argumentlist.h

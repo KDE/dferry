@@ -31,6 +31,7 @@
 
 class IConnectionClient;
 class IEventDispatcher;
+class PeerAddress;
 
 class IConnection
 {
@@ -55,6 +56,8 @@ public:
 
     virtual void setEventDispatcher(IEventDispatcher *ed);
     virtual IEventDispatcher *eventDispatcher() const;
+
+    static IConnection *create(const PeerAddress &address);
 
 protected:
     friend class IEventDispatcher;

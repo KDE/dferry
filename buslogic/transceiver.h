@@ -47,6 +47,8 @@
  * state, a certain pattern in the send and receive queues or some such)
  */
 
+#include "peeraddress.h"
+
 class AuthNegotiator;
 class IConnection;
 class IEventDispatcher;
@@ -64,18 +66,22 @@ public:
 
     // TODO Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer, enum ThreadAffinity);
     // this sets up a connection ready to use
-    Transceiver(IEventDispatcher *dispatcher);
+
+    // convenience, for connecting to the session or system bus
+    Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer);
     ~Transceiver();
 
     Message *sendAndAwaitReply(Message *m);
     void sendAsync(Message *m);
 
+    PeerAddress peerAddress() const;
     IConnection *connection() const; // probably only needed for debugging
 
     ITransceiverClient *client() const;
     void setClient(ITransceiverClient *client);
 
 private:
+    void connect();
     void enqueueSendFromOtherThread(Message *m);
     void addReplyFromOtherThread(Message *m);
     virtual void notifyCompletion(void *task);
@@ -94,6 +100,7 @@ private:
     IConnection *m_connection;
     Transceiver *m_mainThreadTransceiver;
 
+    PeerAddress m_peerAddress;
     AuthNegotiator *m_authNegotiator;
     IEventDispatcher *m_eventDispatcher;
 };

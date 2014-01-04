@@ -25,8 +25,11 @@
 
 #include "iconnectionclient.h"
 #include "ieventdispatcher.h"
+#include "localsocket.h"
+#include "peeraddress.h"
 
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 
 using namespace std;
@@ -131,5 +134,19 @@ void IConnection::notifyWrite()
             m_clients[i]->notifyConnectionReadyWrite();
             break;
         }
+    }
+}
+
+//static
+IConnection *IConnection::create(const PeerAddress &address)
+{
+    switch (address.socketType()) {
+    case PeerAddress::UnixSocket:
+        return new LocalSocket(address.path());
+    case PeerAddress::AbstractUnixSocket:
+        return new LocalSocket(string(1, '\0') + address.path());
+    default:
+        assert(false);
+        return 0;
     }
 }

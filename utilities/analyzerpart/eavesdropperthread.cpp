@@ -27,6 +27,7 @@
 #include "epolleventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"
+#include "peeraddress.h"
 #include "transceiver.h"
 
 EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
@@ -61,7 +62,7 @@ void EavesdropperThread::run()
     m_timer.start();
     m_dispatcher = new EpollEventDispatcher;
 
-    m_transceiver = new Transceiver(m_dispatcher);
+    m_transceiver = new Transceiver(m_dispatcher, PeerAddress::SessionBus);
     m_transceiver->setClient(this);
     {
         static const int messageTypeCount = 4;

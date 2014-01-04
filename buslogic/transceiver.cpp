@@ -28,13 +28,12 @@
 #include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
-#include "pathfinder.h"
 
 #include <iostream>
 
 using namespace std;
 
-Transceiver::Transceiver(IEventDispatcher *dispatcher)
+Transceiver::Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer)
    : m_client(0),
      m_receivingMessage(0),
      m_sendSerial(0),
@@ -43,11 +42,12 @@ Transceiver::Transceiver(IEventDispatcher *dispatcher)
      m_authNegotiator(0),
      m_eventDispatcher(0)
 {
-    SessionBusInfo sessionBusInfo = PathFinder::sessionBusInfo();
-    cout << "session bus address type: " << sessionBusInfo.addressType << '\n';
-    cout << "session bus path: " << sessionBusInfo.path << '\n';
+    m_peerAddress = peer;
 
-    m_connection = new LocalSocket(sessionBusInfo.path);
+    cout << "session bus socket type: " << peer.socketType() << '\n';
+    cout << "session bus path: " << peer.path() << '\n';
+
+    m_connection = IConnection::create(peer);
     m_connection->setEventDispatcher(dispatcher);
     cout << "connection is " << (m_connection->isOpen() ? "open" : "closed") << ".\n";
     m_authNegotiator = new AuthNegotiator(m_connection);

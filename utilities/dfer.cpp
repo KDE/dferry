@@ -26,6 +26,7 @@
 #include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
+#include "peeraddress.h"
 #include "transceiver.h"
 
 #include <iostream>
@@ -65,7 +66,7 @@ int main(int argc, char *argv[])
 {
     EpollEventDispatcher dispatcher;
 
-    Transceiver transceiver(&dispatcher);
+    Transceiver transceiver(&dispatcher, PeerAddress::SessionBus);
     ReplyPrinter receiver;
     transceiver.setClient(&receiver);
     {

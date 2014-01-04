@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2013, 2014 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "pathfinder.h"
+#include "peeraddress.h"
 
 #include "stringtools.h"
 
@@ -89,62 +89,78 @@ static string sessionInfoFile()
     return ret;
 }
 
-SessionBusInfo::SessionBusInfo(string str)
-   : addressType(InvalidAddress)
+class PeerAddress::Private
 {
-    AddressType provisionalType = InvalidAddress;
+public:
+    Private()
+       : m_peerType(NoPeer),
+         m_socketType(NoSocket),
+         m_port(-1)
+    {}
 
-    string unixAddressPrefix = "unix:";
-    if (str.find(unixAddressPrefix) == 0) {
-        provisionalType = LocalSocketFile;
-        str.erase(0, unixAddressPrefix.length());
-    }
+    void fetchSessionBusInfo();
+    void parseSessionBusInfo(std::string info);
 
-    // TODO is there any escaping?
-    const std::vector<string> parts = split(str, ',');
+    PeerAddress::PeerType m_peerType;
+    PeerAddress::SocketType m_socketType;
+    std::string m_path;
+    int m_port;
+    std::string m_guid;
+};
 
-    if (provisionalType == LocalSocketFile) {
-        string pathLiteral = "path=";
-        string abstractLiteral = "abstract=";
-        // TODO what about "guid=..." and "tmpdir=..."?
-
-        for (int i = 0; i < parts.size(); i++) {
-            const string &part = parts[i];
-            if (part.find(pathLiteral) == 0) {
-                if (addressType != InvalidAddress) {
-                    goto invalid; // error - duplicate path specification
-                }
-                addressType = LocalSocketFile;
-                path = part.substr(pathLiteral.length());
-            } else if (part.find(abstractLiteral) == 0) {
-                if (addressType != InvalidAddress) {
-                    goto invalid;
-                }
-                addressType = AbstractLocalSocket;
-                // by adding the \0 that signals a virtual socket address (see man 7 unix on
-                // a Linux system) here already, we don't need to pass a whole SessionBusInfo
-                // to the LocalSocket constructor, which makes it more flexible.
-                // this might need some re-thinking.
-                path = string(1, '\0') + part.substr(abstractLiteral.length());
-            }
-        }
-    }
-    return;
-invalid:
-    addressType = InvalidAddress;
-    path.clear();
+PeerAddress::PeerAddress()
+   : d(new Private)
+{
 }
 
-SessionBusInfo::SessionBusInfo()
-    : addressType(InvalidAddress)
-{}
+PeerAddress::PeerAddress(PeerType bus)
+   : d(new Private)
+{
+    if (bus == SessionBus) {
+        d->fetchSessionBusInfo();
+    } else if (bus == SystemBus) {
+        // TODO non-Linux
+        d->m_path = "/var/run/dbus/system_bus_socket";
+    } else {
+        // TODO error
+    }
+}
+
+PeerAddress::~PeerAddress()
+{
+    delete d;
+    d = 0;
+}
+
+PeerAddress::PeerType PeerAddress::peerType() const
+{
+    return d->m_peerType;
+}
+
+PeerAddress::SocketType PeerAddress::socketType() const
+{
+    return d->m_socketType;
+}
+
+string PeerAddress::path() const
+{
+    return d->m_path;
+}
+
+int PeerAddress::port() const
+{
+    return d->m_port;
+}
+
+string PeerAddress::guid() const
+{
+    return d->m_guid;
+}
 
 
-//static
-SessionBusInfo PathFinder::sessionBusInfo()
+void PeerAddress::Private::fetchSessionBusInfo()
 {
     ifstream infoFile(sessionInfoFile().c_str());
-
     string line;
 
     // TODO: on X, the spec requires a special way to find the session bus
@@ -165,5 +181,58 @@ SessionBusInfo PathFinder::sessionBusInfo()
         }
     }
 
-    return SessionBusInfo(line);
+    parseSessionBusInfo(line);
+}
+
+void PeerAddress::Private::parseSessionBusInfo(string info)
+{
+    SocketType provisionalType = NoSocket;
+
+    string unixAddressLiteral = "unix:";
+    string guidLiteral = "guid=";
+
+    if (info.find(unixAddressLiteral) == 0) {
+        provisionalType = UnixSocket;
+        info.erase(0, unixAddressLiteral.length());
+    }
+
+    // TODO is there any escaping?
+    const vector<string> parts = split(info, ',');
+
+    if (provisionalType == UnixSocket) {
+        string pathLiteral = "path=";
+        string abstractLiteral = "abstract=";
+        // TODO what about "tmpdir=..."?
+
+        for (int i = 0; i < parts.size(); i++) {
+            const string &part = parts[i];
+            if (part.find(pathLiteral) == 0) {
+                if (m_socketType != NoSocket) {
+                    goto invalid; // error - duplicate path specification
+                }
+                m_socketType = UnixSocket;
+                m_path = part.substr(pathLiteral.length());
+            } else if (part.find(abstractLiteral) == 0) {
+                if (m_socketType != NoSocket) {
+                    goto invalid;
+                }
+                m_socketType = AbstractUnixSocket;
+                m_path = part.substr(abstractLiteral.length());
+            }
+        }
+    } else {
+        // TODO
+    }
+
+    for (int i = 0; i < parts.size(); i++) {
+        const string &part = parts[i];
+        if (part.find(guidLiteral) == 0) {
+            m_guid = part.substr(guidLiteral.length());
+        }
+    }
+
+    return;
+invalid:
+    m_socketType = NoSocket;
+    m_path.clear();
 }
