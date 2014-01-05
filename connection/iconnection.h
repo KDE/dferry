@@ -21,6 +21,9 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef ICONNECTION_H
+#define ICONNECTION_H
+
 #include "platform.h"
 #include "types.h"
 
@@ -68,3 +71,5 @@ private:
     bool m_isReadNotificationEnabled;
     bool m_isWriteNotificationEnabled;
 };
+
+#endif // ICONNECTION_H
