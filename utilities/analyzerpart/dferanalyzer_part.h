@@ -27,14 +27,17 @@
 #include <kparts/part.h>
 #include <kparts/factory.h>
 
-class DferAnalyzerPart : public KParts::ReadOnlyPart
+class DferAnalyzerPart : public KParts::ReadWritePart
 {
     Q_OBJECT
 public:
     DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &);
     ~DferAnalyzerPart();
 
-    bool openFile() { return true; };
+protected:
+    // reimplementations from KParts::ReadWritePart
+    bool openFile();
+    bool saveFile();
 };
 
 #endif // DFERANALYZER_PART_H

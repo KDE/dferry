@@ -34,21 +34,13 @@ public:
     virtual ~AnalyzerMainWindow();
  
 public slots:
-    /**
-     * Use this method to load whatever file/URL you have
-     */
-    void load(const KUrl& url);
- 
-    /**
-     * Use this method to display an openUrl dialog and
-     * load the URL that gets entered
-     */
     void load();
+    void saveAs();
  
 private:
     void setupActions();
  
-    KParts::ReadOnlyPart *m_part;
+    KParts::ReadWritePart *m_part;
 };
  
 #endif // ANALYZERMAINWINDOW_H

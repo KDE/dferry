@@ -38,6 +38,9 @@ Q_OBJECT
 public:
     MainWidget();
 
+    void load(const QString &filePath);
+    void save(const QString &filePath);
+
 private slots:
     void clear();
     void setGrouping(bool enable);

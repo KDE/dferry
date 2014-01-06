@@ -75,3 +75,13 @@ void MainWidget::itemClicked(const QModelIndex &index)
     headerView->resizeSection(0, qMax(aiv->sizeHintForColumn(0), headerView->sectionSize(0)));
     delete oldModel;
 }
+
+void MainWidget::load(const QString &filePath)
+{
+    m_model->loadFromFile(filePath);
+}
+
+void MainWidget::save(const QString &filePath)
+{
+    m_model->saveToFile(filePath);
+}

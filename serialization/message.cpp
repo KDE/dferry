@@ -351,6 +351,32 @@ static const int s_properFixedHeaderLength = 12;
 static const int s_extendedFixedHeaderLength = 16;
 static const int s_maxMessageLength = 134217728;
 
+void Message::load(const std::vector<byte> &data)
+{
+    if (m_state > LastSteadyState) {
+        return;
+    }
+    m_headerLength = 0;
+    m_bodyLength = 0;
+    m_buffer = data;
+
+    bool ok = m_buffer.size() >= s_extendedFixedHeaderLength;
+    ok = ok && deserializeFixedHeaders();
+    ok = ok && m_buffer.size() >= m_headerLength;
+    ok = ok && deserializeVariableHeaders();
+
+    if (!ok) {
+        m_state = Empty;
+        m_buffer.clear();
+        return;
+    }
+    assert(m_buffer.size() == m_headerLength + m_bodyLength);
+    std::string sig = signature();
+    chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
+    m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
+    m_state = Deserialized;
+}
+
 void Message::notifyConnectionReadyRead()
 {
     if (m_state != Deserializing) {
@@ -419,6 +445,18 @@ void Message::notifyConnectionReadyRead()
         notifyCompletionClient();
         // TODO reset other data members
     }
+}
+
+std::vector<byte> Message::save()
+{
+    if (m_state > LastSteadyState) {
+        return vector<byte>();
+    }
+    if (m_buffer.empty() && !fillOutBuffer()) {
+        // TODO report error?
+        return vector<byte>();
+    }
+    return m_buffer;
 }
 
 void Message::notifyConnectionReadyWrite()

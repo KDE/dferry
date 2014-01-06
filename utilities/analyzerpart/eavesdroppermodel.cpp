@@ -26,6 +26,9 @@
 #include "argumentlist.h"
 #include "message.h"
 
+#include <QDataStream>
+#include <QFile>
+
 enum {
     TypeColumn = 0,
     RoundtripTimeColumn,
@@ -36,6 +39,18 @@ enum {
     DestinationColumn,
     ColumnCount
 };
+
+MessageRecord::MessageRecord(Message *msg, qint64 time)
+   : message(msg),
+     otherMessageIndex(-1),
+     timestamp(time)
+{}
+
+MessageRecord::MessageRecord()
+   : message(0),
+     otherMessageIndex(-1),
+     timestamp(-1)
+{}
 
 QString MessageRecord::type() const
 {
@@ -307,4 +322,72 @@ void EavesdropperModel::clearInternal()
         m_messages[i].message = 0;
     }
     m_messages.clear();
+}
+
+static const char *fileHeader = "Dferry binary DBus dump v0001";
+
+void EavesdropperModel::saveToFile(const QString &path)
+{
+    QFile f(path);
+    f.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    f.write(fileHeader);
+
+    for (int i = 0; i < m_messages.size(); i++) {
+        std::vector<byte> msgData = m_messages[i].message->save();
+
+        // auxiliary data from MessageRecord, length prefix
+        {
+            QDataStream auxStream(&f);
+            auxStream.setVersion(12);
+            auxStream << m_messages[i].otherMessageIndex;
+            auxStream << m_messages[i].timestamp;
+            auxStream << quint32(msgData.size());
+        }
+
+        // serialized message just like it would appear on the bus
+        f.write(reinterpret_cast<const char*>(&msgData[0]), msgData.size());
+    }
+}
+
+bool EavesdropperModel::loadFromFile(const QString &path)
+{
+    QFile f(path);
+    f.open(QIODevice::ReadOnly);
+    if (f.read(strlen(fileHeader)) != QByteArray(fileHeader)) {
+        return false;
+    }
+
+    std::vector<MessageRecord> loadedRecords;
+    while (!f.atEnd()) {
+        MessageRecord record;
+        quint32 messageDataSize;
+        // auxiliary data from MessageRecord, length prefix
+        {
+            QDataStream auxStream(&f);
+            auxStream.setVersion(12);
+            auxStream >> record.otherMessageIndex;
+            auxStream >> record.timestamp;
+            auxStream >> messageDataSize;
+        }
+        if (f.atEnd()) {
+            return false;
+        }
+
+        // serialized message just like it would appear on the bus
+        std::vector<byte> msgData(messageDataSize, 0);
+        if (f.read(reinterpret_cast<char*>(&msgData[0]), messageDataSize) != messageDataSize) {
+            return false;
+        }
+        record.message = new Message();
+        record.message->load(msgData);
+        loadedRecords.push_back(record);
+    }
+
+    beginResetModel();
+    clearInternal();
+    m_messages = loadedRecords;
+    endResetModel();
+    // TODO disable capture or make sure that our call-reply matching features work in the
+    //      presence of data loaded from a different session...
+    return true;
 }

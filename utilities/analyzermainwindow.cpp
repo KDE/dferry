@@ -43,8 +43,6 @@
 AnalyzerMainWindow::AnalyzerMainWindow()
    : KParts::MainWindow()
 {
- 
-    // Setup our actions
     setupActions();
  
     //query the .desktop file to load the requested Part
@@ -52,8 +50,9 @@ AnalyzerMainWindow::AnalyzerMainWindow()
  
     if (service) {
         QString errorMsg;
-        m_part = service->createInstance<KParts::ReadOnlyPart>(0, QVariantList(), &errorMsg);
+        m_part = service->createInstance<KParts::ReadWritePart>(0, QVariantList(), &errorMsg);
         if (m_part) {
+            setXMLFile("dfer/analyzerui.rc");
             // tell the KParts::MainWindow that this is indeed
             // the main widget
             setCentralWidget(m_part->widget());
@@ -82,18 +81,19 @@ AnalyzerMainWindow::~AnalyzerMainWindow()
 {
 }
  
-void AnalyzerMainWindow::load(const KUrl& url)
-{
-    m_part->openUrl(url);
-}
- 
 void AnalyzerMainWindow::setupActions()
 {
     KStandardAction::open(this, SLOT(load()), actionCollection());
+    KStandardAction::saveAs(this, SLOT(saveAs()), actionCollection());
     KStandardAction::quit(qApp, SLOT(closeAllWindows()), actionCollection());
 }
  
 void AnalyzerMainWindow::load()
 {
-    load(KFileDialog::getOpenUrl());
+    m_part->openUrl(KFileDialog::getOpenUrl());
+}
+
+void AnalyzerMainWindow::saveAs()
+{
+    m_part->saveAs(KFileDialog::getSaveUrl());
 }

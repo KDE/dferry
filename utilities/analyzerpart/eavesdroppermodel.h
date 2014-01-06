@@ -39,11 +39,8 @@ class MessageSortFilter;
 
 struct MessageRecord
 {
-    MessageRecord(Message *msg, qint64 time)
-       : message(msg),
-         otherMessageIndex(-1),
-         timestamp(time)
-    {}
+    MessageRecord(Message *msg, qint64 time);
+    MessageRecord();
 
     QString type() const;
     // whether this is a call that should get a reply, with no reply
@@ -84,6 +81,8 @@ public:
 public slots:
     void setRecording(bool recording);
     void clear();
+    void saveToFile(const QString &path);
+    bool loadFromFile(const QString &path);
 
 private slots:
     void addMessage(Message *message, qint64 timestamp);

@@ -120,6 +120,9 @@ public:
     // happen simultaneously)
     void setCompletionClient(ICompletionClient *client);
 
+    std::vector<byte> save();
+    void load(const std::vector<byte> &data);
+
 protected:
     virtual void notifyConnectionReadyRead();
     virtual void notifyConnectionReadyWrite();

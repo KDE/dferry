@@ -32,7 +32,7 @@ K_PLUGIN_FACTORY(DferAnalyzerPartFactory, registerPlugin<DferAnalyzerPart>();)  
 K_EXPORT_PLUGIN(DferAnalyzerPartFactory("DferAnalyzer", "DferAnalyzer"))
 
 DferAnalyzerPart::DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &)
-   : KParts::ReadOnlyPart(parent)
+   : KParts::ReadWritePart(parent)
 {
     KGlobal::locale()->insertCatalog("DferAnalyzer");
     setComponentData(DferAnalyzerPartFactory::componentData());
@@ -43,4 +43,16 @@ DferAnalyzerPart::DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const
 
 DferAnalyzerPart::~DferAnalyzerPart()
 {
+}
+
+bool DferAnalyzerPart::openFile()
+{
+    qobject_cast<MainWidget*>(widget())->load(localFilePath());
+    return true; // ### does a correct return value do anything useful?
+}
+
+bool DferAnalyzerPart::saveFile()
+{
+    qobject_cast<MainWidget*>(widget())->save(localFilePath());
+    return true;
 }
