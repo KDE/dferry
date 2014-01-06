@@ -13,10 +13,8 @@
     <Merge />
 </MenuBar>
 
+<!--Declaring an empty toolbar seems necessary in order to avoid an "auto-generated" toolbar-->
 <ToolBar noMerge="1" name="mainToolBar"><text>Main Toolbar</text>
-    <Action name="file_open"/>
-    <Action name="file_save_as"/>
-    <Merge/>
 </ToolBar>
 
 </kpartgui>
