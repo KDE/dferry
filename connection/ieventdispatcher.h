@@ -34,7 +34,9 @@ class IEventDispatcher
 {
 public:
     virtual ~IEventDispatcher();
-    virtual void poll(int timeout = -1) = 0;
+    virtual bool poll(int timeout = -1) = 0; // returns false if interrupted by interrupt()
+    // interrupt the waiting for events (from another thread)
+    virtual void interrupt() = 0;
 
 protected:
     friend class IConnection;

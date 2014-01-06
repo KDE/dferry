@@ -26,40 +26,69 @@
 #include "iconnection.h"
 
 #include <sys/epoll.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <cassert>
 #include <cstdio>
 
 EpollEventDispatcher::EpollEventDispatcher()
- : m_epollFd(epoll_create(10))
+   : m_epollFd(epoll_create(10))
 {
+    // set up a pipe that can interrupt the polling from another thread
+    // (we could also use the Linux-only eventfd() - pipes are at least portable to epoll-like mechanisms)
+    pipe2(m_interruptPipe, O_NONBLOCK);
+
+    struct epoll_event epevt;
+    epevt.events = EPOLLIN;
+    epevt.data.u64 = 0; // clear high bits in the union
+    epevt.data.fd = m_interruptPipe[0];
+    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, m_interruptPipe[0], &epevt);
 }
 
 EpollEventDispatcher::~EpollEventDispatcher()
 {
+    close(m_interruptPipe[0]);
+    close(m_interruptPipe[1]);
     close(m_epollFd);
 }
 
-void EpollEventDispatcher::poll(int timeout)
+bool EpollEventDispatcher::poll(int timeout)
 {
     static const int maxEvPerPoll = 8;
     struct epoll_event results[maxEvPerPoll];
     int nresults = epoll_wait(m_epollFd, results, maxEvPerPoll, timeout);
     if (nresults < 0) {
-        // error
-        return;
+        // error?
+        return true;
     }
 
     for (int i = 0; i < nresults; i++) {
         struct epoll_event *evt = results + i;
         if (evt->events & EPOLLIN) {
+            if (evt->data.fd == m_interruptPipe[0]) {
+                // read any bytes written by the other side for cleanliness reasons
+                char buf;
+                while (read(m_interruptPipe[0], &buf, 1) > 0) {
+                }
+                // HACK - we are discarding the rest of the events
+                // this works in our currently only use case, interrupting poll once to reap a thread
+                return false;
+            }
             notifyConnectionForReading(evt->data.fd);
         }
         if (evt->events & EPOLLOUT) {
             notifyConnectionForWriting(evt->data.fd);
         }
     }
+    return true;
+}
+
+void EpollEventDispatcher::interrupt()
+{
+    // write a byte to the write end so the poll waiting on the read end returns
+    char buf = 'I';
+    write(m_interruptPipe[1], &buf, 1);
 }
 
 FileDescriptor EpollEventDispatcher::pollDescriptor() const

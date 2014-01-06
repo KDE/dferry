@@ -51,6 +51,7 @@ public:
     PeerAddress();
     // Intentionally not explicit; it resolves the details of a bus address
     PeerAddress(PeerType bus);
+    PeerAddress(const PeerAddress &other);
     ~PeerAddress();
 
     PeerType peerType() const;
@@ -58,6 +59,10 @@ public:
     std::string path() const;
     int port() const; // only for TcpSocket
     std::string guid() const;
+
+    PeerAddress &operator=(const PeerAddress &other);
+
+    // TODO comparison operators
 
 private:
     class Private;

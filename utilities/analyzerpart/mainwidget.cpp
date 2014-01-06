@@ -31,9 +31,8 @@ MainWidget::MainWidget()
 {
     m_ui.setupUi(this);
 
-    //m_model = new EavesdropperModel(this);
-    m_model = new EavesdropperModel;
-    m_sortFilter = new MessageSortFilter; // TODO parent
+    m_model = new EavesdropperModel(this);
+    m_sortFilter = new MessageSortFilter(m_model);
     m_sortFilter->setSourceModel(m_model);
 
     connect(m_ui.captureButton, SIGNAL(toggled(bool)), m_model, SLOT(setRecording(bool)));

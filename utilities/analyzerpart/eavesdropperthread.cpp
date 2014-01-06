@@ -36,9 +36,17 @@ EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
     moveToThread(&m_thread);
     // ### verify that the connection is a QueuedConnection
     connect(this, SIGNAL(messageReceived(Message *, qint64)),
-            model, SLOT(addMessage(Message *, qint64)));
+            model, SLOT(addMessage(Message *, qint64)), Qt::QueuedConnection);
     connect(&m_thread, SIGNAL(started()), SLOT(run()));
     m_thread.start();
+}
+
+EavesdropperThread::~EavesdropperThread()
+{
+    m_dispatcher->interrupt();
+    m_thread.wait();
+    delete m_transceiver;
+    delete m_dispatcher;
 }
 
 static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
@@ -79,9 +87,9 @@ void EavesdropperThread::run()
         }
     }
 
-    while (true) {
-        m_dispatcher->poll();
+    while (m_dispatcher->poll()) {
     }
+    m_thread.quit();
 }
 
 void EavesdropperThread::messageReceived(Message *message)

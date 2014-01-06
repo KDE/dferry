@@ -28,8 +28,9 @@
 
 #include <QDebug>
 
-MessageSortFilter::MessageSortFilter()
-   : m_onlyUnanswered(false)
+MessageSortFilter::MessageSortFilter(QObject *parent)
+   : QSortFilterProxyModel(parent),
+     m_onlyUnanswered(false)
 {
     setDynamicSortFilter(true);
 }

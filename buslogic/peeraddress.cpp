@@ -126,6 +126,17 @@ PeerAddress::PeerAddress(PeerType bus)
     }
 }
 
+PeerAddress::PeerAddress(const PeerAddress &other)
+   : d(new Private(*other.d))
+{
+}
+
+PeerAddress &PeerAddress::operator=(const PeerAddress &other)
+{
+    *d = *other.d;
+    return *this;
+}
+
 PeerAddress::~PeerAddress()
 {
     delete d;

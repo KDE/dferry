@@ -43,6 +43,7 @@ class EavesdropperThread : public QObject, public ITransceiverClient
 Q_OBJECT
 public:
     EavesdropperThread(EavesdropperModel *model);
+    ~EavesdropperThread();
 
     // reimplemented ITransceiverClient method
     void messageReceived(Message *message);

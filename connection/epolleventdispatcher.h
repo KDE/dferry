@@ -33,7 +33,8 @@ class EpollEventDispatcher : public IEventDispatcher
 public:
     EpollEventDispatcher();
     virtual ~EpollEventDispatcher();
-    virtual void poll(int timeout = -1);
+    virtual bool poll(int timeout = -1);
+    virtual void interrupt();
 
     FileDescriptor pollDescriptor() const;
 
@@ -46,6 +47,7 @@ protected:
 private:
     void notifyRead(int fd);
 
+    int m_interruptPipe[2];
     FileDescriptor m_epollFd;
 };
 

@@ -44,9 +44,9 @@ IConnection::IConnection()
 IConnection::~IConnection()
 {
     setEventDispatcher(0);
-    vector<IConnectionClient *> clients = m_clients;
-    while (!clients.empty()) {
-        removeClient(clients.back()); // LIFO (stack-like) order seems safer...
+    vector<IConnectionClient *> clientsCopy = m_clients;
+    for (int i = clientsCopy.size() - 1; i >= 0; i--) {
+        removeClient(clientsCopy[i]); // LIFO (stack) order seems safest...
     }
 }
 
