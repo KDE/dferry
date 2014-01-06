@@ -372,21 +372,24 @@ void Message::notifyConnectionReadyRead()
 
         const bool headersDone = m_headerLength > 0 && m_buffer.size() >= m_headerLength;
 
-        chunk in = connection()->read(buffer, readMax);
+        in = connection()->read(buffer, readMax);
         assert(in.length > 0);
 
         for (int i = 0; i < in.length; i++) {
             m_buffer.push_back(in.begin[i]);
         }
         if (!headersDone) {
-            if (m_headerLength == 0 && m_buffer.size() >= s_extendedFixedHeaderLength
-                && !deserializeFixedHeaders()) {
-                isError = true;
-                break;
+            if (m_headerLength == 0 && m_buffer.size() >= s_extendedFixedHeaderLength) {
+                if (!deserializeFixedHeaders()) {
+                    isError = true;
+                    break;
+                }
             }
-            if (m_headerLength > 0 && m_buffer.size() >= m_headerLength && !deserializeVariableHeaders()) {
-                isError = true;
-                break;
+            if (m_headerLength > 0 && m_buffer.size() >= m_headerLength) {
+                if (!deserializeVariableHeaders()) {
+                    isError = true;
+                    break;
+                }
             }
         }
         if (m_headerLength > 0 && m_buffer.size() >= m_headerLength + m_bodyLength) {
@@ -395,8 +398,8 @@ void Message::notifyConnectionReadyRead()
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
             std::string sig = signature();
-            chunk data(&m_buffer.front() + m_headerLength, m_bodyLength);
-            m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), data, m_isByteSwapped);
+            chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
+            m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
             assert(!isError);
             connection()->removeClient(this);
             notifyCompletionClient(); // do not access members after this because it might delete us!
