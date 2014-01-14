@@ -1,9 +1,11 @@
 [Desktop Entry]
 Name=D-Bus analyzer
+Name[cs]=Analyzátor D-Busu
 Name[de]=D-Bus-Analyse
 Name[nl]=D-Bus-analyzer
 Name[pt]=Analisador do D-Bus
 Name[pt_BR]=Analisador D-Bus
+Name[sk]=D-Bus analyzátor
 Name[sv]=D-bus analysator
 Name[uk]=Аналізатор D-Bus
 Name[x-test]=xxD-Bus analyzerxx
