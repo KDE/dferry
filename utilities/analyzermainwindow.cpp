@@ -75,6 +75,8 @@ AnalyzerMainWindow::AnalyzerMainWindow()
         // next time we enter the event loop...
         return;
     }
+    // Looks like XMLGUI helpfully creates a status bar, this doesn't work when done too early
+    setStatusBar(0);
 }
  
 AnalyzerMainWindow::~AnalyzerMainWindow()
