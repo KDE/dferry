@@ -13,6 +13,7 @@ Name[sk]=D-Bus analyzátor
 Name[sv]=D-bus analysator
 Name[uk]=Аналізатор D-Bus
 Name[x-test]=xxD-Bus analyzerxx
+Name[zh_CN]=D-Bus 分析器
 X-KDE-ServiceTypes=KParts/ReadOnlyPart
 # ,KParts/ReadWritePart
 X-KDE-Library=dferanalyzerpart
