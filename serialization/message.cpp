@@ -586,7 +586,8 @@ bool Message::deserializeVariableHeaders()
             m_intHeaders[headerType] = reader.readUint32();
             break;
         case UnixFdsHeader:
-            assert(reader.state() == ArgumentList::UnixFd);
+            assert(reader.state() == ArgumentList::Uint32);
+            reader.readUint32(); // discard it, for now
             // TODO
             break;
         case SignatureHeader: {
