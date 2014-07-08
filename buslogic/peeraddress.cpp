@@ -116,10 +116,12 @@ PeerAddress::PeerAddress()
 PeerAddress::PeerAddress(PeerType bus)
    : d(new Private)
 {
+    d->m_peerType = bus;
     if (bus == SessionBus) {
         d->fetchSessionBusInfo();
     } else if (bus == SystemBus) {
         // TODO non-Linux
+        d->m_socketType = UnixSocket;
         d->m_path = "/var/run/dbus/system_bus_socket";
     } else {
         // TODO error
