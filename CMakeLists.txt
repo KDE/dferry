@@ -14,6 +14,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/client
                     ${CMAKE_SOURCE_DIR}/connection
+                    ${CMAKE_SOURCE_DIR}/events
                     ${CMAKE_SOURCE_DIR}/serialization)
 
 set(DFER_SOURCES
@@ -21,13 +22,13 @@ set(DFER_SOURCES
     buslogic/peeraddress.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
-    connection/epolleventpoller.cpp
-    connection/eventdispatcher.cpp
     connection/iconnection.cpp
     connection/iconnectionclient.cpp
-    connection/ieventpoller.cpp
     connection/localsocket.cpp
     connection/stringtools.cpp
+    events/epolleventpoller.cpp
+    events/eventdispatcher.cpp
+    events/ieventpoller.cpp
     serialization/argumentlist.cpp
     serialization/icompletionclient.cpp
     serialization/message.cpp
@@ -38,15 +39,15 @@ set(DFER_HEADERS
     buslogic/peeraddress.h
     buslogic/transceiver.h
     connection/authnegotiator.h
-    connection/epolleventpoller.h
-    connection/eventdispatcher.h
     connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
-    connection/ieventpoller.h
     connection/localsocket.h
     connection/platform.h
     connection/stringtools.h
+    events/epolleventpoller.h
+    events/eventdispatcher.h
+    events/ieventpoller.h
     serialization/argumentlist.h
     serialization/basictypeio.h
     serialization/icompletionclient.h
