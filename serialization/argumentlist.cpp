@@ -683,6 +683,8 @@ void ArgumentList::Reader::replaceData(chunk data)
     }
 }
 
+// this is pretty dumb, and the reason is that we hope that the inliner will understand it well
+// enough to make it efficient.
 static void getTypeInfo(byte letterCode, ArgumentList::IoState *typeState, uint32 *alignment,
                         bool *isPrimitiveType, bool *isStringType)
 {

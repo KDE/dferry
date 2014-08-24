@@ -48,6 +48,10 @@ MainWidget::MainWidget()
 
     m_ui.argumentList->setModel(createArgumentsModel(0));
     m_ui.argumentList->resizeColumnToContents(0);
+
+    // TODO: when a new item appears (what to do if it comes from filter changes?), and the list view scroll
+    //       position is at the bottom, keep it scrolled to the bottom (that is scroll after appending).
+    //       It looks about like this in Konversation: if (wasAtBottom) m_bar->setValue(m_bar->maximum());
 }
 
 void MainWidget::clear()

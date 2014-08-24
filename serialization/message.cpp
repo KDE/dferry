@@ -351,6 +351,8 @@ static const int s_properFixedHeaderLength = 12;
 static const int s_extendedFixedHeaderLength = 16;
 static const int s_maxMessageLength = 134217728;
 
+// This does not return bool because full validation of the main argument list would take quite
+// a few cycles. Validating only the header of the message doesn't seem to be worth it.
 void Message::load(const std::vector<byte> &data)
 {
     if (m_state > LastSteadyState) {
