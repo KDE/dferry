@@ -27,9 +27,9 @@
 #include "ieventdispatcher.h"
 
 IConnectionClient::IConnectionClient()
-   : m_connection(0),
-     m_isReadNotificationEnabled(false),
-     m_isWriteNotificationEnabled(false)
+   : m_isReadNotificationEnabled(false),
+     m_isWriteNotificationEnabled(false),
+     m_connection(0)
 {
 }
 

@@ -42,8 +42,8 @@ static const byte thisMachineEndianness = 'l';
 // TODO think of copying signature from and to output!
 
 Message::Message()
-   : m_state(Empty),
-     m_isByteSwapped(false),
+   : m_isByteSwapped(false),
+     m_state(Empty),
      m_messageType(InvalidMessage),
      m_flags(0),
      m_protocolVersion(1),

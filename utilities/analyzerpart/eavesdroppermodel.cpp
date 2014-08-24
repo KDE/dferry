@@ -289,12 +289,12 @@ QModelIndex EavesdropperModel::parent(const QModelIndex &child) const
     return QModelIndex();
 }
 
-int EavesdropperModel::rowCount(const QModelIndex &parent) const
+int EavesdropperModel::rowCount(const QModelIndex &/* parent */) const
 {
     return m_messages.size();
 }
 
-int EavesdropperModel::columnCount(const QModelIndex &parent) const
+int EavesdropperModel::columnCount(const QModelIndex &/* parent */) const
 {
     return ColumnCount;
 }
