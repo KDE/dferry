@@ -21,32 +21,36 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IEVENTDISPATCHER_H
-#define IEVENTDISPATCHER_H
+#ifndef EPOLLEVENTPOLLER_H
+#define EPOLLEVENTPOLLER_H
 
-#include "platform.h"
+#include "ieventpoller.h"
 
 #include <map>
 
-class IConnection;
-
-class IEventDispatcher
+class EpollEventPoller : public IEventPoller
 {
 public:
-    virtual ~IEventDispatcher();
-    virtual bool poll(int timeout = -1) = 0; // returns false if interrupted by interrupt()
-    // interrupt the waiting for events (from another thread)
-    virtual void interrupt() = 0;
+    EpollEventPoller(EventDispatcher *dispatcher);
+    virtual ~EpollEventPoller() override;
+    virtual bool poll(int timeout) override;
+    virtual void interrupt() override;
 
-protected:
-    friend class IConnection;
-    virtual bool addConnection(IConnection *conn);
-    virtual bool removeConnection(IConnection *conn);
-    virtual void setReadWriteInterest(IConnection *conn, bool read, bool write) = 0;
-    void notifyConnectionForReading(FileDescriptor fd);
-    void notifyConnectionForWriting(FileDescriptor fd);
+    // TODO figure out how to handle plugging into other event loops in the general case;
+    //      there seems to be some single-fd mechanism available on most platforms and where
+    //      there isn't, a list of descriptors (propagate only changes?) should work
+    FileDescriptor pollDescriptor() const;
 
-    std::map<FileDescriptor, IConnection*> m_connections;
+    // reimplemented from IEventPoller
+    void addConnection(IConnection *conn) override;
+    void removeConnection(IConnection *conn) override;
+    void setReadWriteInterest(IConnection *conn, bool read, bool write) override;
+
+private:
+    void notifyRead(int fd);
+
+    int m_interruptPipe[2];
+    FileDescriptor m_epollFd;
 };
 
-#endif // IEVENTDISPATCHER_H
+#endif // EPOLLEVENTPOLLER_H

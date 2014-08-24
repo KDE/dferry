@@ -21,44 +21,14 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef EAVESDROPPERTHREAD_H
-#define EAVESDROPPERTHREAD_H
+#include "ieventpoller.h"
 
-#include "itransceiverclient.h"
-
-#include <QElapsedTimer>
-#include <QThread>
-
-class EavesdropperModel;
-class EventDispatcher;
-class Message;
-class Transceiver;
-
-// This is a separate thread mainly for accurate timestamps. If this was running in the main
-// thread, GUI and other processing would delay the calls to messageReceived() and therefore
-// QDateTime::currentDateTime().
-
-class EavesdropperThread : public QObject, public ITransceiverClient
+IEventPoller::IEventPoller(EventDispatcher *dispatcher)
+   : m_dispatcher(dispatcher)
 {
-Q_OBJECT
-public:
-    EavesdropperThread(EavesdropperModel *model);
-    ~EavesdropperThread();
+}
 
-    // reimplemented ITransceiverClient method
-    void messageReceived(Message *message);
-
-signals:
-    void messageReceived(Message *message, qint64 timestamp);
-
-private slots:
-    void run();
-
-private:
-    QThread m_thread;
-    QElapsedTimer m_timer;
-    EventDispatcher *m_dispatcher;
-    Transceiver *m_transceiver;
-};
-
-#endif // EAVESDROPPERTHREAD_H
+IEventPoller::~IEventPoller()
+{
+    m_dispatcher = 0;
+}

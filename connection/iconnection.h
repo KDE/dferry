@@ -29,8 +29,8 @@
 
 #include <vector>
 
+class EventDispatcher;
 class IConnectionClient;
-class IEventDispatcher;
 class PeerAddress;
 
 class IConnection
@@ -54,13 +54,13 @@ public:
     virtual bool isOpen() = 0;
     virtual FileDescriptor fileDescriptor() const = 0;
 
-    virtual void setEventDispatcher(IEventDispatcher *ed);
-    virtual IEventDispatcher *eventDispatcher() const;
+    virtual void setEventDispatcher(EventDispatcher *ed);
+    virtual EventDispatcher *eventDispatcher() const;
 
     static IConnection *create(const PeerAddress &address);
 
 protected:
-    friend class IEventDispatcher;
+    friend class EventDispatcher;
     // called from the event dispatcher. virtual because at least LocalSocket requires extra logic.
     virtual void notifyRead();
     virtual void notifyWrite();
@@ -69,7 +69,7 @@ private:
     friend class IConnectionClient;
     void updateReadWriteInterest(); // called internally and from IConnectionClient
 
-    IEventDispatcher *m_eventDispatcher;
+    EventDispatcher *m_eventDispatcher;
     std::vector<IConnectionClient *> m_clients;
     bool m_isReadNotificationEnabled;
     bool m_isWriteNotificationEnabled;

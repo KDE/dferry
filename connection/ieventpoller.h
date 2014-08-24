@@ -21,34 +21,33 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef EPOLLEVENTDISPATCHER_H
-#define EPOLLEVENTDISPATCHER_H
+#ifndef IEVENTPOLLER_H
+#define IEVENTPOLLER_H
 
-#include "ieventdispatcher.h"
+#include "eventdispatcher.h"
 
-#include <map>
-
-class EpollEventDispatcher : public IEventDispatcher
+class IEventPoller
 {
 public:
-    EpollEventDispatcher();
-    virtual ~EpollEventDispatcher();
-    virtual bool poll(int timeout = -1);
-    virtual void interrupt();
+    // if you need to refer to the dispatcher, grab and save the value here - not all implementations
+    // need it
+    IEventPoller(EventDispatcher *dispatcher);
+    virtual ~IEventPoller();
 
-    FileDescriptor pollDescriptor() const;
+    virtual bool poll(int timeout = -1) = 0; // returns false if interrupted by interrupt()
+    // interrupt the waiting for events (from another thread)
+    virtual void interrupt() = 0;
+
+    virtual void addConnection(IConnection *conn) = 0;
+    virtual void removeConnection(IConnection *conn) = 0;
+    virtual void setReadWriteInterest(IConnection *conn, bool read, bool write) = 0;
 
 protected:
-    // reimplemented from IEventDispatcher
-    bool addConnection(IConnection *conn);
-    bool removeConnection(IConnection *conn);
-    void setReadWriteInterest(IConnection *conn, bool read, bool write);
+    // forwarding methods - subclasses are *not* friends of EventDispatcher
+    void notifyConnectionForReading(FileDescriptor fd) { m_dispatcher->notifyConnectionForReading(fd); }
+    void notifyConnectionForWriting(FileDescriptor fd) { m_dispatcher->notifyConnectionForWriting(fd); }
 
-private:
-    void notifyRead(int fd);
-
-    int m_interruptPipe[2];
-    FileDescriptor m_epollFd;
+    EventDispatcher *m_dispatcher;
 };
 
-#endif // EPOLLEVENTDISPATCHER_H
+#endif // IEVENTPOLLER_H

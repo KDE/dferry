@@ -50,8 +50,8 @@
 #include "peeraddress.h"
 
 class AuthNegotiator;
+class EventDispatcher;
 class IConnection;
-class IEventDispatcher;
 class ITransceiverClient;
 class Message;
 
@@ -64,11 +64,11 @@ public:
         ThreadLocalConnection
     };
 
-    // TODO Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer, enum ThreadAffinity);
+    // TODO Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer, enum ThreadAffinity);
     // this sets up a connection ready to use
 
     // convenience, for connecting to the session or system bus
-    Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer);
+    Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer);
     ~Transceiver();
 
     Message *sendAndAwaitReply(Message *m);
@@ -102,7 +102,7 @@ private:
 
     PeerAddress m_peerAddress;
     AuthNegotiator *m_authNegotiator;
-    IEventDispatcher *m_eventDispatcher;
+    EventDispatcher *m_eventDispatcher;
 };
 
 #endif // TRANSCEIVER_H

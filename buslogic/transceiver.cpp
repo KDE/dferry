@@ -33,7 +33,7 @@
 
 using namespace std;
 
-Transceiver::Transceiver(IEventDispatcher *dispatcher, const PeerAddress &peer)
+Transceiver::Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer)
    : m_client(0),
      m_receivingMessage(0),
      m_sendSerial(0),

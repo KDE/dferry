@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "epolleventdispatcher.h"
+#include "epolleventpoller.h"
 
 #include "iconnection.h"
 
@@ -32,8 +32,9 @@
 #include <cassert>
 #include <cstdio>
 
-EpollEventDispatcher::EpollEventDispatcher()
-   : m_epollFd(epoll_create(10))
+EpollEventPoller::EpollEventPoller(EventDispatcher *dispatcher)
+   : IEventPoller(dispatcher),
+     m_epollFd(epoll_create(10))
 {
     // set up a pipe that can interrupt the polling from another thread
     // (we could also use the Linux-only eventfd() - pipes are at least portable to epoll-like mechanisms)
@@ -46,14 +47,14 @@ EpollEventDispatcher::EpollEventDispatcher()
     epoll_ctl(m_epollFd, EPOLL_CTL_ADD, m_interruptPipe[0], &epevt);
 }
 
-EpollEventDispatcher::~EpollEventDispatcher()
+EpollEventPoller::~EpollEventPoller()
 {
     close(m_interruptPipe[0]);
     close(m_interruptPipe[1]);
     close(m_epollFd);
 }
 
-bool EpollEventDispatcher::poll(int timeout)
+bool EpollEventPoller::poll(int timeout)
 {
     static const int maxEvPerPoll = 8;
     struct epoll_event results[maxEvPerPoll];
@@ -84,45 +85,37 @@ bool EpollEventDispatcher::poll(int timeout)
     return true;
 }
 
-void EpollEventDispatcher::interrupt()
+void EpollEventPoller::interrupt()
 {
     // write a byte to the write end so the poll waiting on the read end returns
     char buf = 'I';
     write(m_interruptPipe[1], &buf, 1);
 }
 
-FileDescriptor EpollEventDispatcher::pollDescriptor() const
+FileDescriptor EpollEventPoller::pollDescriptor() const
 {
     return m_epollFd;
 }
 
-bool EpollEventDispatcher::addConnection(IConnection *connection)
+void EpollEventPoller::addConnection(IConnection *connection)
 {
-    if (!IEventDispatcher::addConnection(connection)) {
-        return false;
-    }
     struct epoll_event epevt;
     epevt.events = 0;
     epevt.data.u64 = 0; // clear high bits in the union
     epevt.data.fd = connection->fileDescriptor();
     epoll_ctl(m_epollFd, EPOLL_CTL_ADD, connection->fileDescriptor(), &epevt);
-    return true;
 }
 
-bool EpollEventDispatcher::removeConnection(IConnection *connection)
+void EpollEventPoller::removeConnection(IConnection *connection)
 {
-    if (!IEventDispatcher::removeConnection(connection)) {
-        return false;
-    }
     const int connFd = connection->fileDescriptor();
     // Connection should call us *before* resetting its fd on failure
     assert(connFd >= 0);
     struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
     epoll_ctl(m_epollFd, EPOLL_CTL_DEL, connFd, &epevt);
-    return true;
 }
 
-void EpollEventDispatcher::setReadWriteInterest(IConnection *conn, bool readEnabled, bool writeEnabled)
+void EpollEventPoller::setReadWriteInterest(IConnection *conn, bool readEnabled, bool writeEnabled)
 {
     FileDescriptor fd = conn->fileDescriptor();
     if (!fd) {

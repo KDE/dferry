@@ -22,7 +22,7 @@
 */
 
 #include "argumentlist.h"
-#include "epolleventdispatcher.h"
+#include "eventdispatcher.h"
 #include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
@@ -64,8 +64,7 @@ void ReplyPrinter::messageReceived(Message *m)
 
 int main(int argc, char *argv[])
 {
-    EpollEventDispatcher dispatcher;
-
+    EventDispatcher dispatcher;
     Transceiver transceiver(&dispatcher, PeerAddress::SessionBus);
     ReplyPrinter receiver;
     transceiver.setClient(&receiver);

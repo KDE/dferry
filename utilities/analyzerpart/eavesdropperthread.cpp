@@ -24,7 +24,7 @@
 #include "eavesdropperthread.h"
 
 #include "eavesdroppermodel.h"
-#include "epolleventdispatcher.h"
+#include "eventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"
 #include "peeraddress.h"
@@ -68,7 +68,7 @@ static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
 void EavesdropperThread::run()
 {
     m_timer.start();
-    m_dispatcher = new EpollEventDispatcher;
+    m_dispatcher = new EventDispatcher;
 
     m_transceiver = new Transceiver(m_dispatcher, PeerAddress::SessionBus);
     m_transceiver->setClient(this);

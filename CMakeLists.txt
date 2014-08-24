@@ -21,10 +21,11 @@ set(DFER_SOURCES
     buslogic/peeraddress.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
-    connection/epolleventdispatcher.cpp
+    connection/epolleventpoller.cpp
+    connection/eventdispatcher.cpp
     connection/iconnection.cpp
     connection/iconnectionclient.cpp
-    connection/ieventdispatcher.cpp
+    connection/ieventpoller.cpp
     connection/localsocket.cpp
     connection/stringtools.cpp
     serialization/argumentlist.cpp
@@ -37,11 +38,12 @@ set(DFER_HEADERS
     buslogic/peeraddress.h
     buslogic/transceiver.h
     connection/authnegotiator.h
-    connection/epolleventdispatcher.h
+    connection/epolleventpoller.h
+    connection/eventdispatcher.h
     connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
-    connection/ieventdispatcher.h
+    connection/ieventpoller.h
     connection/localsocket.h
     connection/platform.h
     connection/stringtools.h

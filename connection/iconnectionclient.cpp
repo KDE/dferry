@@ -24,7 +24,6 @@
 #include "iconnectionclient.h"
 
 #include "iconnection.h"
-#include "ieventdispatcher.h"
 
 IConnectionClient::IConnectionClient()
    : m_isReadNotificationEnabled(false),

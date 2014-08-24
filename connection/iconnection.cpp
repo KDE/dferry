@@ -23,8 +23,8 @@
 
 #include "iconnection.h"
 
+#include "eventdispatcher.h"
 #include "iconnectionclient.h"
-#include "ieventdispatcher.h"
 #include "localsocket.h"
 #include "peeraddress.h"
 
@@ -95,7 +95,7 @@ void IConnection::updateReadWriteInterest()
     }
 }
 
-void IConnection::setEventDispatcher(IEventDispatcher *ed)
+void IConnection::setEventDispatcher(EventDispatcher *ed)
 {
     if (m_eventDispatcher == ed) {
         return;
@@ -112,7 +112,7 @@ void IConnection::setEventDispatcher(IEventDispatcher *ed)
     }
 }
 
-IEventDispatcher *IConnection::eventDispatcher() const
+EventDispatcher *IConnection::eventDispatcher() const
 {
     return m_eventDispatcher;
 }

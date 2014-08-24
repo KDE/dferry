@@ -21,37 +21,69 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "ieventdispatcher.h"
+#include "eventdispatcher.h"
 
+#include "epolleventpoller.h"
 #include "iconnection.h"
+#include "ieventpoller.h"
 
 #include <cstdio>
 
-#define IEVENTDISPATCHER_DEBUG
+#define EVENTDISPATCHER_DEBUG
 
 using namespace std;
 
-IEventDispatcher::~IEventDispatcher()
+EventDispatcher::EventDispatcher()
+{
+    // TODO other backend on other platforms
+    m_poller = new EpollEventPoller(this);
+}
+
+EventDispatcher::~EventDispatcher()
 {
     map<FileDescriptor, IConnection*>::iterator it = m_connections.begin();
     for ( ; it != m_connections.end(); ++it ) {
         it->second->setEventDispatcher(0);
     }
+    delete m_poller;
 }
 
-bool IEventDispatcher::addConnection(IConnection *conn)
+bool EventDispatcher::poll(int timeout)
+{
+    return m_poller->poll(timeout);
+}
+
+void EventDispatcher::interrupt()
+{
+    m_poller->interrupt();
+}
+
+bool EventDispatcher::addConnection(IConnection *conn)
 {
     pair<map<FileDescriptor, IConnection*>::iterator, bool> insertResult;
     insertResult = m_connections.insert(make_pair(conn->fileDescriptor(), conn));
-    return insertResult.second;
+    const bool ret = insertResult.second;
+    if (ret) {
+        m_poller->addConnection(conn);
+    }
+    return ret;
 }
 
-bool IEventDispatcher::removeConnection(IConnection *conn)
+bool EventDispatcher::removeConnection(IConnection *conn)
 {
-    return m_connections.erase(conn->fileDescriptor());
+    const bool ret = m_connections.erase(conn->fileDescriptor());
+    if (ret) {
+        m_poller->removeConnection(conn);
+    }
+    return ret;
 }
 
-void IEventDispatcher::notifyConnectionForReading(FileDescriptor fd)
+void EventDispatcher::setReadWriteInterest(IConnection *conn, bool read, bool write)
+{
+    m_poller->setReadWriteInterest(conn, read, write);
+}
+
+void EventDispatcher::notifyConnectionForReading(FileDescriptor fd)
 {
     std::map<int, IConnection *>::iterator it = m_connections.find(fd);
     if (it != m_connections.end()) {
@@ -60,12 +92,12 @@ void IEventDispatcher::notifyConnectionForReading(FileDescriptor fd)
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its notifyRead() or notifyWrite() implementation
-        printf("IEventDispatcher::notifyRead(): unhandled file descriptor %d.\n", fd);
+        printf("EventDispatcher::notifyRead(): unhandled file descriptor %d.\n", fd);
 #endif
     }
 }
 
-void IEventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
+void EventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
 {
     std::map<int, IConnection *>::iterator it = m_connections.find(fd);
     if (it != m_connections.end()) {
@@ -74,7 +106,7 @@ void IEventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its notifyRead() or notifyWrite() implementation
-        printf("IEventDispatcher::notifyWrite(): unhandled file descriptor %d.\n", fd);
+        printf("EventDispatcher::notifyWrite(): unhandled file descriptor %d.\n", fd);
 #endif
     }
 }

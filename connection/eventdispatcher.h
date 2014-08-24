@@ -21,44 +21,38 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef EAVESDROPPERTHREAD_H
-#define EAVESDROPPERTHREAD_H
+#ifndef EVENTDISPATCHER_H
+#define EVENTDISPATCHER_H
 
-#include "itransceiverclient.h"
+#include "platform.h"
 
-#include <QElapsedTimer>
-#include <QThread>
+#include <map>
 
-class EavesdropperModel;
-class EventDispatcher;
-class Message;
-class Transceiver;
+class IConnection;
+class IEventPoller;
 
-// This is a separate thread mainly for accurate timestamps. If this was running in the main
-// thread, GUI and other processing would delay the calls to messageReceived() and therefore
-// QDateTime::currentDateTime().
-
-class EavesdropperThread : public QObject, public ITransceiverClient
+class EventDispatcher
 {
-Q_OBJECT
 public:
-    EavesdropperThread(EavesdropperModel *model);
-    ~EavesdropperThread();
-
-    // reimplemented ITransceiverClient method
-    void messageReceived(Message *message);
-
-signals:
-    void messageReceived(Message *message, qint64 timestamp);
-
-private slots:
-    void run();
+    EventDispatcher();
+    ~EventDispatcher();
+    bool poll(int timeout = -1); // returns false if interrupted by interrupt()
+    // interrupt the waiting for events (from another thread)
+    void interrupt();
 
 private:
-    QThread m_thread;
-    QElapsedTimer m_timer;
-    EventDispatcher *m_dispatcher;
-    Transceiver *m_transceiver;
+    friend class IConnection;
+    friend class IEventPoller;
+    // for IConection
+    bool addConnection(IConnection *conn);
+    bool removeConnection(IConnection *conn);
+    void setReadWriteInterest(IConnection *conn, bool read, bool write);
+    // for IEventPoller
+    void notifyConnectionForReading(FileDescriptor fd);
+    void notifyConnectionForWriting(FileDescriptor fd);
+
+    IEventPoller *m_poller;
+    std::map<FileDescriptor, IConnection*> m_connections;
 };
 
-#endif // EAVESDROPPERTHREAD_H
+#endif // EVENTDISPATCHER_H
