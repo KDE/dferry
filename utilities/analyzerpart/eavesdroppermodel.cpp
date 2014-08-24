@@ -328,16 +328,16 @@ static const char *fileHeader = "Dferry binary DBus dump v0001";
 
 void EavesdropperModel::saveToFile(const QString &path)
 {
-    QFile f(path);
-    f.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    f.write(fileHeader);
+    QFile file(path);
+    file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    file.write(fileHeader);
 
     for (int i = 0; i < m_messages.size(); i++) {
         std::vector<byte> msgData = m_messages[i].message->save();
 
         // auxiliary data from MessageRecord, length prefix
         {
-            QDataStream auxStream(&f);
+            QDataStream auxStream(&file);
             auxStream.setVersion(12);
             auxStream << m_messages[i].otherMessageIndex;
             auxStream << m_messages[i].timestamp;
@@ -345,37 +345,37 @@ void EavesdropperModel::saveToFile(const QString &path)
         }
 
         // serialized message just like it would appear on the bus
-        f.write(reinterpret_cast<const char*>(&msgData[0]), msgData.size());
+        file.write(reinterpret_cast<const char*>(&msgData[0]), msgData.size());
     }
 }
 
 bool EavesdropperModel::loadFromFile(const QString &path)
 {
-    QFile f(path);
-    f.open(QIODevice::ReadOnly);
-    if (f.read(strlen(fileHeader)) != QByteArray(fileHeader)) {
+    QFile file(path);
+    file.open(QIODevice::ReadOnly);
+    if (file.read(strlen(fileHeader)) != QByteArray(fileHeader)) {
         return false;
     }
 
     std::vector<MessageRecord> loadedRecords;
-    while (!f.atEnd()) {
+    while (!file.atEnd()) {
         MessageRecord record;
         quint32 messageDataSize;
         // auxiliary data from MessageRecord, length prefix
         {
-            QDataStream auxStream(&f);
+            QDataStream auxStream(&file);
             auxStream.setVersion(12);
             auxStream >> record.otherMessageIndex;
             auxStream >> record.timestamp;
             auxStream >> messageDataSize;
         }
-        if (f.atEnd()) {
+        if (file.atEnd()) {
             return false;
         }
 
         // serialized message just like it would appear on the bus
         std::vector<byte> msgData(messageDataSize, 0);
-        if (f.read(reinterpret_cast<char*>(&msgData[0]), messageDataSize) != messageDataSize) {
+        if (file.read(reinterpret_cast<char*>(&msgData[0]), messageDataSize) != messageDataSize) {
             return false;
         }
         record.message = new Message();
