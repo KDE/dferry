@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,26 +21,21 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ICOMPLETIONCLIENT_H
-#define ICOMPLETIONCLIENT_H
+#include "platformtime.h"
 
-#include <functional>
+#include <time.h>
 
-class ICompletionClient
+namespace PlatformTime
 {
-public:
-    virtual ~ICompletionClient();
-    virtual void notifyCompletion(void *task) = 0;
-};
 
-class CompletionFunc : public ICompletionClient
+uint64 monotonicMsecs()
 {
-public:
-    CompletionFunc(std::function<void(void *)> func) : m_func(func) {}
-    ~CompletionFunc() {}
-    void notifyCompletion(void *task) override { if (m_func) { m_func(task); } }
+    // POSIX implementation
+    timespec tspec;
+    // performance note: at least on Linux AMD64, clock_gettime(CLOCK_MONOTONIC) does not (usually?)
+    // make a syscall, so it's surprisingly cheap; presumably it uses some built-in CPU timer feature
+    clock_gettime(CLOCK_MONOTONIC, &tspec);
+    return uint64(tspec.tv_sec) * 1000 + tspec.tv_nsec / 1000000;
+}
 
-    std::function<void(void *)> m_func;
-};
-
-#endif // ICOMPLETIONCLIENT_H
+}

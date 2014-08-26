@@ -26,10 +26,13 @@
 #include "epolleventpoller.h"
 #include "iconnection.h"
 #include "ieventpoller.h"
+#include "platformtime.h"
+#include "timer.h"
 
-#include <cstdio>
+#include <algorithm>
+#include <cassert>
 
-#define EVENTDISPATCHER_DEBUG
+//#define EVENTDISPATCHER_DEBUG
 
 using namespace std;
 
@@ -45,12 +48,33 @@ EventDispatcher::~EventDispatcher()
     for ( ; it != m_connections.end(); ++it ) {
         it->second->setEventDispatcher(0);
     }
+
+    multimap<uint64 /* due */, Timer*>::iterator tt = m_timers.begin();
+    for ( ; tt != m_timers.end(); ++tt ) {
+        tt->second->m_eventDispatcher = 0;
+        tt->second->m_isRunning = false;
+    }
+
     delete m_poller;
 }
 
 bool EventDispatcher::poll(int timeout)
 {
-    return m_poller->poll(timeout);
+    int nextDue = timeToFirstDueTimer();
+    if (timeout < 0) {
+        timeout = nextDue;
+    } else if (nextDue >= 0) {
+        timeout = std::min(timeout, nextDue);
+    }
+
+#ifdef EVENTDISPATCHER_DEBUG
+    printf("EventDispatcher::poll(): timeout=%d, nextDue=%d.\n", timeout, nextDue);
+#endif
+    if (!m_poller->poll(timeout)) {
+        return false;
+    }
+    triggerDueTimers();
+    return true;
 }
 
 void EventDispatcher::interrupt()
@@ -109,4 +133,128 @@ void EventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
         printf("EventDispatcher::notifyWrite(): unhandled file descriptor %d.\n", fd);
 #endif
     }
+}
+
+int EventDispatcher::timeToFirstDueTimer() const
+{
+    if (m_timers.empty()) {
+        return -1;
+    }
+    uint64 nextTimeout = (*m_timers.cbegin()).first >> 10;
+    uint64 currentTime = PlatformTime::monotonicMsecs();
+
+    if (currentTime >= nextTimeout) {
+        return 0;
+    }
+    return nextTimeout - currentTime;
+}
+
+uint EventDispatcher::nextTimerSerial()
+{
+    if (++m_lastTimerSerial > s_maxTimerSerial) {
+        m_lastTimerSerial = 0;
+    }
+    return m_lastTimerSerial;
+}
+
+void EventDispatcher::addTimer(Timer *timer)
+{
+    if (timer == m_triggeredTimer) {
+        m_isTriggeredTimerPendingRemoval = false;
+        return;
+    }
+    if (timer->m_tag == 0) {
+        timer->m_tag = nextTimerSerial();
+    }
+
+    uint64 dueTime = PlatformTime::monotonicMsecs() + timer->m_interval;
+
+    // ### When a timer is added from a timer callback, make sure it only runs in the *next*
+    //     iteration of the event loop. Otherwise, endless cascades of timers triggering, adding
+    //     more timers etc could occur without ever returning from triggerDueTimers().
+    //     For the condition for this hazard, see "invariant:" in triggerDueTimers(): the only way
+    //     the new timer could trigger in this event loop iteration is when:
+    //
+    //     m_triggerTime == currentTime(before call to trigger()) == timerAddedInTrigger().dueTime
+    //
+    //     note: m_triggeredTimer.dueTime < mtriggerTime is well possible; if ==, the additional
+    //           condition applies that timerAddedInTrigger().serial >= m_triggeredTimer.serial;
+    //           we ignore this and do it conservative and less complicated.
+    //           (the additional condition stems from serials and how multimap insertion works)
+    //
+    //     As a countermeasure, tweak the new timer's timeout, putting it well before m_triggeredTimer's
+    //     iterator position in the multimap... because the new timer must have zero timeout in order for
+    //     its due time to occur within this triggerDueTimers() iteration, it is supposed to trigger ASAP
+    //     anyway. This disturbs the order of triggering a little compared to the usual, but all
+    //     timeouts are properly respected - the next event loop iteration is guaranteed to trigger
+    //     timers at times strictly greater-equal than this iteration ;)
+    if (m_triggeredTimer && dueTime == m_triggerTime) {
+        dueTime = (m_triggeredTimer->m_tag >> 10) - 1;
+    }
+    timer->m_tag = (dueTime << 10) + (timer->m_tag & s_maxTimerSerial);
+
+    m_timers.emplace(timer->m_tag, timer);
+}
+
+void EventDispatcher::removeTimer(Timer *timer)
+{
+    assert(timer->m_tag != 0);
+
+    if (timer == m_triggeredTimer) {
+        // using this variable, we can avoid dereferencing m_triggeredTimer should it have been
+        // removed from its destructor or otherwise removed and deleted while triggered
+        m_isTriggeredTimerPendingRemoval = true;
+        return;
+    }
+
+    auto iterRange = m_timers.equal_range(timer->m_tag);
+    for (; iterRange.first != iterRange.second; ++iterRange.first) {
+        if (iterRange.first->second == timer) {
+            m_timers.erase(iterRange.first);
+            return;
+        }
+    }
+    assert(false); // the timer should never request a remove when it has not been added
+}
+
+void EventDispatcher::triggerDueTimers()
+{
+    m_triggerTime = PlatformTime::monotonicMsecs();
+    for (auto it = m_timers.begin(); it != m_timers.end();) {
+        const uint64 timerTimeout = (it->first >> 10);
+        if (timerTimeout > m_triggerTime) {
+            break;
+        }
+        // careful here - protect against adding and removing any timers while inside trigger()!
+        // we do this by keeping the iterator at the current position (so changing any other timer
+        // doesn't invalidate it) and blocking changes to the timer behind that iterator
+        // (so we don't mess with its data should it have been deleted outright in the callback)
+
+        m_triggeredTimer = it->second;
+        Timer *const timer = m_triggeredTimer;
+        m_isTriggeredTimerPendingRemoval = false;
+
+        // invariant: m_triggeredTimer.dueTime <= m_triggerTime <= currentTime(here) <= timerAddedInTrigger().dueTime
+        timer->trigger();
+
+        m_triggeredTimer = nullptr;
+        if (!m_isTriggeredTimerPendingRemoval && timer->m_isRunning) {
+            // ### we are rescheduling timers based on triggerTime even though real time can be much later - is
+            // this the desired behavior? I think so...
+            uint64 newTag = ((m_triggerTime + timer->m_interval) << 10) + (timer->m_tag & s_maxTimerSerial);
+            if (timer->m_tag == newTag) {
+                // if we re-added the timer, it could end up at the end of a run of entries with the same
+                // tag, and we'd iterate over the same timer again in this loop, re-adding it again etc.,
+                // producing an infinite loop - this is fixed by not modifying the record at all!
+                ++it;
+            } else {
+                timer->m_tag = newTag;
+                m_timers.erase(it++);
+                m_timers.emplace(timer->m_tag, timer);
+            }
+        } else {
+            m_timers.erase(it++);
+        }
+    }
+    m_triggerTime = 0;
 }

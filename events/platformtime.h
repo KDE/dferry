@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,26 +21,14 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ICOMPLETIONCLIENT_H
-#define ICOMPLETIONCLIENT_H
+#ifndef PLATFORMTIME_H
+#define PLATFORMTIME_H
 
-#include <functional>
+#include "types.h"
 
-class ICompletionClient
+namespace PlatformTime
 {
-public:
-    virtual ~ICompletionClient();
-    virtual void notifyCompletion(void *task) = 0;
-};
+uint64 monotonicMsecs();
+}
 
-class CompletionFunc : public ICompletionClient
-{
-public:
-    CompletionFunc(std::function<void(void *)> func) : m_func(func) {}
-    ~CompletionFunc() {}
-    void notifyCompletion(void *task) override { if (m_func) { m_func(task); } }
-
-    std::function<void(void *)> m_func;
-};
-
-#endif // ICOMPLETIONCLIENT_H
+#endif // PLATFORMTIME_H
