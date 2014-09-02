@@ -34,7 +34,7 @@ using namespace std;
 IEventDispatcher::~IEventDispatcher()
 {
     map<FileDescriptor, IConnection*>::iterator it = m_connections.begin();
-    for ( ; it != m_connections.end(); it = m_connections.begin() ) {
+    for ( ; it != m_connections.end(); ++it ) {
         it->second->setEventDispatcher(0);
     }
 }
