@@ -225,6 +225,61 @@ static void testAddInTrigger()
     }
 }
 
+static void testTriggerOnlyOncePerDispatch()
+{
+    EventDispatcher dispatcher;
+    int dispatchCounter = 0;
+    int noWorkCounter1 = 0;
+    int noWorkCounter2 = 0;
+    int hardWorkCounter = 0;
+
+    Timer t1(&dispatcher);
+    t1.setRunning(true);
+
+    Timer t2(&dispatcher);
+    t2.setRunning(true);
+
+    Timer t3(&dispatcher);
+    t3.setRunning(true);
+
+    CompletionFunc noWorkCounter([&noWorkCounter1, &noWorkCounter2, &dispatchCounter, &t1, &t3] (void *task)
+    {
+        if (task == &t1) {
+            TEST(noWorkCounter1 == dispatchCounter);
+            noWorkCounter1++;
+        } else {
+            TEST(task == &t3);
+            TEST(noWorkCounter2 == dispatchCounter);
+            noWorkCounter2++;
+        }
+    });
+    t1.setCompletionClient(&noWorkCounter);
+    t3.setCompletionClient(&noWorkCounter);
+
+
+    CompletionFunc hardWorker([&hardWorkCounter, &dispatchCounter] (void *task)
+    {
+        TEST(hardWorkCounter == dispatchCounter);
+        uint64 startTime = PlatformTime::monotonicMsecs();
+        // waste ten milliseconds, trying not to spend all time in PlatformTime::monotonicMsecs()
+        do {
+            for (volatile int i = 0; i < 20000; i++) {}
+        } while (PlatformTime::monotonicMsecs() < startTime + 10);
+        hardWorkCounter++;
+    });
+    t2.setCompletionClient(&hardWorker);
+
+    EventDispatcherInterruptor interruptor(&dispatcher, 200);
+
+    while (dispatcher.poll()) {
+        dispatchCounter++;
+    }
+
+    TEST(noWorkCounter1 == dispatchCounter || noWorkCounter1 == dispatchCounter - 1);
+    TEST(noWorkCounter2 == dispatchCounter || noWorkCounter2 == dispatchCounter - 1);
+    TEST(hardWorkCounter == dispatchCounter || hardWorkCounter == dispatchCounter - 1);
+}
+
 static void testReEnableNonRepeatingInTrigger()
 {
     EventDispatcher dispatcher;
@@ -290,6 +345,7 @@ int main(int argc, char *argv[])
     testAccuracy();
     testDeleteInTrigger();
     testAddInTrigger();
+    testTriggerOnlyOncePerDispatch();
     testReEnableNonRepeatingInTrigger();
     std::cout << "Passed!\n";
 }

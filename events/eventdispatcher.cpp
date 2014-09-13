@@ -241,14 +241,13 @@ void EventDispatcher::triggerDueTimers()
         if (!m_isTriggeredTimerPendingRemoval && timer->m_isRunning) {
             // ### we are rescheduling timers based on triggerTime even though real time can be much later - is
             // this the desired behavior? I think so...
-            uint64 newTag = ((m_triggerTime + timer->m_interval) << 10) + (timer->m_tag & s_maxTimerSerial);
-            if (timer->m_tag == newTag) {
-                // if we re-added the timer, it could end up at the end of a run of entries with the same
-                // tag, and we'd iterate over the same timer again in this loop, re-adding it again etc.,
-                // producing an infinite loop - this is fixed by not modifying the record at all!
+            if (timer->m_interval == 0) {
+                // we might iterate over this timer again in this invocation because we only break out of the
+                // loop if timerTimeout > m_triggerTime, so just leave it behind - zero interval timers with
+                // due time in the past work just fine in practice!
                 ++it;
             } else {
-                timer->m_tag = newTag;
+                timer->m_tag = ((m_triggerTime + timer->m_interval) << 10) + (timer->m_tag & s_maxTimerSerial);
                 m_timers.erase(it++);
                 m_timers.emplace(timer->m_tag, timer);
             }
