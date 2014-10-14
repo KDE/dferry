@@ -50,10 +50,10 @@ public:
 };
 
 // Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
-// "data is good if X" instead of "data is bad if Y". That stuff should end up the same after
+// "data is good if X" instead of "data is bad if !X". That stuff should end up the same after
 // optimization anyway.
-// while to avoid the dangling-else problem
-#define VALID_IF(cond) while (unlikely(!(cond))) { m_state = InvalidData; return; }
+// funny condition to avoid the dangling-else problem
+#define VALID_IF(cond) if (likely(cond)) {} else { m_state = InvalidData; return; }
 
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
@@ -905,9 +905,10 @@ void ArgumentList::Reader::advanceState()
             if (d->m_signaturePosition >= d->m_signature.length) {
                 m_state = EndVariant;
                 d->m_nesting.endVariant();
-                d->m_signature.begin = aggregateInfo.var.prevSignature.begin;
-                d->m_signature.length = aggregateInfo.var.prevSignature.length;
-                d->m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+                const Private::VariantInfo &variantInfo = aggregateInfo.var;
+                d->m_signature.begin = variantInfo.prevSignature.begin;
+                d->m_signature.length = variantInfo.prevSignature.length;
+                d->m_signaturePosition = variantInfo.prevSignaturePosition;
                 d->m_aggregateStack.pop_back();
                 return;
             }
@@ -1013,9 +1014,10 @@ void ArgumentList::Reader::advanceState()
         VALID_IF(d->m_nesting.beginVariant());
 
         aggregateInfo.aggregateType = BeginVariant;
-        aggregateInfo.var.prevSignature.begin = d->m_signature.begin;
-        aggregateInfo.var.prevSignature.length = d->m_signature.length;
-        aggregateInfo.var.prevSignaturePosition = d->m_signaturePosition;
+        Private::VariantInfo &variantInfo = aggregateInfo.var;
+        variantInfo.prevSignature.begin = d->m_signature.begin;
+        variantInfo.prevSignature.length = d->m_signature.length;
+        variantInfo.prevSignaturePosition = d->m_signaturePosition;
         d->m_aggregateStack.push_back(aggregateInfo);
         d->m_signature = signature;
         d->m_signaturePosition = -1; // because we increment d->m_signaturePosition before reading a char
@@ -1040,14 +1042,15 @@ void ArgumentList::Reader::advanceState()
 
         m_state = firstElementType == BeginDict ? BeginDict : BeginArray;
         aggregateInfo.aggregateType = m_state;
+        Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
 
         // ### are we supposed to align d->m_dataPosition if the array is empty?
         if (likely(!d->m_zeroLengthArrayNesting)) {
             int padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementAlignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
-            aggregateInfo.arr.dataEnd = d->m_dataPosition + arrayLength;
-            if (unlikely(aggregateInfo.arr.dataEnd > d->m_data.length)) {
+            arrayInfo.dataEnd = d->m_dataPosition + arrayLength;
+            if (unlikely(arrayInfo.dataEnd > d->m_data.length)) {
                 // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
                 goto out_needMoreData;
             }
@@ -1060,7 +1063,7 @@ void ArgumentList::Reader::advanceState()
         }
 
         // position at the 'a' or '{' because we increment d->m_signaturePosition before reading a char
-        aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
+        arrayInfo.containedTypeBegin = d->m_signaturePosition;
         if (!arrayLength) {
             d->m_zeroLengthArrayNesting++;
         }
@@ -1144,9 +1147,10 @@ bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
     assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+    Private::ArrayInfo &arrayInfo = aggregateInfo.arr;
 
     if (unlikely(d->m_zeroLengthArrayNesting)) {
-        if (d->m_signaturePosition <= aggregateInfo.arr.containedTypeBegin) {
+        if (d->m_signaturePosition <= arrayInfo.containedTypeBegin) {
             // do one iteration to read the types; read the next type...
             advanceState();
             // theoretically, nothing can go wrong: the signature is pre-validated and we are not going
@@ -1157,12 +1161,12 @@ bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
             d->m_zeroLengthArrayNesting--;
         }
     } else {
-        if (d->m_dataPosition < aggregateInfo.arr.dataEnd) {
+        if (d->m_dataPosition < arrayInfo.dataEnd) {
             if (isDict) {
                 d->m_dataPosition = align(d->m_dataPosition, 8); // align to dict entry
             }
             // rewind to start of contained type and read the type info there
-            d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+            d->m_signaturePosition = arrayInfo.containedTypeBegin;
             advanceState();
             return m_state != InvalidData;
         }
@@ -1522,8 +1526,8 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
             const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
             switch (aggregateInfo.aggregateType) {
             case BeginVariant:
-                // arrays and variants may contain just one single complete type (note that this will
-                // trigger only when not inside an aggregate inside the variant or array)
+                // arrays and variants may contain just one single complete type; note that this will
+                // trigger only when not inside an aggregate inside the variant or (see below) array
                 if (d->m_signaturePosition >= 1) {
                     VALID_IF(m_state == EndVariant);
                 }
@@ -1557,7 +1561,7 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         // signature must match first iteration (of an array/dict)
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= d->m_signature.length);
         // TODO need to apply special checks for state changes with no explicit signature char?
-        // (end of array, end of variant and such)
+        // (end of array, end of variant)
         for (int i = 0; i < signatureFragment.length; i++) {
             VALID_IF(d->m_signature.begin[d->m_signaturePosition++] == signatureFragment.begin[i]);
         }
@@ -1594,10 +1598,13 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
     case BeginVariant: {
         VALID_IF(d->m_nesting.beginVariant());
         aggregateInfo.aggregateType = BeginVariant;
-        aggregateInfo.var.prevSignature.begin = d->m_signature.begin;
-        aggregateInfo.var.prevSignature.length = d->m_signature.length;
-        aggregateInfo.var.prevSignaturePosition = d->m_signaturePosition;
-        aggregateInfo.var.signatureIndex = d->m_variantSignatures.size();
+
+        Private::VariantInfo &variantInfo = aggregateInfo.var;
+        variantInfo.prevSignature.begin = d->m_signature.begin;
+        variantInfo.prevSignature.length = d->m_signature.length;
+        variantInfo.prevSignaturePosition = d->m_signaturePosition;
+        variantInfo.signatureIndex = d->m_variantSignatures.size();
+
         d->m_aggregateStack.push_back(aggregateInfo);
 
         // arrange for finish() to take a signature from d->m_variantSignatures
@@ -1618,13 +1625,16 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
             VALID_IF(d->m_signaturePosition > 0);
         }
         d->m_signature.begin[d->m_signaturePosition] = '\0';
-        assert(aggregateInfo.var.signatureIndex < d->m_variantSignatures.size());
-        d->m_variantSignatures[aggregateInfo.var.signatureIndex].length = d->m_signaturePosition;
-        assert(d->m_variantSignatures[aggregateInfo.var.signatureIndex].begin = d->m_signature.begin);
 
-        d->m_signature.begin = aggregateInfo.var.prevSignature.begin;
-        d->m_signature.length = aggregateInfo.var.prevSignature.length;
-        d->m_signaturePosition = aggregateInfo.var.prevSignaturePosition;
+
+        Private::VariantInfo &variantInfo = aggregateInfo.var;
+        assert(variantInfo.signatureIndex < d->m_variantSignatures.size());
+        d->m_variantSignatures[variantInfo.signatureIndex].length = d->m_signaturePosition;
+        assert(d->m_variantSignatures[variantInfo.signatureIndex].begin = d->m_signature.begin);
+
+        d->m_signature.begin = variantInfo.prevSignature.begin;
+        d->m_signature.length = variantInfo.prevSignature.length;
+        d->m_signaturePosition = variantInfo.prevSignaturePosition;
         d->m_aggregateStack.pop_back();
         break; }
 
