@@ -24,6 +24,7 @@
 #include "iconnection.h"
 
 #include "eventdispatcher.h"
+#include "eventdispatcher_p.h"
 #include "iconnectionclient.h"
 #include "localsocket.h"
 #include "peeraddress.h"
@@ -90,8 +91,9 @@ void IConnection::updateReadWriteInterest()
     if (readInterest != m_isReadNotificationEnabled || writeInterest != m_isWriteNotificationEnabled) {
         m_isReadNotificationEnabled = readInterest;
         m_isWriteNotificationEnabled = writeInterest;
-        m_eventDispatcher->setReadWriteInterest(this, m_isReadNotificationEnabled,
-                                                m_isWriteNotificationEnabled);
+
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        ep->setReadWriteInterest(this, m_isReadNotificationEnabled, m_isWriteNotificationEnabled);
     }
 }
 
@@ -101,11 +103,13 @@ void IConnection::setEventDispatcher(EventDispatcher *ed)
         return;
     }
     if (m_eventDispatcher) {
-        m_eventDispatcher->removeConnection(this);
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        ep->removeIoEventClient(this);
     }
     m_eventDispatcher = ed;
     if (m_eventDispatcher) {
-        m_eventDispatcher->addConnection(this);
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        ep->addIoEventClient(this);
         m_isReadNotificationEnabled = false;
         m_isWriteNotificationEnabled = false;
         updateReadWriteInterest();

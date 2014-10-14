@@ -27,6 +27,7 @@
 #include "types.h"
 
 class EventDispatcher;
+class EventDispatcherPrivate;
 class ICompletionClient;
 
 class Timer
@@ -54,7 +55,7 @@ public:
     ICompletionClient *completionClient() const;
 
 private:
-    friend class EventDispatcher;
+    friend class EventDispatcherPrivate;
     void trigger();
     EventDispatcher *m_eventDispatcher; // TODO make a per-thread event dispatcher implicit?
     ICompletionClient *m_completionClient;

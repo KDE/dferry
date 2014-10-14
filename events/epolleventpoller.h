@@ -32,9 +32,9 @@ class EpollEventPoller : public IEventPoller
 {
 public:
     EpollEventPoller(EventDispatcher *dispatcher);
-    virtual ~EpollEventPoller() override;
-    virtual bool poll(int timeout) override;
-    virtual void interrupt() override;
+    ~EpollEventPoller();
+    bool poll(int timeout) override;
+    void interrupt() override;
 
     // TODO figure out how to handle plugging into other event loops in the general case;
     //      there seems to be some single-fd mechanism available on most platforms and where
@@ -42,9 +42,9 @@ public:
     FileDescriptor pollDescriptor() const;
 
     // reimplemented from IEventPoller
-    void addConnection(IConnection *conn) override;
-    void removeConnection(IConnection *conn) override;
-    void setReadWriteInterest(IConnection *conn, bool read, bool write) override;
+    void addIoEventClient(IioEventClient *ioc) override;
+    void removeIoEventClient(IioEventClient *ioc) override;
+    void setReadWriteInterest(IioEventClient *ioc, bool read, bool write) override;
 
 private:
     void notifyRead(int fd);

@@ -24,6 +24,7 @@
 #include "timer.h"
 
 #include "eventdispatcher.h"
+#include "eventdispatcher_p.h"
 #include "icompletionclient.h"
 #include "platformtime.h"
 
@@ -49,7 +50,7 @@ Timer::~Timer()
         m_reentrancyGuard = 0;
     }
     if (m_isRunning) {
-        m_eventDispatcher->removeTimer(this);
+        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
     }
 }
 
@@ -59,10 +60,11 @@ void Timer::setRunning(bool run)
         return;
     }
     m_isRunning = run;
+    EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
     if (run) {
-        m_eventDispatcher->addTimer(this);
+        ep->addTimer(this);
     } else {
-        m_eventDispatcher->removeTimer(this);
+        ep->removeTimer(this);
     }
 }
 
@@ -81,8 +83,9 @@ void Timer::setInterval(int msec)
     }
     m_interval = msec;
     if (m_isRunning) {
-        m_eventDispatcher->removeTimer(this);
-        m_eventDispatcher->addTimer(this);
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        ep->removeTimer(this);
+        ep->addTimer(this);
     }
 }
 

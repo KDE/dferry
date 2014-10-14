@@ -22,10 +22,11 @@
 */
 
 #include "eventdispatcher.h"
+#include "eventdispatcher_p.h"
 
 #include "epolleventpoller.h"
-#include "iconnection.h"
 #include "ieventpoller.h"
+#include "iioeventclient.h"
 #include "platformtime.h"
 #include "timer.h"
 
@@ -37,30 +38,35 @@
 using namespace std;
 
 EventDispatcher::EventDispatcher()
+   : d(new EventDispatcherPrivate)
 {
     // TODO other backend on other platforms
-    m_poller = new EpollEventPoller(this);
+    d->m_poller = new EpollEventPoller(this);
 }
 
-EventDispatcher::~EventDispatcher()
+EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    map<FileDescriptor, IConnection*>::iterator it = m_connections.begin();
-    for ( ; it != m_connections.end(); ++it ) {
-        it->second->setEventDispatcher(0);
+    for (const pair<FileDescriptor, IioEventClient*> &fdCon : m_ioClients) {
+        fdCon.second->setEventDispatcher(0);
     }
 
-    multimap<uint64 /* due */, Timer*>::iterator tt = m_timers.begin();
-    for ( ; tt != m_timers.end(); ++tt ) {
-        tt->second->m_eventDispatcher = 0;
-        tt->second->m_isRunning = false;
+    for (const pair<uint64 /* due */, Timer*> &dt : m_timers) {
+        dt.second->m_eventDispatcher = 0;
+        dt.second->m_isRunning = false;
     }
 
     delete m_poller;
 }
 
+EventDispatcher::~EventDispatcher()
+{
+    delete d;
+    d = 0;
+}
+
 bool EventDispatcher::poll(int timeout)
 {
-    int nextDue = timeToFirstDueTimer();
+    int nextDue = d->timeToFirstDueTimer();
     if (timeout < 0) {
         timeout = nextDue;
     } else if (nextDue >= 0) {
@@ -70,47 +76,47 @@ bool EventDispatcher::poll(int timeout)
 #ifdef EVENTDISPATCHER_DEBUG
     printf("EventDispatcher::poll(): timeout=%d, nextDue=%d.\n", timeout, nextDue);
 #endif
-    if (!m_poller->poll(timeout)) {
+    if (!d->m_poller->poll(timeout)) {
         return false;
     }
-    triggerDueTimers();
+    d->triggerDueTimers();
     return true;
 }
 
 void EventDispatcher::interrupt()
 {
-    m_poller->interrupt();
+    d->m_poller->interrupt();
 }
 
-bool EventDispatcher::addConnection(IConnection *conn)
+bool EventDispatcherPrivate::addIoEventClient(IioEventClient *ioc)
 {
-    pair<map<FileDescriptor, IConnection*>::iterator, bool> insertResult;
-    insertResult = m_connections.insert(make_pair(conn->fileDescriptor(), conn));
+    pair<unordered_map<FileDescriptor, IioEventClient*>::iterator, bool> insertResult;
+    insertResult = m_ioClients.insert(make_pair(ioc->fileDescriptor(), ioc));
     const bool ret = insertResult.second;
     if (ret) {
-        m_poller->addConnection(conn);
+        m_poller->addIoEventClient(ioc);
     }
     return ret;
 }
 
-bool EventDispatcher::removeConnection(IConnection *conn)
+bool EventDispatcherPrivate::removeIoEventClient(IioEventClient *ioc)
 {
-    const bool ret = m_connections.erase(conn->fileDescriptor());
+    const bool ret = m_ioClients.erase(ioc->fileDescriptor());
     if (ret) {
-        m_poller->removeConnection(conn);
+        m_poller->removeIoEventClient(ioc);
     }
     return ret;
 }
 
-void EventDispatcher::setReadWriteInterest(IConnection *conn, bool read, bool write)
+void EventDispatcherPrivate::setReadWriteInterest(IioEventClient *ioc, bool read, bool write)
 {
-    m_poller->setReadWriteInterest(conn, read, write);
+    m_poller->setReadWriteInterest(ioc, read, write);
 }
 
-void EventDispatcher::notifyConnectionForReading(FileDescriptor fd)
+void EventDispatcherPrivate::notifyClientForReading(FileDescriptor fd)
 {
-    std::map<int, IConnection *>::iterator it = m_connections.find(fd);
-    if (it != m_connections.end()) {
+    unordered_map<int, IioEventClient *>::iterator it = m_ioClients.find(fd);
+    if (it != m_ioClients.end()) {
         it->second->notifyRead();
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
@@ -121,10 +127,10 @@ void EventDispatcher::notifyConnectionForReading(FileDescriptor fd)
     }
 }
 
-void EventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
+void EventDispatcherPrivate::notifyClientForWriting(FileDescriptor fd)
 {
-    std::map<int, IConnection *>::iterator it = m_connections.find(fd);
-    if (it != m_connections.end()) {
+    unordered_map<int, IioEventClient *>::iterator it = m_ioClients.find(fd);
+    if (it != m_ioClients.end()) {
         it->second->notifyWrite();
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
@@ -135,7 +141,7 @@ void EventDispatcher::notifyConnectionForWriting(FileDescriptor fd)
     }
 }
 
-int EventDispatcher::timeToFirstDueTimer() const
+int EventDispatcherPrivate::timeToFirstDueTimer() const
 {
     if (m_timers.empty()) {
         return -1;
@@ -149,7 +155,7 @@ int EventDispatcher::timeToFirstDueTimer() const
     return nextTimeout - currentTime;
 }
 
-uint EventDispatcher::nextTimerSerial()
+uint EventDispatcherPrivate::nextTimerSerial()
 {
     if (++m_lastTimerSerial > s_maxTimerSerial) {
         m_lastTimerSerial = 0;
@@ -157,7 +163,7 @@ uint EventDispatcher::nextTimerSerial()
     return m_lastTimerSerial;
 }
 
-void EventDispatcher::addTimer(Timer *timer)
+void EventDispatcherPrivate::addTimer(Timer *timer)
 {
     if (timer == m_triggeredTimer) {
         m_isTriggeredTimerPendingRemoval = false;
@@ -177,10 +183,11 @@ void EventDispatcher::addTimer(Timer *timer)
     //
     //     m_triggerTime == currentTime(before call to trigger()) == timerAddedInTrigger().dueTime
     //
-    //     note: m_triggeredTimer.dueTime < mtriggerTime is well possible; if ==, the additional
+    //     note: m_triggeredTimer.dueTime < m_triggerTime is well possible; if ==, the additional
     //           condition applies that timerAddedInTrigger().serial >= m_triggeredTimer.serial;
     //           we ignore this and do it conservative and less complicated.
-    //           (the additional condition stems from serials and how multimap insertion works)
+    //           (the additional condition comes from serials as keys and that each "slot" in multimap with
+    //           the same keys is a list where new entries are back-inserted)
     //
     //     As a countermeasure, tweak the new timer's timeout, putting it well before m_triggeredTimer's
     //     iterator position in the multimap... because the new timer must have zero timeout in order for
@@ -196,13 +203,13 @@ void EventDispatcher::addTimer(Timer *timer)
     m_timers.emplace(timer->m_tag, timer);
 }
 
-void EventDispatcher::removeTimer(Timer *timer)
+void EventDispatcherPrivate::removeTimer(Timer *timer)
 {
     assert(timer->m_tag != 0);
 
     if (timer == m_triggeredTimer) {
         // using this variable, we can avoid dereferencing m_triggeredTimer should it have been
-        // removed from its destructor or otherwise removed and deleted while triggered
+        // deleted while triggered
         m_isTriggeredTimerPendingRemoval = true;
         return;
     }
@@ -217,7 +224,7 @@ void EventDispatcher::removeTimer(Timer *timer)
     assert(false); // the timer should never request a remove when it has not been added
 }
 
-void EventDispatcher::triggerDueTimers()
+void EventDispatcherPrivate::triggerDueTimers()
 {
     m_triggerTime = PlatformTime::monotonicMsecs();
     for (auto it = m_timers.begin(); it != m_timers.end();) {
@@ -242,9 +249,12 @@ void EventDispatcher::triggerDueTimers()
             // ### we are rescheduling timers based on triggerTime even though real time can be much later - is
             // this the desired behavior? I think so...
             if (timer->m_interval == 0) {
-                // we might iterate over this timer again in this invocation because we only break out of the
-                // loop if timerTimeout > m_triggerTime, so just leave it behind - zero interval timers with
-                // due time in the past work just fine in practice!
+                // With the other branch we might iterate over this timer again in this invocation because
+                // if there are several timers with the same tag, this entry will be back-inserted into the
+                // list of values for the current tag / key slot. We only break out of the loop if
+                // timerTimeout > m_triggerTime, so there would be an infinite loop.
+                // Instead, we just leave the iterator alone, which does not put it in front of the current
+                // iterator position. It's also good for performance. Win-win!
                 ++it;
             } else {
                 timer->m_tag = ((m_triggerTime + timer->m_interval) << 10) + (timer->m_tag & s_maxTimerSerial);

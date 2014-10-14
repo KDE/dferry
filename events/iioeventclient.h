@@ -21,46 +21,28 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef LOCALSOCKET_H
-#define LOCALSOCKET_H
+#ifndef IIOEVENTCLIENT_H
+#define IIOEVENTCLIENT_H
 
-#include "iconnection.h"
+#include "platform.h"
 
-#include <map>
-#include <string>
+class EventDispatcher;
+class EventDispatcherPrivate;
 
-class IConnectionListener;
-struct SessionBusInfo;
-
-class LocalSocket : public IConnection
+class IioEventClient
 {
 public:
-    // Connect to local socket at socketFilePath
-    LocalSocket(const std::string &socketFilePath);
+    virtual ~IioEventClient();
 
-    ~LocalSocket();
+    virtual FileDescriptor fileDescriptor() const = 0;
 
-    // pure virtuals from IConnection
-    int write(chunk data) override;
-    int availableBytesForReading() override;
-    chunk read(byte *buffer, int maxSize) override;
-    void close() override;
-    bool isOpen() override;
-    int fileDescriptor() const override;
-    void notifyRead() override;
-    // end IConnection
+    virtual void setEventDispatcher(EventDispatcher *ed) = 0;
+    virtual EventDispatcher *eventDispatcher() const = 0;
 
-private:
-    friend class IEventLoop;
-    friend class IConnectionListener;
-    // IConnectionListener uses this constructor for incoming connections
-    LocalSocket(int fd);
-
-    LocalSocket(); // not implemented
-    LocalSocket(const LocalSocket &); // not implemented, disable copying
-    LocalSocket &operator=(const LocalSocket &); // dito
-
-    int m_fd;
+protected:
+    friend class EventDispatcherPrivate;
+    virtual void notifyRead() = 0;
+    virtual void notifyWrite() = 0;
 };
 
-#endif // LOCALSOCKET_H
+#endif // IIOEVENTCLIENT_H

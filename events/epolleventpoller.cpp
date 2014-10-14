@@ -23,6 +23,7 @@
 
 #include "epolleventpoller.h"
 
+#include "eventdispatcher_p.h"
 #include "iconnection.h"
 
 #include <sys/epoll.h>
@@ -76,10 +77,10 @@ bool EpollEventPoller::poll(int timeout)
                 // this works in our currently only use case, interrupting poll once to reap a thread
                 return false;
             }
-            notifyConnectionForReading(evt->data.fd);
+            EventDispatcherPrivate::get(m_dispatcher)->notifyClientForReading(evt->data.fd);
         }
         if (evt->events & EPOLLOUT) {
-            notifyConnectionForWriting(evt->data.fd);
+            EventDispatcherPrivate::get(m_dispatcher)->notifyClientForWriting(evt->data.fd);
         }
     }
     return true;
@@ -97,27 +98,27 @@ FileDescriptor EpollEventPoller::pollDescriptor() const
     return m_epollFd;
 }
 
-void EpollEventPoller::addConnection(IConnection *connection)
+void EpollEventPoller::addIoEventClient(IioEventClient *ioc)
 {
     struct epoll_event epevt;
     epevt.events = 0;
     epevt.data.u64 = 0; // clear high bits in the union
-    epevt.data.fd = connection->fileDescriptor();
-    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, connection->fileDescriptor(), &epevt);
+    epevt.data.fd = ioc->fileDescriptor();
+    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, ioc->fileDescriptor(), &epevt);
 }
 
-void EpollEventPoller::removeConnection(IConnection *connection)
+void EpollEventPoller::removeIoEventClient(IioEventClient *ioc)
 {
-    const int connFd = connection->fileDescriptor();
+    const int fd = ioc->fileDescriptor();
     // Connection should call us *before* resetting its fd on failure
-    assert(connFd >= 0);
+    assert(fd >= 0);
     struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
-    epoll_ctl(m_epollFd, EPOLL_CTL_DEL, connFd, &epevt);
+    epoll_ctl(m_epollFd, EPOLL_CTL_DEL, fd, &epevt);
 }
 
-void EpollEventPoller::setReadWriteInterest(IConnection *conn, bool readEnabled, bool writeEnabled)
+void EpollEventPoller::setReadWriteInterest(IioEventClient *ioc, bool readEnabled, bool writeEnabled)
 {
-    FileDescriptor fd = conn->fileDescriptor();
+    FileDescriptor fd = ioc->fileDescriptor();
     if (!fd) {
         return;
     }

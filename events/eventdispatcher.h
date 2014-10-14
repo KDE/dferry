@@ -24,58 +24,24 @@
 #ifndef EVENTDISPATCHER_H
 #define EVENTDISPATCHER_H
 
-#include "platform.h"
-#include "types.h"
-
-#include <map>
-
-class IConnection;
-class IEventPoller;
-class Timer;
+class EventDispatcherPrivate;
 
 class EventDispatcher
 {
 public:
     EventDispatcher();
     ~EventDispatcher();
+    EventDispatcher(EventDispatcher &other) = delete;
+    void operator=(EventDispatcher &other) = delete;
+
     bool poll(int timeout = -1); // returns false if interrupted by interrupt()
-    // interrupt the waiting for events (from another thread)
+    // asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
+    // explicitly allowed to be called from another thread, but not only
     void interrupt();
 
 private:
-    int timeToFirstDueTimer() const;
-    uint nextTimerSerial();
-    void triggerDueTimers();
-
-    // for IConnection
-    friend class IConnection;
-    bool addConnection(IConnection *conn);
-    bool removeConnection(IConnection *conn);
-    void setReadWriteInterest(IConnection *conn, bool read, bool write);
-    // for IEventPoller
-    friend class IEventPoller;
-    void notifyConnectionForReading(FileDescriptor fd);
-    void notifyConnectionForWriting(FileDescriptor fd);
-    // for Timer
-    friend class Timer;
-    void addTimer(Timer *timer);
-    void removeTimer(Timer *timer);
-
-    IEventPoller *m_poller;
-    std::map<FileDescriptor, IConnection*> m_connections;
-
-    static const int s_maxTimerSerial = 0x3ff; // 10 bits set
-    uint m_lastTimerSerial = s_maxTimerSerial;
-    // the highest 54 bits in "due" encode due time, the lowest 10 bits act like a serial number to reduce
-    // (not eliminate - the serial eventually wraps around) collisions of timers with the same timeout
-    // (this is not expressed as a struct/class to avoid compiler pessimization in the multimap code)
-    std::multimap<uint64 /* due */, Timer*> m_timers;
-    // for logic to prevent executing a timer in the dispatch run it was added
-    uint64 m_triggerTime = 0;
-    // helpers that help to avoid touching the currently triggered timer after it has been deleted in
-    // a client called from trigger()
-    Timer *m_triggeredTimer = nullptr;
-    bool m_isTriggeredTimerPendingRemoval = false;
+    friend class EventDispatcherPrivate;
+    EventDispatcherPrivate *d;
 };
 
 #endif // EVENTDISPATCHER_H

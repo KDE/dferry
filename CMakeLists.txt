@@ -29,6 +29,7 @@ set(DFER_SOURCES
     events/epolleventpoller.cpp
     events/eventdispatcher.cpp
     events/ieventpoller.cpp
+    events/iioeventclient.cpp
     events/platformtime.cpp
     events/timer.cpp
     serialization/argumentlist.cpp
@@ -50,6 +51,7 @@ set(DFER_HEADERS
     events/epolleventpoller.h
     events/eventdispatcher.h
     events/ieventpoller.h
+    events/iioeventclient.h
     events/platformtime.h
     events/timer.h
     serialization/argumentlist.h

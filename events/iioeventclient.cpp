@@ -21,33 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IEVENTPOLLER_H
-#define IEVENTPOLLER_H
+#include "iioeventclient.h"
 
-#include "eventdispatcher.h"
-
-#include "platform.h"
-
-class IioEventClient;
-
-class IEventPoller
+IioEventClient::~IioEventClient()
 {
-public:
-    // if you need to refer to the dispatcher, grab and save the value here - not all implementations
-    // need it
-    IEventPoller(EventDispatcher *dispatcher);
-    virtual ~IEventPoller();
-
-    virtual bool poll(int timeout = -1) = 0; // returns false if interrupted by interrupt()
-    // interrupt the waiting for events (from another thread)
-    virtual void interrupt() = 0;
-
-    virtual void addIoEventClient(IioEventClient *ioc) = 0;
-    virtual void removeIoEventClient(IioEventClient *ioc) = 0;
-    virtual void setReadWriteInterest(IioEventClient *ioc, bool read, bool write) = 0;
-
-protected:
-    EventDispatcher *m_dispatcher;
-};
-
-#endif // IEVENTPOLLER_H
+}

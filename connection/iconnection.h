@@ -24,6 +24,7 @@
 #ifndef ICONNECTION_H
 #define ICONNECTION_H
 
+#include "iioeventclient.h"
 #include "platform.h"
 #include "types.h"
 
@@ -33,7 +34,7 @@ class EventDispatcher;
 class IConnectionClient;
 class PeerAddress;
 
-class IConnection
+class IConnection : public IioEventClient
 {
 public:
     // An IConnection subclass must have a file descriptor after construction and it must not change
@@ -52,18 +53,18 @@ public:
     virtual void close() = 0;
 
     virtual bool isOpen() = 0;
-    virtual FileDescriptor fileDescriptor() const = 0;
 
-    virtual void setEventDispatcher(EventDispatcher *ed);
-    virtual EventDispatcher *eventDispatcher() const;
+    void setEventDispatcher(EventDispatcher *ed) override;
+    EventDispatcher *eventDispatcher() const override;
 
+    // factory method - creates a suitable subclass to connect to address
     static IConnection *create(const PeerAddress &address);
 
 protected:
     friend class EventDispatcher;
-    // called from the event dispatcher. virtual because at least LocalSocket requires extra logic.
-    virtual void notifyRead();
-    virtual void notifyWrite();
+    // IioEventClient
+    void notifyRead() override;
+    void notifyWrite() override;
 
 private:
     friend class IConnectionClient;
