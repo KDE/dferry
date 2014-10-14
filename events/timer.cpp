@@ -54,6 +54,26 @@ Timer::~Timer()
     }
 }
 
+void Timer::start(int msec)
+{
+    if (msec < 0) {
+        std::cerr << "Timer::start(): interval cannot be negative!\n";
+    }
+    // restart if already running
+    EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+    if (m_isRunning) {
+        ep->removeTimer(this);
+    }
+    m_interval = msec;
+    m_isRunning = true;
+    ep->addTimer(this);
+}
+
+void Timer::stop()
+{
+    setRunning(false);
+}
+
 void Timer::setRunning(bool run)
 {
     if (m_isRunning == run) {

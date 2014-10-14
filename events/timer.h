@@ -40,6 +40,8 @@ public:
     Timer(const Timer &) = delete;
     void operator=(const Timer &) = delete;
 
+    void start(int msec); // convenience: setInterval(msec) and setRunning(true)
+    void stop(); // convenience: setRunning(false)
     void setRunning(bool);
     bool isRunning() const;
 
