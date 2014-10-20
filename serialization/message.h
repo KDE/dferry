@@ -57,8 +57,6 @@ public:
     Type type() const;
     void setType(Type type);
     uint32 protocolVersion() const;
-    void setSerial(uint32 serial);
-    uint32 serial() const;
 
     // more convenient access to headers
     void setPath(const std::string &path);
@@ -111,17 +109,24 @@ public:
     void setArgumentList(const ArgumentList &arguments);
     const ArgumentList &argumentList() const;
 
-    void readFrom(IConnection *connection); // fills in this message from connection
-    bool isReading() const;
-    void writeTo(IConnection *connection); // sends this message over connection
-    bool isWriting() const;
+    std::vector<byte> save();
+    void load(const std::vector<byte> &data);
+
+    // The rest of public methods is low-level API that should only be used in very special situations
+
+    void setSerial(uint32 serial);
+    uint32 serial() const;
+
+    void receive(IConnection *connection); // fills in this message from connection
+    bool isReceiving() const;
+    void send(IConnection *connection); // sends this message over connection
+    bool isSending() const;
 
     // for read or write completion (it should be clear which because reading and writing can't
     // happen simultaneously)
+    // ### might want to remove it: this is a value class, the completion client is kind of an identity aspect
+    //     because what would the completion client of a copy be? same pointer or null? both are bad. see std::auto_ptr.
     void setCompletionClient(ICompletionClient *client);
-
-    std::vector<byte> save();
-    void load(const std::vector<byte> &data);
 
 protected:
     virtual void notifyConnectionReadyRead();

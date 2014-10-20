@@ -84,7 +84,7 @@ void Transceiver::sendAsync(Message *m)
     m_sendQueue.push_back(m);
     m->setCompletionClient(this);
     if (!m_authNegotiator && m_sendQueue.size() == 1) {
-        m->writeTo(m_connection);
+        m->send(m_connection);
     }
 }
 
@@ -111,7 +111,7 @@ void Transceiver::notifyCompletion(void *task)
         m_authNegotiator = 0;
         // cout << "Authenticated.\n";
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
-        m_sendQueue.front()->writeTo(m_connection);
+        m_sendQueue.front()->send(m_connection);
         receiveNextMessage();
     } else {
         if (!m_sendQueue.empty() && task == m_sendQueue.front()) {
@@ -119,7 +119,7 @@ void Transceiver::notifyCompletion(void *task)
             delete m_sendQueue.front();
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
-                m_sendQueue.front()->writeTo(m_connection);
+                m_sendQueue.front()->send(m_connection);
             }
         } else {
             // cout << "Received message.\n";
@@ -135,5 +135,5 @@ void Transceiver::receiveNextMessage()
 {
     m_receivingMessage = new Message;
     m_receivingMessage->setCompletionClient(this);
-    m_receivingMessage->readFrom(m_connection);
+    m_receivingMessage->receive(m_connection);
 }

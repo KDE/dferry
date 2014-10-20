@@ -295,7 +295,7 @@ void Message::setExpectsReply(bool expectsReply)
     }
 }
 
-void Message::readFrom(IConnection *conn)
+void Message::receive(IConnection *conn)
 {
     if (m_state > LastSteadyState) {
         return;
@@ -307,12 +307,12 @@ void Message::readFrom(IConnection *conn)
     m_bodyLength = 0;
 }
 
-bool Message::isReading() const
+bool Message::isReceiving() const
 {
     return m_state == Deserializing;
 }
 
-void Message::writeTo(IConnection *conn)
+void Message::send(IConnection *conn)
 {
     if (m_state > LastSteadyState) {
         return;
@@ -326,7 +326,7 @@ void Message::writeTo(IConnection *conn)
     m_state = Serializing;
 }
 
-bool Message::isWriting() const
+bool Message::isSending() const
 {
     return m_state == Serializing;
 }
