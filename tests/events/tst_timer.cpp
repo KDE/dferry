@@ -184,8 +184,9 @@ static void testAddInTrigger()
     // iteration, otherwise there could be an (accidental or intended) infinite cascade of zero interval
     // timers adding zero interval timers
 
-    // since this test has a (small) false negative rate - if the current millisecond changes at certain
-    // points, it can mask a problem - just run it a couple of times...
+    // since this test has a (small) false negative (note: negative == no problem found) rate - if
+    // the current millisecond changes at certain points, it can mask a problem - just run it a couple
+    // of times...
     for (int i = 0; i < 5; i++) {
         EventDispatcher dispatcher;
         int dispatchCounter = 0;
