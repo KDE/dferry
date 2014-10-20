@@ -48,9 +48,15 @@
  */
 
 #include "peeraddress.h"
+#include "pendingreply.h"
+#include "types.h"
+
+#include <deque>
+#include <unordered_map>
 
 class AuthNegotiator;
 class EventDispatcher;
+class HelloReceiver;
 class IConnection;
 class ITransceiverClient;
 class Message;
@@ -71,28 +77,49 @@ public:
     Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer);
     ~Transceiver();
 
-    Message *sendAndAwaitReply(Message *m);
-    void sendAsync(Message *m);
+    void setDefaultReplyTimeout(int msecs);
+    int defaultReplyTimeout() const;
+    enum TimeoutSpecialValues {
+        DefaultTimeout = -1,
+        NoTimeout = -2
+    };
+    // if a message expects no reply, that is not absolutely binding; this method allows to send a message that
+    // does not expect (request) a reply, but we get it if it comes - not terribly useful in most cases
+    PendingReply send(Message *m, int timeoutMsecs = DefaultTimeout);
+    // this one throws away the reply, if any. It reports any locally detectable errors in its return value.
+    PendingReply::Error sendNoReply(Message *m);
 
     PeerAddress peerAddress() const;
+    PeerAddress ownAddress() const; // ### this suggests renaming PeerAddress to Address / EndpointAddress / ...
     IConnection *connection() const; // probably only needed for debugging
+
+    // TODO matching patterns for subscription; note that a signal requires path, interface and
+    //      "method" (signal name) of sender
+    void subscribeToSignal();
 
     ITransceiverClient *client() const;
     void setClient(ITransceiverClient *client);
 
 private:
-    void connect();
+    void authAndHello();
+    void processHello();
     void enqueueSendFromOtherThread(Message *m);
     void addReplyFromOtherThread(Message *m);
-    virtual void notifyCompletion(void *task);
+    void notifyCompletion(void *task) override;
 
     void receiveNextMessage();
+
+    // for PendingReply
+    friend class PendingReply;
+    friend class PendingReplyPrivate;
+    void unregisterPendingReply(PendingReplyPrivate *p);
 
     ITransceiverClient *m_client;
     Message *m_receivingMessage;
     int m_sendSerial; // TODO handle recycling of serials
+    int m_defaultTimeout;
     std::deque<Message *> m_sendQueue; // waiting to be sent
-    std::deque<Message *> m_receiveQueue; // waiting for event loop to run and notify the receiver
+    std::unordered_map<uint32, PendingReplyPrivate *> m_pendingReplies; // replies we're waiting for
 
     // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver
     // equals this, so that the main thread knows it's the main thread and not just a thread-local
@@ -100,9 +127,12 @@ private:
     IConnection *m_connection;
     Transceiver *m_mainThreadTransceiver;
 
+    friend class HelloReceiver;
+    HelloReceiver *m_helloReceiver;
+
+    EventDispatcher *m_eventDispatcher;
     PeerAddress m_peerAddress;
     AuthNegotiator *m_authNegotiator;
-    EventDispatcher *m_eventDispatcher;
 };
 
 #endif // TRANSCEIVER_H

@@ -83,7 +83,7 @@ void EavesdropperThread::run()
         for (int i = 0; i < messageTypeCount; i++) {
             Message *spyEnable = new Message;
             fillEavesdropMessage(spyEnable, messageType[i]);
-            m_transceiver->sendAsync(spyEnable);
+            m_transceiver->sendNoReply(spyEnable);
         }
     }
 

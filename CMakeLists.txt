@@ -20,6 +20,7 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
 set(DFER_SOURCES
     buslogic/itransceiverclient.cpp
     buslogic/peeraddress.cpp
+    buslogic/pendingreply.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
     connection/iconnection.cpp
@@ -40,6 +41,7 @@ set(DFER_SOURCES
 set(DFER_HEADERS
     buslogic/itransceiverclient.h
     buslogic/peeraddress.h
+    buslogic/pendingreply.h
     buslogic/transceiver.h
     connection/authnegotiator.h
     connection/iauthmechanism.h

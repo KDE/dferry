@@ -1,0 +1,60 @@
+/*
+   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public
+   License as published by the Free Software Foundation; either
+   version 2 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Library General Public License
+   along with this library; see the file COPYING.LGPL.  If not, write to
+   the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.
+
+   Alternatively, this file is available under the Mozilla Public License
+   Version 1.1.  You may obtain a copy of the License at
+   http://www.mozilla.org/MPL/
+*/
+
+#ifndef PENDINGREPLY_P_H
+#define PENDINGREPLY_P_H
+
+#include "icompletionclient.h"
+#include "message.h"
+#include "timer.h"
+
+class PendingReply;
+class Transceiver;
+
+class PendingReplyPrivate : public ICompletionClient
+{
+public:
+    PendingReplyPrivate(EventDispatcher *dispatcher, int timeout)
+       : m_replyTimeout(dispatcher)
+    {
+        if (timeout >= 0) {
+            m_replyTimeout.setRepeating(false);
+            m_replyTimeout.start(timeout);
+        }
+    }
+
+    // for Transceiver
+    void notifyDone();
+    // for m_replyTimeout
+    void notifyCompletion(void *task) override;
+
+    PendingReply *m_owner;
+    Transceiver *m_transceiver;
+    Timer m_replyTimeout;
+    ICompletionClient *m_client;
+    uint32 m_serial;
+    PendingReply::Error m_error = PendingReply::Error::None;
+    Message *m_reply = nullptr;
+};
+
+#endif // PENDINGREPLY_P_H

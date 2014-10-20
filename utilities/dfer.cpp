@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < messageTypeCount; i++) {
             Message *spyEnable = new Message;
             fillEavesdropMessage(spyEnable, messageType[i]);
-            transceiver.sendAsync(spyEnable);
+            transceiver.sendNoReply(spyEnable);
         }
     }
 
