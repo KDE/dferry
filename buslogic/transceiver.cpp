@@ -22,6 +22,7 @@
 */
 
 #include "transceiver.h"
+#include "transceiver_p.h"
 
 #include "authnegotiator.h"
 #include "icompletionclient.h"
@@ -41,7 +42,7 @@ class HelloReceiver : public ICompletionClient
 public:
     void notifyCompletion(void *task) override;
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
-    Transceiver *m_parent;
+    TransceiverPrivate *m_parent;
 };
 
 void HelloReceiver::notifyCompletion(void *)
@@ -49,7 +50,7 @@ void HelloReceiver::notifyCompletion(void *)
     m_parent->processHello();
 }
 
-Transceiver::Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer)
+TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const PeerAddress &peer)
    : m_client(nullptr),
      m_receivingMessage(nullptr),
      m_sendSerial(1),
@@ -61,26 +62,31 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer)
      m_peerAddress(peer),
      m_authNegotiator(nullptr)
 {
+}
+
+Transceiver::Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer)
+   : d(new TransceiverPrivate(dispatcher, peer))
+{
     cout << "session bus socket type: " << peer.socketType() << '\n';
     cout << "session bus path: " << peer.path() << '\n';
-    m_connection = IConnection::create(peer);
-    m_connection->setEventDispatcher(dispatcher);
-    cout << "connection is " << (m_connection->isOpen() ? "open" : "closed") << ".\n";
-    authAndHello();
+    d->m_connection = IConnection::create(peer);
+    d->m_connection->setEventDispatcher(dispatcher);
+    cout << "connection is " << (d->m_connection->isOpen() ? "open" : "closed") << ".\n";
+    d->authAndHello(this);
 }
 
 Transceiver::~Transceiver()
 {
-    delete m_connection;
-    m_connection = nullptr;
-    delete m_authNegotiator;
-    m_authNegotiator = nullptr;
-    delete m_helloReceiver;
-    m_helloReceiver = nullptr;
-    // TODO delete m_receivingMessage ?
+    delete d->m_connection;
+    delete d->m_authNegotiator;
+    delete d->m_helloReceiver;
+    // TODO delete d->m_receivingMessage ?
+
+    delete d;
+    d = nullptr;
 }
 
-void Transceiver::authAndHello()
+void TransceiverPrivate::authAndHello(Transceiver *parent)
 {
     m_authNegotiator = new AuthNegotiator(m_connection);
     m_authNegotiator->setCompletionClient(this);
@@ -95,18 +101,19 @@ void Transceiver::authAndHello()
     hello->setMethod(std::string("Hello"));
 
     m_helloReceiver = new HelloReceiver;
-    m_helloReceiver->m_helloReply = send(hello);
+    m_helloReceiver->m_helloReply = parent->send(hello);
     m_helloReceiver->m_helloReply.setCompletionClient(m_helloReceiver);
     m_helloReceiver->m_parent = this;
 }
 
-void Transceiver::processHello()
+void TransceiverPrivate::processHello()
 {
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
     ArgumentList argList = m_helloReceiver->m_helloReply.reply().argumentList();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
+
     ArgumentList::Reader reader = argList.beginRead();
     cstring busName = reader.readString();
     assert(reader.state() == ArgumentList::Finished);
@@ -115,25 +122,25 @@ void Transceiver::processHello()
 
 void Transceiver::setDefaultReplyTimeout(int msecs)
 {
-    m_defaultTimeout = msecs;
+    d->m_defaultTimeout = msecs;
 }
 
 int Transceiver::defaultReplyTimeout() const
 {
-    return m_defaultTimeout;
+    return d->m_defaultTimeout;
 }
 
 PendingReply Transceiver::send(Message *m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
-        timeoutMsecs = m_defaultTimeout;
+        timeoutMsecs = d->m_defaultTimeout;
     }
 
-    PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(m_eventDispatcher, timeoutMsecs);
-    pendingPriv->m_transceiver = this;
+    PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(d->m_eventDispatcher, timeoutMsecs);
+    pendingPriv->m_transceiver = d;
     pendingPriv->m_client = nullptr;
-    pendingPriv->m_serial = m_sendSerial;
-    m_pendingReplies.emplace(m_sendSerial, pendingPriv);
+    pendingPriv->m_serial = d->m_sendSerial;
+    d->m_pendingReplies.emplace(d->m_sendSerial, pendingPriv);
 
     sendNoReply(m);
 
@@ -144,31 +151,31 @@ PendingReply::Error Transceiver::sendNoReply(Message *m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
-    m->setSerial(m_sendSerial++);
-    m_sendQueue.push_back(m);
-    m->setCompletionClient(this);
-    if (!m_authNegotiator && m_sendQueue.size() == 1) {
-        m->send(m_connection);
+    m->setSerial(d->m_sendSerial++);
+    d->m_sendQueue.push_back(m);
+    m->setCompletionClient(d);
+    if (!d->m_authNegotiator && d->m_sendQueue.size() == 1) {
+        m->send(d->m_connection);
     }
     return PendingReply::Error::None;// ###
 }
 
 IConnection *Transceiver::connection() const
 {
-    return m_connection;
+    return d->m_connection;
 }
 
 ITransceiverClient *Transceiver::client() const
 {
-    return m_client;
+    return d->m_client;
 }
 
 void Transceiver::setClient(ITransceiverClient *client)
 {
-    m_client = client;
+    d->m_client = client;
 }
 
-void Transceiver::notifyCompletion(void *task)
+void TransceiverPrivate::notifyCompletion(void *task)
 {
     if (m_authNegotiator) {
         assert(task == m_authNegotiator);
@@ -227,14 +234,14 @@ void Transceiver::notifyCompletion(void *task)
     }
 }
 
-void Transceiver::receiveNextMessage()
+void TransceiverPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
     m_receivingMessage->setCompletionClient(this);
     m_receivingMessage->receive(m_connection);
 }
 
-void Transceiver::unregisterPendingReply(PendingReplyPrivate *p)
+void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)
 {
 #ifndef NDEBUG
     auto it = m_pendingReplies.find(p->m_serial);

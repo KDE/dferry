@@ -29,7 +29,7 @@
 #include "timer.h"
 
 class PendingReply;
-class Transceiver;
+class TransceiverPrivate;
 
 class PendingReplyPrivate : public ICompletionClient
 {
@@ -49,7 +49,7 @@ public:
     void notifyCompletion(void *task) override;
 
     PendingReply *m_owner;
-    Transceiver *m_transceiver;
+    TransceiverPrivate *m_transceiver;
     Timer m_replyTimeout;
     ICompletionClient *m_client;
     uint32 m_serial;

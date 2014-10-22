@@ -51,17 +51,13 @@
 #include "pendingreply.h"
 #include "types.h"
 
-#include <deque>
-#include <unordered_map>
-
-class AuthNegotiator;
 class EventDispatcher;
-class HelloReceiver;
 class IConnection;
 class ITransceiverClient;
 class Message;
+class TransceiverPrivate;
 
-class Transceiver : public ICompletionClient
+class Transceiver
 {
 public:
     enum ThreadAffinity
@@ -93,6 +89,7 @@ public:
 
     PeerAddress peerAddress() const;
     PeerAddress ownAddress() const; // ### this suggests renaming PeerAddress to Address / EndpointAddress / ...
+
     IConnection *connection() const; // probably only needed for debugging
 
     // TODO matching patterns for subscription; note that a signal requires path, interface and
@@ -103,38 +100,8 @@ public:
     void setClient(ITransceiverClient *client);
 
 private:
-    void authAndHello();
-    void processHello();
-    void enqueueSendFromOtherThread(Message *m);
-    void addReplyFromOtherThread(Message *m);
-    void notifyCompletion(void *task) override;
-
-    void receiveNextMessage();
-
-    // for PendingReply
-    friend class PendingReply;
-    friend class PendingReplyPrivate;
-    void unregisterPendingReply(PendingReplyPrivate *p);
-
-    ITransceiverClient *m_client;
-    Message *m_receivingMessage;
-    int m_sendSerial; // TODO handle recycling of serials
-    int m_defaultTimeout;
-    std::deque<Message *> m_sendQueue; // waiting to be sent
-    std::unordered_map<uint32, PendingReplyPrivate *> m_pendingReplies; // replies we're waiting for
-
-    // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver
-    // equals this, so that the main thread knows it's the main thread and not just a thread-local
-    // transceiver.
-    IConnection *m_connection;
-    Transceiver *m_mainThreadTransceiver;
-
-    friend class HelloReceiver;
-    HelloReceiver *m_helloReceiver;
-
-    EventDispatcher *m_eventDispatcher;
-    PeerAddress m_peerAddress;
-    AuthNegotiator *m_authNegotiator;
+    friend class TransceiverPrivate;
+    TransceiverPrivate *d;
 };
 
 #endif // TRANSCEIVER_H

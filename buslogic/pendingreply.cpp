@@ -25,6 +25,7 @@
 #include "pendingreply_p.h"
 
 #include "transceiver.h"
+#include "transceiver_p.h"
 
 #include <cassert>
 #include <iostream>
