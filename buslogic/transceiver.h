@@ -76,6 +76,8 @@ public:
     // convenience, for connecting to the session or system bus
     Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer);
     ~Transceiver();
+    Transceiver(Transceiver &other) = delete;
+    Transceiver &operator=(Transceiver &other) = delete;
 
     void setDefaultReplyTimeout(int msecs);
     int defaultReplyTimeout() const;
