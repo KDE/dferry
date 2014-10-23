@@ -22,6 +22,7 @@
 */
 
 #include "message.h"
+#include "message_p.h"
 
 #include "basictypeio.h"
 #include "icompletionclient.h"
@@ -41,16 +42,44 @@ static const byte thisMachineEndianness = 'l';
 
 // TODO think of copying signature from and to output!
 
-Message::Message()
-   : m_isByteSwapped(false),
+MessagePrivate::MessagePrivate(Message *parent)
+   : m_message(parent),
+     m_isByteSwapped(false),
      m_state(Empty),
-     m_messageType(InvalidMessage),
+     m_messageType(Message::InvalidMessage),
      m_flags(0),
      m_protocolVersion(1),
      m_bodyLength(0),
      m_serial(0),
-     m_completionClient(0)
+     m_completionClient(nullptr)
+{}
+
+Message::Message()
+   : d(new MessagePrivate(this))
 {
+}
+
+Message::Message(Message &&other)
+   : d(other.d)
+{
+    other.d = nullptr;
+    d->m_message = this;
+}
+
+Message &Message::operator=(Message &&other)
+{
+    if (&other != this) {
+        delete d;
+        d = other.d;
+        d->m_message = this;
+    }
+    return *this;
+}
+
+Message::~Message()
+{
+    delete d;
+    d = nullptr;
 }
 
 struct VarHeaderPrinter
@@ -88,8 +117,8 @@ static const char *printableMessageTypes[messageTypeCount] = {
 string Message::prettyPrint() const
 {
     string ret;
-    if (m_messageType >= 1 && m_messageType < messageTypeCount) {
-        ret += printableMessageTypes[m_messageType];
+    if (d->m_messageType >= 1 && d->m_messageType < messageTypeCount) {
+        ret += printableMessageTypes[d->m_messageType];
     } else {
         return string("Invalid message.\n");
     }
@@ -115,38 +144,38 @@ string Message::prettyPrint() const
     }
 
     ret += '\n';
-    ret += m_mainArguments.prettyPrint();
+    ret += d->m_mainArguments.prettyPrint();
     return ret;
 }
 
 Message::Type Message::type() const
 {
-    return m_messageType;
+    return d->m_messageType;
 }
 
 void Message::setType(Type type)
 {
-    if (m_messageType == type) {
+    if (d->m_messageType == type) {
         return;
     }
-    m_buffer.clear(); // dirty
-    m_messageType = type;
-    setExpectsReply(m_messageType == MethodCallMessage);
+    d->m_buffer.clear(); // dirty
+    d->m_messageType = type;
+    setExpectsReply(d->m_messageType == MethodCallMessage);
 }
 
 uint32 Message::protocolVersion() const
 {
-    return m_protocolVersion;
+    return d->m_protocolVersion;
 }
 
 void Message::setSerial(uint32 serial)
 {
-    m_serial = serial;
+    d->m_serial = serial;
 }
 
 uint32 Message::serial() const
 {
-    return m_serial;
+    return d->m_serial;
 }
 
 std::string Message::path() const
@@ -241,110 +270,110 @@ void Message::setUnixFdCount(uint32 fdCount)
 
 string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
-    map<int, string>::const_iterator it = m_stringHeaders.find(header);
+    map<int, string>::const_iterator it = d->m_stringHeaders.find(header);
     if (isPresent) {
-        *isPresent = it != m_stringHeaders.end();
+        *isPresent = it != d->m_stringHeaders.end();
     }
-    return it == m_stringHeaders.end() ? string() : it->second;
+    return it == d->m_stringHeaders.end() ? string() : it->second;
 }
 
 bool Message::setStringHeader(VariableHeader header, const string &value)
 {
     if (header == SignatureHeader && value.empty()) {
         // The spec allows no signature header when the signature is empty. Make use of that.
-        if (m_stringHeaders.erase(header)) {
-            m_buffer.clear();
+        if (d->m_stringHeaders.erase(header)) {
+            d->m_buffer.clear();
         }
         return true;
     }
 
-    m_buffer.clear();
-    m_stringHeaders[header] = value;
+    d->m_buffer.clear();
+    d->m_stringHeaders[header] = value;
     // TODO error checking / validation
     return true;
 }
 
 uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
 {
-    map<int, uint32>::const_iterator it = m_intHeaders.find(header);
+    map<int, uint32>::const_iterator it = d->m_intHeaders.find(header);
     if (isPresent) {
-        *isPresent = it != m_intHeaders.end();
+        *isPresent = it != d->m_intHeaders.end();
     }
-    return it == m_intHeaders.end() ? 0 : it->second;
+    return it == d->m_intHeaders.end() ? 0 : it->second;
 }
 
 bool Message::setIntHeader(VariableHeader header, uint32 value)
 {
-    m_buffer.clear();
-    m_intHeaders[header] = value;
+    d->m_buffer.clear();
+    d->m_intHeaders[header] = value;
     // TODO error checking / validation
     return true;
 }
 
 bool Message::expectsReply() const
 {
-    return (m_flags & NoReplyExpectedFlag) == 0;
+    return (d->m_flags & MessagePrivate::NoReplyExpectedFlag) == 0;
 }
 
 void Message::setExpectsReply(bool expectsReply)
 {
     if (expectsReply) {
-        m_flags &= ~NoReplyExpectedFlag;
+        d->m_flags &= ~MessagePrivate::NoReplyExpectedFlag;
     } else {
-        m_flags |= NoReplyExpectedFlag;
+        d->m_flags |= MessagePrivate::NoReplyExpectedFlag;
     }
 }
 
 void Message::receive(IConnection *conn)
 {
-    if (m_state > LastSteadyState) {
+    if (d->m_state > MessagePrivate::LastSteadyState) {
         return;
     }
-    conn->addClient(this);
-    setIsReadNotificationEnabled(true);
-    m_state = Deserializing;
-    m_headerLength = 0;
-    m_bodyLength = 0;
+    conn->addClient(d);
+    d->setIsReadNotificationEnabled(true);
+    d->m_state = MessagePrivate::Deserializing;
+    d->m_headerLength = 0;
+    d->m_bodyLength = 0;
 }
 
 bool Message::isReceiving() const
 {
-    return m_state == Deserializing;
+    return d->m_state == MessagePrivate::Deserializing;
 }
 
 void Message::send(IConnection *conn)
 {
-    if (m_state > LastSteadyState) {
+    if (d->m_state > MessagePrivate::LastSteadyState) {
         return;
     }
-    if (m_buffer.empty() && !fillOutBuffer()) {
+    if (d->m_buffer.empty() && !d->fillOutBuffer()) {
         // TODO report error
         return;
     }
-    conn->addClient(this);
-    setIsWriteNotificationEnabled(true);
-    m_state = Serializing;
+    conn->addClient(d);
+    d->setIsWriteNotificationEnabled(true);
+    d->m_state = MessagePrivate::Serializing;
 }
 
 bool Message::isSending() const
 {
-    return m_state == Serializing;
+    return d->m_state == MessagePrivate::Serializing;
 }
 
 void Message::setCompletionClient(ICompletionClient *client)
 {
-    m_completionClient = client;
+    d->m_completionClient = client;
 }
 
 void Message::setArgumentList(const ArgumentList &arguments)
 {
-    m_buffer.clear();
-    m_mainArguments = arguments;
+    d->m_buffer.clear();
+    d->m_mainArguments = arguments;
 }
 
 const ArgumentList &Message::argumentList() const
 {
-    return m_mainArguments;
+    return d->m_mainArguments;
 }
 
 static const int s_properFixedHeaderLength = 12;
@@ -355,31 +384,31 @@ static const int s_maxMessageLength = 134217728;
 // a few cycles. Validating only the header of the message doesn't seem to be worth it.
 void Message::load(const std::vector<byte> &data)
 {
-    if (m_state > LastSteadyState) {
+    if (d->m_state > MessagePrivate::LastSteadyState) {
         return;
     }
-    m_headerLength = 0;
-    m_bodyLength = 0;
-    m_buffer = data;
+    d->m_headerLength = 0;
+    d->m_bodyLength = 0;
+    d->m_buffer = data;
 
-    bool ok = m_buffer.size() >= s_extendedFixedHeaderLength;
-    ok = ok && deserializeFixedHeaders();
-    ok = ok && m_buffer.size() >= m_headerLength;
-    ok = ok && deserializeVariableHeaders();
+    bool ok = d->m_buffer.size() >= s_extendedFixedHeaderLength;
+    ok = ok && d->deserializeFixedHeaders();
+    ok = ok && d->m_buffer.size() >= d->m_headerLength;
+    ok = ok && d->deserializeVariableHeaders();
 
     if (!ok) {
-        m_state = Empty;
-        m_buffer.clear();
+        d->m_state = MessagePrivate::Empty;
+        d->m_buffer.clear();
         return;
     }
-    assert(m_buffer.size() == m_headerLength + m_bodyLength);
+    assert(d->m_buffer.size() == d->m_headerLength + d->m_bodyLength);
     std::string sig = signature();
-    chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
-    m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
-    m_state = Deserialized;
+    chunk bodyData(&d->m_buffer.front() + d->m_headerLength, d->m_bodyLength);
+    d->m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, d->m_isByteSwapped);
+    d->m_state = MessagePrivate::Deserialized;
 }
 
-void Message::notifyConnectionReadyRead()
+void MessagePrivate::notifyConnectionReadyRead()
 {
     if (m_state != Deserializing) {
         return;
@@ -425,7 +454,11 @@ void Message::notifyConnectionReadyRead()
             assert(m_buffer.size() == m_headerLength + m_bodyLength);
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
-            std::string sig = signature();
+            std::string sig;
+            auto it = m_stringHeaders.find(Message::SignatureHeader);
+            if (it != m_stringHeaders.end()) {
+                sig = it->second;
+            }
             chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
             m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
             assert(!isError);
@@ -451,17 +484,17 @@ void Message::notifyConnectionReadyRead()
 
 std::vector<byte> Message::save()
 {
-    if (m_state > LastSteadyState) {
+    if (d->m_state > MessagePrivate::LastSteadyState) {
         return vector<byte>();
     }
-    if (m_buffer.empty() && !fillOutBuffer()) {
+    if (d->m_buffer.empty() && !d->fillOutBuffer()) {
         // TODO report error?
         return vector<byte>();
     }
-    return m_buffer;
+    return d->m_buffer;
 }
 
-void Message::notifyConnectionReadyWrite()
+void MessagePrivate::notifyConnectionReadyWrite()
 {
     if (m_state != Serializing) {
         return;
@@ -479,41 +512,41 @@ void Message::notifyConnectionReadyWrite()
     notifyCompletionClient();
 }
 
-bool Message::requiredHeadersPresent() const
+bool MessagePrivate::requiredHeadersPresent() const
 {
     if (m_serial == 0 || m_protocolVersion != 1) {
         return false;
     }
 
     switch (m_messageType) {
-    case SignalMessage:
+    case Message::SignalMessage:
         // required: PathHeader, InterfaceHeader, MethodHeader
-        if (!m_stringHeaders.count(InterfaceHeader)) {
+        if (!m_stringHeaders.count(Message::InterfaceHeader)) {
             return false;
         }
         // fall through
-    case MethodCallMessage:
+    case Message::MethodCallMessage:
         // required: PathHeader, MethodHeader
-        return m_stringHeaders.count(PathHeader) && m_stringHeaders.count(MethodHeader);
+        return m_stringHeaders.count(Message::PathHeader) && m_stringHeaders.count(Message::MethodHeader);
 
-    case ErrorMessage:
+    case Message::ErrorMessage:
         // required: ErrorNameHeader, ReplySerialHeader
-        if (!m_stringHeaders.count(ErrorNameHeader)) {
+        if (!m_stringHeaders.count(Message::ErrorNameHeader)) {
             return false;
         }
         // fall through
-    case MethodReturnMessage:
+    case Message::MethodReturnMessage:
         // required: ReplySerialHeader
-        return m_intHeaders.count(ReplySerialHeader);
+        return m_intHeaders.count(Message::ReplySerialHeader);
 
-    case InvalidMessage:
+    case Message::InvalidMessage:
     default:
         break;
     }
     return false;
 }
 
-bool Message::deserializeFixedHeaders()
+bool MessagePrivate::deserializeFixedHeaders()
 {
     assert(m_buffer.size() >= s_extendedFixedHeaderLength);
     byte *p = &m_buffer.front();
@@ -525,7 +558,7 @@ bool Message::deserializeFixedHeaders()
     m_isByteSwapped = endianness != thisMachineEndianness;
 
     // TODO validate the values read here
-    m_messageType = static_cast<Type>(*p++);
+    m_messageType = static_cast<Message::Type>(*p++);
     m_flags = *p++;
     m_protocolVersion = *p++;
 
@@ -541,7 +574,7 @@ bool Message::deserializeFixedHeaders()
     return m_headerLength + m_bodyLength <= s_maxMessageLength;
 }
 
-bool Message::deserializeVariableHeaders()
+bool MessagePrivate::deserializeVariableHeaders()
 {
     // use ArgumentList to parse the variable header fields
     // HACK: the fake first int argument is there to start the ArgumentList's data 8 byte aligned
@@ -569,30 +602,30 @@ bool Message::deserializeVariableHeaders()
         reader.beginVariant();
         switch (headerType) {
         // TODO: proper error handling instead of assertions
-        case PathHeader: {
+        case Message::PathHeader: {
             assert(reader.state() == ArgumentList::ObjectPath);
             m_stringHeaders[headerType] = toStdString(reader.readObjectPath());;
             break;
         }
-        case InterfaceHeader:
-        case MethodHeader:
-        case ErrorNameHeader:
-        case DestinationHeader:
-        case SenderHeader: {
+        case Message::InterfaceHeader:
+        case Message::MethodHeader:
+        case Message::ErrorNameHeader:
+        case Message::DestinationHeader:
+        case Message::SenderHeader: {
             assert(reader.state() == ArgumentList::String);
             m_stringHeaders[headerType] = toStdString(reader.readString());
             break;
         }
-        case ReplySerialHeader:
+        case Message::ReplySerialHeader:
             assert(reader.state() == ArgumentList::Uint32);
             m_intHeaders[headerType] = reader.readUint32();
             break;
-        case UnixFdsHeader:
+        case Message::UnixFdsHeader:
             assert(reader.state() == ArgumentList::Uint32);
             reader.readUint32(); // discard it, for now
             // TODO
             break;
-        case SignatureHeader: {
+        case Message::SignatureHeader: {
             assert(reader.state() == ArgumentList::Signature);
             // The spec allows having no signature header, which means "empty signature". However...
             // We do not drop empty signature headers when deserializing, in order to preserve
@@ -619,7 +652,7 @@ bool Message::deserializeVariableHeaders()
     return true;
 }
 
-bool Message::fillOutBuffer()
+bool MessagePrivate::fillOutBuffer()
 {
     if (!requiredHeadersPresent()) {
         return false;
@@ -628,7 +661,7 @@ bool Message::fillOutBuffer()
     // ### can this be done more cleanly?
     cstring signature = m_mainArguments.signature();
     if (signature.length) {
-        m_stringHeaders[SignatureHeader] = toStdString(signature);
+        m_stringHeaders[Message::SignatureHeader] = toStdString(signature);
     }
 
     ArgumentList headerArgs;
@@ -670,7 +703,7 @@ bool Message::fillOutBuffer()
     return true;
 }
 
-void Message::serializeFixedHeaders()
+void MessagePrivate::serializeFixedHeaders()
 {
     assert(m_buffer.size() >= s_extendedFixedHeaderLength);
     byte *p = &m_buffer.front();
@@ -684,7 +717,7 @@ void Message::serializeFixedHeaders()
     basic::writeUint32(p + sizeof(uint32), m_serial);
 }
 
-void Message::serializeVariableHeaders(ArgumentList *headerArgs)
+void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
 {
     ArgumentList::Writer writer = headerArgs->beginWrite();
 
@@ -712,17 +745,17 @@ void Message::serializeVariableHeaders(ArgumentList *headerArgs)
         writer.beginVariant();
 
         switch (it->first) {
-        case PathHeader:
+        case Message::PathHeader:
             writer.writeObjectPath(cstring(it->second.c_str(), it->second.length()));
             break;
-        case InterfaceHeader:
-        case MethodHeader:
-        case ErrorNameHeader:
-        case DestinationHeader:
-        case SenderHeader:
+        case Message::InterfaceHeader:
+        case Message::MethodHeader:
+        case Message::ErrorNameHeader:
+        case Message::DestinationHeader:
+        case Message::SenderHeader:
             writer.writeString(cstring(it->second.c_str(), it->second.length()));
             break;
-        case SignatureHeader:
+        case Message::SignatureHeader:
             writer.writeSignature(cstring(it->second.c_str(), it->second.length()));
             break;
         default:
@@ -737,9 +770,9 @@ void Message::serializeVariableHeaders(ArgumentList *headerArgs)
     writer.finish();
 }
 
-void Message::notifyCompletionClient()
+void MessagePrivate::notifyCompletionClient()
 {
     if (m_completionClient) {
-        m_completionClient->notifyCompletion(this);
+        m_completionClient->notifyCompletion(m_message);
     }
 }

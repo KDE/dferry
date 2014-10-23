@@ -23,6 +23,7 @@
 
 #include "eavesdropperthread.h"
 
+#include "argumentlist.h"
 #include "eavesdroppermodel.h"
 #include "eventdispatcher.h"
 #include "localsocket.h"

@@ -24,6 +24,7 @@
 #include "transceiver.h"
 #include "transceiver_p.h"
 
+#include "argumentlist.h"
 #include "authnegotiator.h"
 #include "icompletionclient.h"
 #include "itransceiverclient.h"
@@ -214,8 +215,8 @@ void TransceiverPrivate::notifyCompletion(void *task)
 
                     cout << "Received message: dispatching to PendingReply.\n";
                     cout << "Received message: argumentList A " << receivedMessage->argumentList().prettyPrint() << '\n';
-                    pr->m_reply = *receivedMessage;
-                    cout << "Received message: argumentList B " << pr->m_reply.argumentList().prettyPrint() << '\n';
+                    pr->m_reply = receivedMessage;
+                    cout << "Received message: argumentList B " << pr->m_reply->argumentList().prettyPrint() << '\n';
                     pr->notifyDone();
                 }
             }

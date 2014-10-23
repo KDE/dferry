@@ -24,24 +24,33 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
-#include "argumentlist.h"
-#include "iconnectionclient.h"
 #include "types.h"
 
-#include <map>
 #include <string>
 #include <vector>
 
+class ArgumentList;
 class IConnection;
 class ICompletionClient;
+class MessagePrivate;
 
-class Message : public IConnectionClient
+// TODO: some separation between convenience and low-level API, move all convenience API to top
+
+class Message
 {
 public:
     // this class contains header data in deserialized form (maybe also serialized) and the payload
     // in serialized form
 
     Message(); // constructs an invalid message (to be filled in later, usually)
+    ~Message();
+
+    Message(Message &&other);
+    Message &operator=(Message &&other);
+
+    // might need to implement them later
+    Message(const Message &other) = delete;
+    Message &operator=(const Message &other) = delete;
 
     std::string prettyPrint() const;
 
@@ -128,50 +137,8 @@ public:
     //     because what would the completion client of a copy be? same pointer or null? both are bad. see std::auto_ptr.
     void setCompletionClient(ICompletionClient *client);
 
-protected:
-    virtual void notifyConnectionReadyRead();
-    virtual void notifyConnectionReadyWrite();
-
 private:
-    bool requiredHeadersPresent() const;
-    bool deserializeFixedHeaders();
-    bool deserializeVariableHeaders();
-    bool fillOutBuffer();
-    void serializeFixedHeaders();
-    void serializeVariableHeaders(ArgumentList *headerArgs);
-
-    void notifyCompletionClient();
-
-    // there is no explicit dirty flag; the buffer is simply cleared when dirtying any of the data below.
-    std::vector<byte> m_buffer;
-
-    bool m_isByteSwapped;
-    enum {
-        Empty,
-        Serialized,
-        Deserialized,
-        LastSteadyState = Deserialized,
-        Serializing,
-        Deserializing
-    } m_state;
-    Type m_messageType;
-    enum {
-        NoReplyExpectedFlag = 1,
-        NoAutoStartFlag = 2
-    };
-    byte m_flags;
-    byte m_protocolVersion;
-    uint32 m_headerLength;
-    uint32 m_headerPadding;
-    uint32 m_bodyLength;
-    uint32 m_serial;
-
-    ArgumentList m_mainArguments;
-
-    std::map<int, std::string> m_stringHeaders;
-    std::map<int, uint32> m_intHeaders;
-
-    ICompletionClient *m_completionClient;
+    MessagePrivate *d;
 };
 
 #endif // MESSAGE_H
