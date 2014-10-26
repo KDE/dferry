@@ -52,6 +52,19 @@ public:
     Message(const Message &other) = delete;
     Message &operator=(const Message &other) = delete;
 
+    // convenience
+    void setCall(const std::string &path, const std::string &interface, const std::string &method);
+    void setCall(const std::string &path, const std::string &method); // deprecated? remove?
+    void setReplyTo(const Message &call); // fills in all available details as appropriate for a reply
+    void setErrorReplyTo(const Message &call, const std::string &errorName);
+    void setSignal(const std::string &path, const std::string &interface, const std::string &method);
+    // decadence
+    static Message *createCall(const std::string &path, const std::string &interface, const std::string &method);
+    static Message *createCall(const std::string &path, const std::string &method);
+    static Message *createReplyTo(const Message &call);
+    static Message *createErrorReplyTo(const Message &call, const std::string &errorName);
+    static Message *createSignal(const std::string &path, const std::string &interface, const std::string &method);
+
     std::string prettyPrint() const;
 
     enum Type {

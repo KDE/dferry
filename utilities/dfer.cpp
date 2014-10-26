@@ -34,20 +34,18 @@
 
 using namespace std;
 
-void fillEavesdropMessage(Message *spyEnable, const char *messageType)
+static Message *createEavesdropMessage(const char *messageType)
 {
-    spyEnable->setType(Message::MethodCallMessage);
-    spyEnable->setDestination(string("org.freedesktop.DBus"));
-    spyEnable->setInterface(string("org.freedesktop.DBus"));
-    spyEnable->setPath(string("/org/freedesktop/DBus"));
-    spyEnable->setMethod(string("AddMatch"));
+    Message *ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
+    ret->setDestination("org.freedesktop.DBus");
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
     writer.finish();
-    spyEnable->setArgumentList(argList);
+    ret->setArgumentList(argList);
+    return ret;
 }
 
 class ReplyPrinter : public ITransceiverClient
@@ -77,9 +75,7 @@ int main(int argc, char *argv[])
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            Message *spyEnable = new Message;
-            fillEavesdropMessage(spyEnable, messageType[i]);
-            transceiver.sendNoReply(spyEnable);
+            transceiver.sendNoReply(createEavesdropMessage(messageType[i]));
         }
     }
 

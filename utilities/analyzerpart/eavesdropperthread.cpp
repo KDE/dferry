@@ -50,20 +50,18 @@ EavesdropperThread::~EavesdropperThread()
     delete m_dispatcher;
 }
 
-static void fillEavesdropMessage(Message *spyEnable, const char *messageType)
+static Message *createEavesdropMessage(const char *messageType)
 {
-    spyEnable->setType(Message::MethodCallMessage);
-    spyEnable->setDestination(std::string("org.freedesktop.DBus"));
-    spyEnable->setInterface(std::string("org.freedesktop.DBus"));
-    spyEnable->setPath(std::string("/org/freedesktop/DBus"));
-    spyEnable->setMethod(std::string("AddMatch"));
+    Message *ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
+    ret->setDestination("org.freedesktop.DBus");
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
     writer.finish();
-    spyEnable->setArgumentList(argList);
+    ret->setArgumentList(argList);
+    return ret;
 }
 
 void EavesdropperThread::run()
@@ -82,9 +80,7 @@ void EavesdropperThread::run()
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            Message *spyEnable = new Message;
-            fillEavesdropMessage(spyEnable, messageType[i]);
-            m_transceiver->sendNoReply(spyEnable);
+            m_transceiver->sendNoReply(createEavesdropMessage(messageType[i]));
         }
     }
 

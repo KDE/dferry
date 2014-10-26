@@ -82,6 +82,77 @@ Message::~Message()
     d = nullptr;
 }
 
+void Message::setCall(const string &path, const string &interface, const string &method)
+{
+    setType(MethodCallMessage);
+    setPath(path);
+    setInterface(interface);
+    setMethod(method);
+}
+
+void Message::setCall(const string &path, const string &method)
+{
+    setCall(path, string(), method);
+}
+
+void Message::setReplyTo(const Message &call)
+{
+    setType(MethodReturnMessage);
+    setDestination(call.sender());
+    setReplySerial(call.serial());
+}
+
+void Message::setErrorReplyTo(const Message &call, const string &errorName)
+{
+    setType(ErrorMessage);
+    setErrorName(errorName);
+    setDestination(call.sender());
+    setReplySerial(call.serial());
+}
+
+void Message::setSignal(const string &path, const string &interface, const string &method)
+{
+    setType(SignalMessage);
+    setPath(path);
+    setInterface(interface);
+    setMethod(method);
+}
+
+Message *Message::createCall(const string &path, const string &interface, const string &method)
+{
+    Message *ret = new Message;
+    ret->setCall(path, interface, method);
+    return ret;
+}
+
+Message *Message::createCall(const string &path, const string &method)
+{
+    Message *ret = new Message;
+    ret->setCall(path, method);
+    return ret;
+}
+
+Message *Message::createReplyTo(const Message &call)
+{
+    Message *ret = new Message;
+    ret->setReplyTo(call);
+    return ret;
+}
+
+Message *Message::createErrorReplyTo(const Message &call, const string &errorName)
+{
+    Message *ret = new Message;
+    ret->setErrorReplyTo(call, errorName);
+    return ret;
+}
+
+Message *Message::createSignal(const string &path, const string &interface, const string &method)
+{
+    Message *ret = new Message;
+    ret->setSignal(path, interface, method);
+    return ret;
+}
+
 struct VarHeaderPrinter
 {
     Message::VariableHeader field;
