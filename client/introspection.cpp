@@ -7,7 +7,7 @@
 
 #include <cassert>
 #include <cstring> // for strcmp...
-#include <memory> // for auto_ptr - yes it sucks in general, but it's suitable here
+#include <memory>
 
 namespace tx2 = tinyxml2;
 
@@ -171,7 +171,7 @@ bool IntrospectionTree::addNode(IntrospectionNode *parent, const tx2::XMLElement
 
     const bool isRootOfDocument = el == el->GetDocument()->RootElement();
 
-    std::auto_ptr<IntrospectionNode> node(new IntrospectionNode);
+    std::unique_ptr<IntrospectionNode> node(new IntrospectionNode);
     node->parent = parent;
     node->name = attr->Value();
 
@@ -186,7 +186,8 @@ bool IntrospectionTree::addNode(IntrospectionNode *parent, const tx2::XMLElement
             }
         }
     }
-    parent->children[node->name] = node.release();
+    parent->children.emplace(node->name, node.get());
+    node.release();
     return true;
 }
 
