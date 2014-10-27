@@ -93,8 +93,9 @@ static void testBasic()
 class AccuracyTester : public ICompletionClient
 {
 public:
-    AccuracyTester(EventDispatcher *dispatcher)
-       : m_lastTriggerTime(PlatformTime::monotonicMsecs()), m_dispatcher(dispatcher) {}
+    AccuracyTester()
+       : m_lastTriggerTime(PlatformTime::monotonicMsecs())
+    {}
     void notifyCompletion(void *task) override
     {
         Timer *timer = reinterpret_cast<Timer *>(task);
@@ -109,11 +110,10 @@ public:
         TEST(m_count < 26); // event loop should have stopped right at 25
 
         if (m_count == 25) {
-            m_dispatcher->interrupt();
+            timer->eventDispatcher()->interrupt();
         }
     }
     uint64 m_lastTriggerTime;
-    EventDispatcher *m_dispatcher;
     uint m_count = 0;
 };
 
@@ -122,13 +122,13 @@ static void testAccuracy()
     // this test is likely to fail spuriously on a machine under load
     EventDispatcher dispatcher;
 
-    AccuracyTester at1(&dispatcher);
+    AccuracyTester at1;
     Timer t1(&dispatcher);
     t1.setCompletionClient(&at1);
     t1.setInterval(225);
     t1.setRunning(true);
 
-    AccuracyTester at2(&dispatcher);
+    AccuracyTester at2;
     Timer t2(&dispatcher);
     t2.setCompletionClient(&at2);
     t2.setInterval(42);
@@ -144,14 +144,17 @@ class EventDispatcherInterruptor : public ICompletionClient
 {
 public:
     EventDispatcherInterruptor(EventDispatcher *ed, int timeout)
-       : m_eventDispatcher(ed), m_ttl(ed)
+       : m_ttl(ed)
     {
         m_ttl.setInterval(timeout);
         m_ttl.setCompletionClient(this);
         m_ttl.setRunning(true);
     }
-    void notifyCompletion(void *task) override { m_eventDispatcher->interrupt(); m_ttl.setRunning(false); }
-    EventDispatcher *m_eventDispatcher;
+    void notifyCompletion(void *task) override
+    {
+        m_ttl.eventDispatcher()->interrupt();
+        m_ttl.setRunning(false);
+    }
     Timer m_ttl;
 };
 

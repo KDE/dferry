@@ -91,6 +91,7 @@ public:
     PeerAddress ownAddress() const; // ### this suggests renaming PeerAddress to Address / EndpointAddress / ...
 
     IConnection *connection() const; // probably only needed for debugging
+    EventDispatcher *eventDispatcher() const;
 
     // TODO matching patterns for subscription; note that a signal requires path, interface and
     //      "method" (signal name) of sender

@@ -166,3 +166,8 @@ ICompletionClient *Timer::completionClient() const
 {
     return m_completionClient;
 }
+
+EventDispatcher *Timer::eventDispatcher() const
+{
+    return m_eventDispatcher;
+}

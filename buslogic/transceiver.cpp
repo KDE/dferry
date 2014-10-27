@@ -166,6 +166,11 @@ IConnection *Transceiver::connection() const
     return d->m_connection;
 }
 
+EventDispatcher *Transceiver::eventDispatcher() const
+{
+    return d->m_eventDispatcher;
+}
+
 ITransceiverClient *Transceiver::client() const
 {
     return d->m_client;

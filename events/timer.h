@@ -56,6 +56,8 @@ public:
     void setCompletionClient(ICompletionClient *client);
     ICompletionClient *completionClient() const;
 
+    EventDispatcher *eventDispatcher() const;
+
 private:
     friend class EventDispatcherPrivate;
     void trigger();
