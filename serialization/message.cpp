@@ -78,29 +78,24 @@ static int indexOfHeader(int field)
     return s_storageForHeader[field] & ~0xf0;
 }
 
-VarHeaderStorage::VarHeaderStorage()
-   : m_intHeaderPresenceBitmap(0)
+bool VarHeaderStorage::hasHeader(Message::VariableHeader header) const
 {
-    for (int i = 0; i < s_stringHeaderCount; i++) {
-        m_stringHeaders[i] = nullptr;
-    }
-}
-
-VarHeaderStorage::~VarHeaderStorage()
-{
-    for (int i = 0; i < s_stringHeaderCount; i++) {
-        delete m_stringHeaders[i];
-    }
+    return m_headerPresenceBitmap & (1 << header);
 }
 
 bool VarHeaderStorage::hasStringHeader(Message::VariableHeader header) const
 {
-    return isStringHeader(header) && m_stringHeaders[indexOfHeader(header)];
+    return hasHeader(header) && isStringHeader(header);
+}
+
+bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
+{
+    return hasHeader(header) && !isStringHeader(header);
 }
 
 string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
 {
-    return hasStringHeader(header) ? *m_stringHeaders[indexOfHeader(header)] : string();
+    return isStringHeader(header) ? m_stringHeaders[indexOfHeader(header)] : string();
 }
 
 void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
@@ -108,21 +103,17 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
     if (!isStringHeader(header)) {
         return;
     }
-    const int idx = indexOfHeader(header);
-    if (m_stringHeaders[idx]) {
-        *m_stringHeaders[idx] = value;
-    } else {
-        m_stringHeaders[idx] = new string(value);
-    }
+    m_headerPresenceBitmap |= 1 << header;
+    m_stringHeaders[indexOfHeader(header)] = value;
 }
 
-bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, const string &value)
+bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, string value)
 {
-    const int idx = indexOfHeader(header);
-    if (m_stringHeaders[idx]) {
+    if (hasHeader(header)) {
         return false;
     }
-    m_stringHeaders[idx] = new string(value);
+    m_headerPresenceBitmap |= 1 << header;
+    m_stringHeaders[indexOfHeader(header)] = move(value);
     return true;
 }
 
@@ -131,14 +122,8 @@ void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
     if (!isStringHeader(header)) {
         return;
     }
-    const int idx = indexOfHeader(header);
-    delete m_stringHeaders[idx];
-    m_stringHeaders[idx] = nullptr;
-}
-
-bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
-{
-    return !isStringHeader(header) && (m_intHeaderPresenceBitmap & (1 << indexOfHeader(header)));
+    m_headerPresenceBitmap &= ~(1 << header);
+    m_stringHeaders[indexOfHeader(header)].clear();
 }
 
 uint32 VarHeaderStorage::intHeader(Message::VariableHeader header) const
@@ -151,19 +136,17 @@ void VarHeaderStorage::setIntHeader(Message::VariableHeader header, uint32 value
     if (isStringHeader(header)) {
         return;
     }
-    const int idx = indexOfHeader(header);
-    m_intHeaderPresenceBitmap |= 1 << idx;
-    m_intHeaders[idx] = value;
+    m_headerPresenceBitmap |= 1 << header;
+    m_intHeaders[indexOfHeader(header)] = value;
 }
 
 bool VarHeaderStorage::setIntHeader_deser(Message::VariableHeader header, uint32 value)
 {
-    const int idx = indexOfHeader(header);
-    if (m_intHeaderPresenceBitmap & (1 << idx)) {
+    if (hasHeader(header)) {
         return false;
     }
-    m_intHeaderPresenceBitmap |= 1 << idx;
-    m_intHeaders[idx] = value;
+    m_headerPresenceBitmap |= 1 << header;
+    m_intHeaders[indexOfHeader(header)] = value;
     return true;
 }
 
@@ -172,8 +155,7 @@ void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
     if (isStringHeader(header)) {
         return;
     }
-    const int idx = indexOfHeader(header);
-    m_intHeaderPresenceBitmap &= ~(1 << idx);
+    m_headerPresenceBitmap &= ~(1 << header);
 }
 
 // TODO think of copying signature from and to output!
@@ -941,11 +923,11 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
     writer.beginArray(false);
 
     for (int i = 0; i < VarHeaderStorage::s_stringHeaderCount; i++) {
-        if (m_varHeaders.m_stringHeaders[i]) {
-            const Message::VariableHeader field = s_stringHeaderAtIndex[i];
+        const Message::VariableHeader field = s_stringHeaderAtIndex[i];
+        if (m_varHeaders.hasHeader(field)) {
             doVarHeaderPrologue(&writer, field);
 
-            const string &str = *m_varHeaders.m_stringHeaders[i];
+            const string &str = m_varHeaders.m_stringHeaders[i];
             if (field == Message::PathHeader) {
                 writer.writeObjectPath(cstring(str.c_str(), str.length()));
             } else if (field == Message::SignatureHeader) {
@@ -959,8 +941,8 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
     }
 
     for (int i = 0; i < VarHeaderStorage::s_intHeaderCount; i++) {
-        if (m_varHeaders.m_intHeaderPresenceBitmap & (1 << i)) {
-            const Message::VariableHeader field = s_intHeaderAtIndex[i];
+        const Message::VariableHeader field = s_intHeaderAtIndex[i];
+        if (m_varHeaders.hasHeader(field)) {
             doVarHeaderPrologue(&writer, field);
             writer.writeUint32(m_varHeaders.m_intHeaders[i]);
             doVarHeaderEpilogue(&writer);
