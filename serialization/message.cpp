@@ -40,6 +40,142 @@ using namespace std;
 // TODO
 static const byte thisMachineEndianness = 'l';
 
+static const byte s_storageForHeader[Message::UnixFdsHeader + 1] = {
+    0, // dummy entry: there is no enum value for 0
+    0xf0 | 0, // PathHeader
+    0xf0 | 1, // InterfaceHeader
+    0xf0 | 2, // MethodHeader
+    0xf0 | 3, // ErrorNameHeader
+       0 | 0, // ReplySerialHeader
+    0xf0 | 4, // DestinationHeader
+    0xf0 | 5, // SenderHeader
+    0xf0 | 6, // SignatureHeader
+       0 | 1  // UnixFdsHeader
+};
+
+static const Message::VariableHeader s_stringHeaderAtIndex[VarHeaderStorage::s_stringHeaderCount] = {
+    Message::PathHeader,
+    Message::InterfaceHeader,
+    Message::MethodHeader,
+    Message::ErrorNameHeader,
+    Message::DestinationHeader,
+    Message::SenderHeader,
+    Message::SignatureHeader
+};
+
+static const Message::VariableHeader s_intHeaderAtIndex[VarHeaderStorage::s_intHeaderCount] = {
+    Message::ReplySerialHeader,
+    Message::UnixFdsHeader
+};
+
+static bool isStringHeader(int field)
+{
+    return s_storageForHeader[field] & 0xf0;
+}
+
+static int indexOfHeader(int field)
+{
+    return s_storageForHeader[field] & ~0xf0;
+}
+
+VarHeaderStorage::VarHeaderStorage()
+   : m_intHeaderPresenceBitmap(0)
+{
+    for (int i = 0; i < s_stringHeaderCount; i++) {
+        m_stringHeaders[i] = nullptr;
+    }
+}
+
+VarHeaderStorage::~VarHeaderStorage()
+{
+    for (int i = 0; i < s_stringHeaderCount; i++) {
+        delete m_stringHeaders[i];
+    }
+}
+
+bool VarHeaderStorage::hasStringHeader(Message::VariableHeader header) const
+{
+    return isStringHeader(header) && m_stringHeaders[indexOfHeader(header)];
+}
+
+string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
+{
+    return hasStringHeader(header) ? *m_stringHeaders[indexOfHeader(header)] : string();
+}
+
+void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
+{
+    if (!isStringHeader(header)) {
+        return;
+    }
+    const int idx = indexOfHeader(header);
+    if (m_stringHeaders[idx]) {
+        *m_stringHeaders[idx] = value;
+    } else {
+        m_stringHeaders[idx] = new string(value);
+    }
+}
+
+bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, const string &value)
+{
+    const int idx = indexOfHeader(header);
+    if (m_stringHeaders[idx]) {
+        return false;
+    }
+    m_stringHeaders[idx] = new string(value);
+    return true;
+}
+
+void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
+{
+    if (!isStringHeader(header)) {
+        return;
+    }
+    const int idx = indexOfHeader(header);
+    delete m_stringHeaders[idx];
+    m_stringHeaders[idx] = nullptr;
+}
+
+bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
+{
+    return !isStringHeader(header) && (m_intHeaderPresenceBitmap & (1 << indexOfHeader(header)));
+}
+
+uint32 VarHeaderStorage::intHeader(Message::VariableHeader header) const
+{
+    return hasIntHeader(header) ? m_intHeaders[indexOfHeader(header)] : 0;
+}
+
+void VarHeaderStorage::setIntHeader(Message::VariableHeader header, uint32 value)
+{
+    if (isStringHeader(header)) {
+        return;
+    }
+    const int idx = indexOfHeader(header);
+    m_intHeaderPresenceBitmap |= 1 << idx;
+    m_intHeaders[idx] = value;
+}
+
+bool VarHeaderStorage::setIntHeader_deser(Message::VariableHeader header, uint32 value)
+{
+    const int idx = indexOfHeader(header);
+    if (m_intHeaderPresenceBitmap & (1 << idx)) {
+        return false;
+    }
+    m_intHeaderPresenceBitmap |= 1 << idx;
+    m_intHeaders[idx] = value;
+    return true;
+}
+
+void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
+{
+    if (isStringHeader(header)) {
+        return;
+    }
+    const int idx = indexOfHeader(header);
+    m_intHeaderPresenceBitmap &= ~(1 << idx);
+}
+
 // TODO think of copying signature from and to output!
 
 MessagePrivate::MessagePrivate(Message *parent)
@@ -341,44 +477,40 @@ void Message::setUnixFdCount(uint32 fdCount)
 
 string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
-    map<int, string>::const_iterator it = d->m_stringHeaders.find(header);
+    const bool exists = d->m_varHeaders.hasStringHeader(header);
     if (isPresent) {
-        *isPresent = it != d->m_stringHeaders.end();
+        *isPresent = exists;
     }
-    return it == d->m_stringHeaders.end() ? string() : it->second;
+    return exists ? d->m_varHeaders.stringHeader(header) : string();
 }
 
-bool Message::setStringHeader(VariableHeader header, const string &value)
+void Message::setStringHeader(VariableHeader header, const string &value)
 {
     if (header == SignatureHeader && value.empty()) {
         // The spec allows no signature header when the signature is empty. Make use of that.
-        if (d->m_stringHeaders.erase(header)) {
+        if (d->m_varHeaders.hasStringHeader(header)) {
             d->m_buffer.clear();
+            d->m_varHeaders.clearStringHeader(header);
         }
-        return true;
+        return;
     }
-
     d->m_buffer.clear();
-    d->m_stringHeaders[header] = value;
-    // TODO error checking / validation
-    return true;
+    d->m_varHeaders.setStringHeader(header, value);
 }
 
 uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
 {
-    map<int, uint32>::const_iterator it = d->m_intHeaders.find(header);
+    const bool exists = d->m_varHeaders.hasIntHeader(header);
     if (isPresent) {
-        *isPresent = it != d->m_intHeaders.end();
+        *isPresent = exists;
     }
-    return it == d->m_intHeaders.end() ? 0 : it->second;
+    return d->m_varHeaders.intHeader(header);
 }
 
-bool Message::setIntHeader(VariableHeader header, uint32 value)
+void Message::setIntHeader(VariableHeader header, uint32 value)
 {
     d->m_buffer.clear();
-    d->m_intHeaders[header] = value;
-    // TODO error checking / validation
-    return true;
+    d->m_varHeaders.setIntHeader(header, value);
 }
 
 bool Message::expectsReply() const
@@ -526,9 +658,8 @@ void MessagePrivate::notifyConnectionReadyRead()
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
             std::string sig;
-            auto it = m_stringHeaders.find(Message::SignatureHeader);
-            if (it != m_stringHeaders.end()) {
-                sig = it->second;
+            if (m_varHeaders.hasStringHeader(Message::SignatureHeader)) {
+                sig = m_varHeaders.stringHeader(Message::SignatureHeader);
             }
             chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
             m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
@@ -589,26 +720,29 @@ bool MessagePrivate::requiredHeadersPresent() const
         return false;
     }
 
+    // might want to check for DestinationHeader if the connection is a bus (not peer-to-peer)
+
     switch (m_messageType) {
     case Message::SignalMessage:
         // required: PathHeader, InterfaceHeader, MethodHeader
-        if (!m_stringHeaders.count(Message::InterfaceHeader)) {
+        if (!m_varHeaders.hasStringHeader(Message::InterfaceHeader)) {
             return false;
         }
         // fall through
     case Message::MethodCallMessage:
         // required: PathHeader, MethodHeader
-        return m_stringHeaders.count(Message::PathHeader) && m_stringHeaders.count(Message::MethodHeader);
+        return m_varHeaders.hasStringHeader(Message::PathHeader) &&
+               m_varHeaders.hasStringHeader(Message::MethodHeader);
 
     case Message::ErrorMessage:
         // required: ErrorNameHeader, ReplySerialHeader
-        if (!m_stringHeaders.count(Message::ErrorNameHeader)) {
+        if (!m_varHeaders.hasStringHeader(Message::ErrorNameHeader)) {
             return false;
         }
         // fall through
     case Message::MethodReturnMessage:
         // required: ReplySerialHeader
-        return m_intHeaders.count(Message::ReplySerialHeader);
+        return m_varHeaders.hasIntHeader(Message::ReplySerialHeader);
 
     case Message::InvalidMessage:
     default:
@@ -668,44 +802,40 @@ bool MessagePrivate::deserializeVariableHeaders()
 
     while (reader.nextArrayEntry()) {
         reader.beginStruct();
-        byte headerType = reader.readByte();
+        const byte headerField = reader.readByte();
+        if (headerField < Message::PathHeader || headerField > Message::UnixFdsHeader) {
+            return false;
+        }
+        const Message::VariableHeader eHeader = static_cast<Message::VariableHeader>(headerField);
 
         reader.beginVariant();
-        switch (headerType) {
-        // TODO: proper error handling instead of assertions
-        case Message::PathHeader: {
-            assert(reader.state() == ArgumentList::ObjectPath);
-            m_stringHeaders[headerType] = toStdString(reader.readObjectPath());;
-            break;
+
+        bool ok = true; // short-circuit evaluation ftw
+        if (isStringHeader(headerField)) {
+            if (headerField == Message::PathHeader) {
+                ok = ok && reader.state() == ArgumentList::ObjectPath;
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readObjectPath()));
+            } else if (headerField == Message::SignatureHeader) {
+                ok = ok && reader.state() == ArgumentList::Signature;
+                // The spec allows having no signature header, which means "empty signature". However...
+                // We do not drop empty signature headers when deserializing, in order to preserve
+                // the original message contents. This could be useful for debugging and testing.
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readSignature()));
+            } else {
+                ok = ok && reader.state() == ArgumentList::String;
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readString()));
+            }
+        } else {
+            ok = ok && reader.state() == ArgumentList::Uint32;
+            if (headerField == Message::UnixFdsHeader) {
+                reader.readUint32(); // discard it, for now (TODO)
+            } else {
+                ok = ok && m_varHeaders.setIntHeader_deser(eHeader, reader.readUint32());
+            }
         }
-        case Message::InterfaceHeader:
-        case Message::MethodHeader:
-        case Message::ErrorNameHeader:
-        case Message::DestinationHeader:
-        case Message::SenderHeader: {
-            assert(reader.state() == ArgumentList::String);
-            m_stringHeaders[headerType] = toStdString(reader.readString());
-            break;
-        }
-        case Message::ReplySerialHeader:
-            assert(reader.state() == ArgumentList::Uint32);
-            m_intHeaders[headerType] = reader.readUint32();
-            break;
-        case Message::UnixFdsHeader:
-            assert(reader.state() == ArgumentList::Uint32);
-            reader.readUint32(); // discard it, for now
-            // TODO
-            break;
-        case Message::SignatureHeader: {
-            assert(reader.state() == ArgumentList::Signature);
-            // The spec allows having no signature header, which means "empty signature". However...
-            // We do not drop empty signature headers when deserializing, in order to preserve
-            // the original message contents. This could be useful for debugging and testing.
-            m_stringHeaders[headerType] = toStdString(reader.readSignature());
-            break;
-        }
-        default:
-            break; // ignore unknown headers
+
+        if (!ok) {
+            return false;
         }
         reader.endVariant();
         reader.endStruct();
@@ -732,7 +862,7 @@ bool MessagePrivate::fillOutBuffer()
     // ### can this be done more cleanly?
     cstring signature = m_mainArguments.signature();
     if (signature.length) {
-        m_stringHeaders[Message::SignatureHeader] = toStdString(signature);
+        m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
     }
 
     ArgumentList headerArgs;
@@ -788,6 +918,20 @@ void MessagePrivate::serializeFixedHeaders()
     basic::writeUint32(p + sizeof(uint32), m_serial);
 }
 
+static void doVarHeaderPrologue(ArgumentList::Writer *writer, Message::VariableHeader field)
+{
+    writer->nextArrayEntry();
+    writer->beginStruct();
+    writer->writeByte(byte(field));
+    writer->beginVariant();
+}
+
+static void doVarHeaderEpilogue(ArgumentList::Writer *writer)
+{
+    writer->endVariant();
+    writer->endStruct();
+}
+
 void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
 {
     ArgumentList::Writer writer = headerArgs->beginWrite();
@@ -796,45 +940,31 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
     // at least one of the variable headers
     writer.beginArray(false);
 
-    for (map<int, uint32>::const_iterator it = m_intHeaders.begin(); it != m_intHeaders.end(); ++it) {
-        writer.nextArrayEntry();
-        writer.beginStruct();
-        writer.writeByte(byte(it->first));
-        writer.beginVariant();
-        writer.writeUint32(it->second);
-        writer.endVariant();
-        writer.endStruct();
+    for (int i = 0; i < VarHeaderStorage::s_stringHeaderCount; i++) {
+        if (m_varHeaders.m_stringHeaders[i]) {
+            const Message::VariableHeader field = s_stringHeaderAtIndex[i];
+            doVarHeaderPrologue(&writer, field);
+
+            const string &str = *m_varHeaders.m_stringHeaders[i];
+            if (field == Message::PathHeader) {
+                writer.writeObjectPath(cstring(str.c_str(), str.length()));
+            } else if (field == Message::SignatureHeader) {
+                writer.writeSignature(cstring(str.c_str(), str.length()));
+            } else {
+                writer.writeString(cstring(str.c_str(), str.length()));
+            }
+
+            doVarHeaderEpilogue(&writer);
+        }
     }
 
-    // TODO check errors in the writer, e.g. when passing an invalid object path. for efficiency, that
-    //      is not checked before because it's done in the writer anyway.
-
-    for (map<int, string>::const_iterator it = m_stringHeaders.begin(); it != m_stringHeaders.end(); ++it) {
-        writer.nextArrayEntry();
-        writer.beginStruct();
-        writer.writeByte(static_cast<byte>(it->first));
-        writer.beginVariant();
-
-        switch (it->first) {
-        case Message::PathHeader:
-            writer.writeObjectPath(cstring(it->second.c_str(), it->second.length()));
-            break;
-        case Message::InterfaceHeader:
-        case Message::MethodHeader:
-        case Message::ErrorNameHeader:
-        case Message::DestinationHeader:
-        case Message::SenderHeader:
-            writer.writeString(cstring(it->second.c_str(), it->second.length()));
-            break;
-        case Message::SignatureHeader:
-            writer.writeSignature(cstring(it->second.c_str(), it->second.length()));
-            break;
-        default:
-            assert(false);
+    for (int i = 0; i < VarHeaderStorage::s_intHeaderCount; i++) {
+        if (m_varHeaders.m_intHeaderPresenceBitmap & (1 << i)) {
+            const Message::VariableHeader field = s_intHeaderAtIndex[i];
+            doVarHeaderPrologue(&writer, field);
+            writer.writeUint32(m_varHeaders.m_intHeaders[i]);
+            doVarHeaderEpilogue(&writer);
         }
-
-        writer.endVariant();
-        writer.endStruct();
     }
 
     writer.endArray();

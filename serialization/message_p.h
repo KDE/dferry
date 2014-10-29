@@ -29,7 +29,32 @@
 #include "argumentlist.h"
 #include "iconnectionclient.h"
 
-#include <map>
+class VarHeaderStorage {
+public:
+    VarHeaderStorage();
+    ~VarHeaderStorage();
+
+    bool hasStringHeader(Message::VariableHeader header) const;
+    std::string stringHeader(Message::VariableHeader header) const;
+    void setStringHeader(Message::VariableHeader header, const std::string &value);
+    void clearStringHeader(Message::VariableHeader header);
+
+    bool hasIntHeader(Message::VariableHeader header) const;
+    uint32 intHeader(Message::VariableHeader header) const;
+    void setIntHeader(Message::VariableHeader header, uint32 value);
+    void clearIntHeader(Message::VariableHeader header);
+
+    // for use during header deserialization: returns false if a header occurs twice,
+    // but does not check if the given header is of the right type (int / string).
+    bool setIntHeader_deser(Message::VariableHeader header, uint32 value);
+    bool setStringHeader_deser(Message::VariableHeader header, const std::string &value);
+
+    static const int s_stringHeaderCount = 7;
+    static const int s_intHeaderCount = 2;
+    std::string *m_stringHeaders[s_stringHeaderCount];
+    uint32 m_intHeaders[s_intHeaderCount];
+    uint32 m_intHeaderPresenceBitmap;
+};
 
 class MessagePrivate : public IConnectionClient
 {
@@ -75,8 +100,7 @@ public:
 
     ArgumentList m_mainArguments;
 
-    std::map<int, std::string> m_stringHeaders;
-    std::map<int, uint32> m_intHeaders;
+    VarHeaderStorage m_varHeaders;
 
     ICompletionClient *m_completionClient;
 };
