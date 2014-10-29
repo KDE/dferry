@@ -31,6 +31,8 @@
 
 class VarHeaderStorage {
 public:
+    ~VarHeaderStorage();
+
     bool hasHeader(Message::VariableHeader header) const;
 
     bool hasStringHeader(Message::VariableHeader header) const;
@@ -48,9 +50,25 @@ public:
     bool setIntHeader_deser(Message::VariableHeader header, uint32 value);
     bool setStringHeader_deser(Message::VariableHeader header, std::string value);
 
+    const std::string *stringHeaders() const
+    {
+        return reinterpret_cast<const std::string *>(m_stringStorage);
+    }
+    std::string *stringHeaders()
+    {
+        return reinterpret_cast<std::string *>(m_stringStorage);
+    }
+
     static const int s_stringHeaderCount = 7;
     static const int s_intHeaderCount = 2;
-    std::string m_stringHeaders[s_stringHeaderCount];
+
+    // Uninitialized storage for strings, to avoid con/destructing strings we'd never touch otherwise.
+    // Since unsigned char * is incompatible with char *, it gives better compiler messages than char if
+    // there is a problem; std::string deals with char * a lot.
+
+    // the awkward position of alignas() is the only one that works with both g++ and clang++...
+    unsigned char m_stringStorage alignas(std::string)
+        [sizeof(std::string[VarHeaderStorage::s_stringHeaderCount])];
     uint32 m_intHeaders[s_intHeaderCount];
     uint32 m_headerPresenceBitmap = 0;
 };

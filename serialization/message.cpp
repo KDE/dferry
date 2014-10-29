@@ -68,6 +68,16 @@ static const Message::VariableHeader s_intHeaderAtIndex[VarHeaderStorage::s_intH
     Message::UnixFdsHeader
 };
 
+VarHeaderStorage::~VarHeaderStorage()
+{
+    for (int i = 0; i < s_stringHeaderCount; i++) {
+        const Message::VariableHeader field = s_stringHeaderAtIndex[i];
+        if (hasHeader(field)) {
+            stringHeaders()[i].~string();
+        }
+    }
+}
+
 static bool isStringHeader(int field)
 {
     return s_storageForHeader[field] & 0xf0;
@@ -95,7 +105,7 @@ bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
 
 string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
 {
-    return isStringHeader(header) ? m_stringHeaders[indexOfHeader(header)] : string();
+    return isStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : string();
 }
 
 void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
@@ -103,8 +113,13 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
     if (!isStringHeader(header)) {
         return;
     }
-    m_headerPresenceBitmap |= 1 << header;
-    m_stringHeaders[indexOfHeader(header)] = value;
+    const int idx = indexOfHeader(header);
+    if (hasHeader(header)) {
+        stringHeaders()[idx] = value;
+    } else {
+        m_headerPresenceBitmap |= 1 << header;
+        new(stringHeaders() + idx) string(value);
+    }
 }
 
 bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, string value)
@@ -113,7 +128,7 @@ bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, str
         return false;
     }
     m_headerPresenceBitmap |= 1 << header;
-    m_stringHeaders[indexOfHeader(header)] = move(value);
+    new(stringHeaders() + indexOfHeader(header)) string(move(value));
     return true;
 }
 
@@ -123,7 +138,7 @@ void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
         return;
     }
     m_headerPresenceBitmap &= ~(1 << header);
-    m_stringHeaders[indexOfHeader(header)].clear();
+    stringHeaders()[indexOfHeader(header)].~string();
 }
 
 uint32 VarHeaderStorage::intHeader(Message::VariableHeader header) const
@@ -927,7 +942,7 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
         if (m_varHeaders.hasHeader(field)) {
             doVarHeaderPrologue(&writer, field);
 
-            const string &str = m_varHeaders.m_stringHeaders[i];
+            const string &str = m_varHeaders.stringHeaders()[i];
             if (field == Message::PathHeader) {
                 writer.writeObjectPath(cstring(str.c_str(), str.length()));
             } else if (field == Message::SignatureHeader) {
