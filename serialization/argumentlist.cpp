@@ -683,115 +683,60 @@ void ArgumentList::Reader::replaceData(chunk data)
     }
 }
 
-// this is pretty dumb, and the reason is that we hope that the inliner will understand it well
-// enough to make it efficient.
-static void getTypeInfo(byte letterCode, ArgumentList::IoState *typeState, uint32 *alignment,
-                        bool *isPrimitiveType, bool *isStringType)
+struct TypeInfo
 {
-    ArgumentList::IoState state = ArgumentList::InvalidData;
-    bool isPrimitive = true;
-    bool isString = false;
-    int align = 4;
-    // TODO use table lookup instead
-    switch (letterCode) {
-    case 'y':
-        state = ArgumentList::Byte;
-        align = 1;
-        break;
-    case 'b':
-        state = ArgumentList::Boolean;
-        break;
-    case 'n':
-        state = ArgumentList::Int16;
-        align = 2;
-        break;
-    case 'q':
-        state = ArgumentList::Uint16;
-        align = 2;
-        break;
-    case 'i':
-        state = ArgumentList::Int32;
-        break;
-    case 'u':
-        state = ArgumentList::Uint32;
-        break;
-    case 'x':
-        state = ArgumentList::Int64;
-        align = 8;
-        break;
-    case 't':
-        state = ArgumentList::Uint64;
-        align = 8;
-        break;
-    case 'd':
-        state = ArgumentList::Double;
-        align = 8;
-        break;
-    case 's':
-        state = ArgumentList::String;
-        isPrimitive = false;
-        isString = true;
-        break;
-    case 'o':
-        state = ArgumentList::ObjectPath;
-        isPrimitive = false;
-        isString = true;
-        break;
-    case 'g':
-        state = ArgumentList::Signature;
-        isPrimitive = false;
-        isString = true;
-        align = 1;
-        break;
-    case 'h':
-        state = ArgumentList::UnixFd;
-        // this is handled like a primitive type with some extra postprocessing
-        break;
-    case 'v':
-        state = ArgumentList::BeginVariant;
-        isPrimitive = false;
-        align = 1;
-        break;
-    case '(':
-        state = ArgumentList::BeginStruct;
-        isPrimitive = false;
-        align = 8;
-        break;
-    case ')':
-        state = ArgumentList::EndStruct;
-        isPrimitive = false;
-        align = 1;
-        break;
-    case 'a':
-        state = ArgumentList::BeginArray;
-        isPrimitive = false;
-        break;
-    case '{':
-        state = ArgumentList::BeginDict;
-        isPrimitive = false;
-        align = 8;
-        break;
-    case '}':
-        state = ArgumentList::EndDict;
-        isPrimitive = false;
-        align = 1;
-        break;
-    default:
-        align = 1; // don't move the data read/write pointer by aligning it
-        break;
+    ArgumentList::IoState state() const { return static_cast<ArgumentList::IoState>(_state); }
+    byte _state;
+    byte alignment : 6;
+    bool isPrimitive : 1;
+    bool isString : 1;
+};
+
+static const TypeInfo &typeInfo(byte letterCode)
+{
+    assert(letterCode >= '(');
+    static const TypeInfo low[2] = {
+        { ArgumentList::BeginStruct,  8, false, false }, // (
+        { ArgumentList::EndStruct,    1, false, false }  // )
+    };
+    if (letterCode <= ')') {
+        return low[letterCode - '('];
     }
-    if (typeState) {
-        *typeState = state;
-    }
-    if (alignment) {
-        *alignment = align;
-    }
-    if (isPrimitiveType) {
-        *isPrimitiveType = isPrimitive;
-    }
-    if (isStringType) {
-        *isStringType = isString;
-    }
+    assert(letterCode >= 'a' && letterCode <= '}');
+    // entries for invalid letters are designed to be as inert as possible in the code using the data,
+    // which may make it possible to catch errors at a common point with less special case code.
+    static const TypeInfo high['}' - 'a' + 1] = {
+        { ArgumentList::BeginArray,   4, false, false }, // a
+        { ArgumentList::Boolean,      4, true,  false }, // b
+        { ArgumentList::InvalidData,  1, true,  false }, // c
+        { ArgumentList::Double,       8, true,  false }, // d
+        { ArgumentList::InvalidData,  1, true,  false }, // e
+        { ArgumentList::InvalidData,  1, true,  false }, // f
+        { ArgumentList::Signature,    1, false, true  }, // g
+        { ArgumentList::UnixFd,       4, true,  false }, // h
+        { ArgumentList::Int32,        4, true,  false }, // i
+        { ArgumentList::InvalidData,  1, true,  false }, // j
+        { ArgumentList::InvalidData,  1, true,  false }, // k
+        { ArgumentList::InvalidData,  1, true,  false }, // l
+        { ArgumentList::InvalidData,  1, true,  false }, // m
+        { ArgumentList::Int16,        2, true,  false }, // n
+        { ArgumentList::ObjectPath,   4, false, true  }, // o
+        { ArgumentList::InvalidData,  1, true,  false }, // p
+        { ArgumentList::Uint16,       2, true,  false }, // q
+        { ArgumentList::InvalidData,  1, true,  false }, // r
+        { ArgumentList::String,       4, false, true  }, // s
+        { ArgumentList::Uint64,       8, true,  false }, // t
+        { ArgumentList::Uint32,       4, true,  false }, // u
+        { ArgumentList::BeginVariant, 1, false, false }, // v
+        { ArgumentList::InvalidData,  1, true,  false }, // w
+        { ArgumentList::Int64,        8, true,  false }, // x
+        { ArgumentList::Byte,         1, true,  false }, // y
+        { ArgumentList::InvalidData,  1, true,  false }, // z
+        { ArgumentList::BeginDict,    8, false, false }, // {
+        { ArgumentList::InvalidData,  1, true,  false }, // |
+        { ArgumentList::EndDict,      1, false, false }  // }
+    };
+    return high[letterCode - 'a'];
 }
 
 ArgumentList::IoState ArgumentList::Reader::doReadPrimitiveType()
@@ -900,7 +845,7 @@ void ArgumentList::Reader::advanceState()
         const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
         case BeginStruct:
-            break; // handled later by getTypeInfo recognizing ')' -> EndStruct
+            break; // handled later by TypeInfo knowing ')' -> EndStruct
         case BeginVariant:
             if (d->m_signaturePosition >= d->m_signature.length) {
                 m_state = EndVariant;
@@ -930,13 +875,10 @@ void ArgumentList::Reader::advanceState()
         }
     }
 
-    // for aggregate types, it's just the alignment. for primitive types, it's also the actual size.
-    uint32 alignment = 1;
-    bool isPrimitiveType = false;
-    bool isStringType = false;
-
-    getTypeInfo(d->m_signature.begin[d->m_signaturePosition],
-                &m_state, &alignment, &isPrimitiveType, &isStringType);
+    // for aggregate types, ty.alignment is just the alignment.
+    // for primitive types, it's also the actual size.
+    const TypeInfo ty = typeInfo(d->m_signature.begin[d->m_signaturePosition]);
+    m_state = ty.state();
 
     if (unlikely(m_state == InvalidData)) {
         return;
@@ -947,22 +889,22 @@ void ArgumentList::Reader::advanceState()
 
     if (likely(!d->m_zeroLengthArrayNesting)) {
         int padStart = d->m_dataPosition;
-        d->m_dataPosition = align(d->m_dataPosition, alignment);
+        d->m_dataPosition = align(d->m_dataPosition, ty.alignment);
         if (unlikely(d->m_dataPosition > d->m_data.length)) {
             goto out_needMoreData;
         }
         VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
 
-        if (isPrimitiveType || isStringType) {
-            if (unlikely(d->m_dataPosition + alignment > d->m_data.length)) {
+        if (ty.isPrimitive || ty.isString) {
+            if (unlikely(d->m_dataPosition + ty.alignment > d->m_data.length)) {
                 goto out_needMoreData;
             }
 
-            if (isPrimitiveType) {
+            if (ty.isPrimitive) {
                 m_state = doReadPrimitiveType();
-                d->m_dataPosition += alignment;
+                d->m_dataPosition += ty.alignment;
             } else {
-                m_state = doReadString(alignment);
+                m_state = doReadString(ty.alignment);
                 if (unlikely(m_state == NeedMoreData)) {
                     goto out_needMoreData;
                 }
@@ -970,7 +912,7 @@ void ArgumentList::Reader::advanceState()
             return;
         }
     } else {
-        if (isPrimitiveType || isStringType) {
+        if (ty.isPrimitive || ty.isString) {
             return; // nothing to do! (readFoo() will return "random" data, so don't use that data!)
         }
     }
@@ -1035,19 +977,16 @@ void ArgumentList::Reader::advanceState()
             d->m_dataPosition += 4;
         }
 
-        IoState firstElementType;
-        uint32 firstElementAlignment;
-        getTypeInfo(d->m_signature.begin[d->m_signaturePosition + 1],
-                    &firstElementType, &firstElementAlignment, 0, 0);
+        const TypeInfo firstElementTy = typeInfo(d->m_signature.begin[d->m_signaturePosition + 1]);
 
-        m_state = firstElementType == BeginDict ? BeginDict : BeginArray;
+        m_state = firstElementTy.state() == BeginDict ? BeginDict : BeginArray;
         aggregateInfo.aggregateType = m_state;
         Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
 
         // ### are we supposed to align d->m_dataPosition if the array is empty?
         if (likely(!d->m_zeroLengthArrayNesting)) {
             int padStart = d->m_dataPosition;
-            d->m_dataPosition = align(d->m_dataPosition, firstElementAlignment);
+            d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
             arrayInfo.dataEnd = d->m_dataPosition + arrayLength;
             if (unlikely(arrayInfo.dataEnd > d->m_data.length)) {
@@ -1056,7 +995,7 @@ void ArgumentList::Reader::advanceState()
             }
         }
         VALID_IF(d->m_nesting.beginArray());
-        if (firstElementType == BeginDict) {
+        if (firstElementTy.state() == BeginDict) {
             d->m_signaturePosition++;
             // not re-opened before each element: there is no observable difference for clients
             VALID_IF(d->m_nesting.beginParen());
@@ -1514,7 +1453,10 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
     bool isStringType = false;
 
     if (signatureFragment.length) {
-        getTypeInfo(signatureFragment.begin[0], 0, &alignment, &isPrimitiveType, &isStringType);
+        TypeInfo ty = typeInfo(signatureFragment.begin[0]);
+        alignment = ty.alignment;
+        isPrimitiveType = ty.isPrimitive;
+        isStringType = ty.isString;
     }
 
     bool isWritingSignature = d->m_signaturePosition == d->m_signature.length; // TODO correct?
