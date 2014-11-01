@@ -81,4 +81,4 @@ install(TARGETS dfer dferclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR}
 
 enable_testing() # need this here to get the "test" target in the toplevel build dir
 add_subdirectory(tests)
-add_subdirectory(utilities)
+add_subdirectory(applications)
