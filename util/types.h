@@ -24,6 +24,8 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#include "export.h"
+
 // ### this belongs into a different header
 #define likely(x)    __builtin_expect(!!(x), 1)
 #define unlikely(x)  __builtin_expect(!!(x), 0)
@@ -36,7 +38,7 @@ typedef unsigned int uint32;
 typedef long long int int64;
 typedef unsigned long long int uint64;
 
-struct chunk
+struct DFERRY_EXPORT chunk
 {
     chunk() : begin(0), length(0) {}
     chunk(byte *b, int l) : begin(b), length(l) {}
@@ -46,7 +48,7 @@ struct chunk
     int length;
 };
 
-struct cstring
+struct DFERRY_EXPORT cstring
 {
     cstring() : begin(0), length(0) {}
     cstring(byte *b, int l) : begin(b), length(l) {}

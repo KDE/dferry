@@ -28,7 +28,7 @@
 
 namespace PlatformTime
 {
-uint64 monotonicMsecs();
+uint64 DFERRY_EXPORT monotonicMsecs();
 }
 
 #endif // PLATFORMTIME_H

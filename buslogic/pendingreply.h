@@ -31,7 +31,7 @@ class Message;
 class Transceiver;
 class PendingReplyPrivate;
 
-class PendingReply
+class DFERRY_EXPORT PendingReply
 {
 public:
     // Constructs a detached instance, which does not have any reply to wait for:

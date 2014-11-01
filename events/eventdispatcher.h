@@ -24,9 +24,11 @@
 #ifndef EVENTDISPATCHER_H
 #define EVENTDISPATCHER_H
 
+#include "export.h"
+
 class EventDispatcherPrivate;
 
-class EventDispatcher
+class DFERRY_EXPORT EventDispatcher
 {
 public:
     EventDispatcher();

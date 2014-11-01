@@ -7,21 +7,21 @@
 #include <string>
 #include <vector>
 
-struct Argument
+struct DFERRY_EXPORT Argument
 {
     std::string name;
     std::string type;
     bool isDirectionOut; // in otherwise
 };
 
-struct Method
+struct DFERRY_EXPORT Method
 {
     Message::Type type; // allowed: MethodCallMessage, SignalMessage
     std::string name;
     std::vector<Argument> arguments;
 };
 
-struct Property
+struct DFERRY_EXPORT Property
 {
     enum Access {
         Invalid = 0,
@@ -34,14 +34,14 @@ struct Property
     Access access;
 };
 
-struct Interface
+struct DFERRY_EXPORT Interface
 {
     std::string name;
     std::map<std::string, Method> methods;
     std::map<std::string, Property> properties;
 };
 
-struct IntrospectionNode
+struct DFERRY_EXPORT IntrospectionNode
 {
     // IntrospectionNode *parent() const;
     std::string path() const; // returns all parents' names plus this node's like "/grand/parent/this"
@@ -55,7 +55,7 @@ struct IntrospectionNode
 namespace tinyxml2 { class XMLElement; }
 namespace tx2 = tinyxml2;
 
-class IntrospectionTree
+class DFERRY_EXPORT IntrospectionTree
 {
 public:
     IntrospectionTree();

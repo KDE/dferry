@@ -57,7 +57,7 @@ class ITransceiverClient;
 class Message;
 class TransceiverPrivate;
 
-class Transceiver
+class DFERRY_EXPORT Transceiver
 {
 public:
     enum ThreadAffinity

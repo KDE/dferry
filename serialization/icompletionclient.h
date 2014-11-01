@@ -24,16 +24,18 @@
 #ifndef ICOMPLETIONCLIENT_H
 #define ICOMPLETIONCLIENT_H
 
+#include "export.h"
+
 #include <functional>
 
-class ICompletionClient
+class DFERRY_EXPORT ICompletionClient
 {
 public:
     virtual ~ICompletionClient();
     virtual void notifyCompletion(void *task) = 0;
 };
 
-class CompletionFunc : public ICompletionClient
+class DFERRY_EXPORT CompletionFunc : public ICompletionClient
 {
 public:
     CompletionFunc(std::function<void(void *)> func) : m_func(func) {}

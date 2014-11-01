@@ -30,7 +30,7 @@ class EventDispatcher;
 class EventDispatcherPrivate;
 class ICompletionClient;
 
-class Timer
+class DFERRY_EXPORT Timer
 {
 public:
     Timer(EventDispatcher *dispatcher);

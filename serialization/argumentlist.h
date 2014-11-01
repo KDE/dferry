@@ -24,13 +24,14 @@
 #ifndef ARGUMENTLIST_H
 #define ARGUMENTLIST_H
 
+#include "export.h"
 #include "types.h"
 
 #include <cassert>
 #include <string>
 #include <vector>
 
-class ArgumentList
+class DFERRY_EXPORT ArgumentList
 {
 public:
     ArgumentList(); // constructs an empty argument list

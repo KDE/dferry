@@ -36,7 +36,7 @@ class MessagePrivate;
 
 // TODO: some separation between convenience and low-level API, move all convenience API to top
 
-class Message
+class DFERRY_EXPORT Message
 {
 public:
     // this class contains header data in deserialized form (maybe also serialized) and the payload

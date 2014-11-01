@@ -24,12 +24,14 @@
 #ifndef PEERADDRESS_H
 #define PEERADDRESS_H
 
+#include "export.h"
+
 #include <string>
 
 // I think we don't need to bother with subclasses, which will add boilerplate
 // while on the other hand all-in-one isn't particularly easy to misuse.
 
-class PeerAddress
+class DFERRY_EXPORT PeerAddress
 {
 public:
     enum PeerType

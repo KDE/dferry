@@ -24,9 +24,11 @@
 #ifndef ITRANSCEIVERCLIENT_H
 #define ITRANSCEIVERCLIENT_H
 
+#include "export.h"
+
 class Message;
 
-class ITransceiverClient
+class DFERRY_EXPORT ITransceiverClient
 {
 public:
     virtual ~ITransceiverClient();
