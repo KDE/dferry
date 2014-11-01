@@ -162,7 +162,8 @@ public:
 
         // when @p isEmpty is not null and the array contains no elements, the array is
         // iterated over once so you can get the type information. due to lack of data,
-        // all contained arrays, dicts and variants (but not structs) will be empty, and
+        // all contained containers (arrays, dicts and variants) will contain no elements,
+        // but you can iterate once over them as well to obtain type information.
         // any values returned by read... will be garbage.
         // in any case, *isEmpty will be set to indicate whether the array is empty.
 

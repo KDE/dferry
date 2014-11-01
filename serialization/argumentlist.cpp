@@ -564,7 +564,7 @@ public:
        : m_argList(0),
          m_signaturePosition(-1),
          m_dataPosition(0),
-         m_zeroLengthArrayNesting(0)
+         m_nilArrayNesting(0)
     {}
 
     ArgumentList *m_argList;
@@ -573,7 +573,7 @@ public:
     chunk m_data;
     int m_signaturePosition;
     int m_dataPosition;
-    int m_zeroLengthArrayNesting; // this keeps track of how many zero-length arrays we are in
+    int m_nilArrayNesting; // this keeps track of how many nil arrays we are in
 
     struct ArrayInfo
     {
@@ -885,9 +885,9 @@ void ArgumentList::Reader::advanceState()
     }
 
     // check if we have enough data for the next type, and read it
-    // if we're in a zero-length array, we are iterating only over the types without reading any data
+    // if we're in a nil array, we are iterating only over the types without reading any data
 
-    if (likely(!d->m_zeroLengthArrayNesting)) {
+    if (likely(!d->m_nilArrayNesting)) {
         int padStart = d->m_dataPosition;
         d->m_dataPosition = align(d->m_dataPosition, ty.alignment);
         if (unlikely(d->m_dataPosition > d->m_data.length)) {
@@ -937,7 +937,7 @@ void ArgumentList::Reader::advanceState()
 
     case BeginVariant: {
         cstring signature;
-        if (unlikely(d->m_zeroLengthArrayNesting)) {
+        if (unlikely(d->m_nilArrayNesting)) {
             static const char *emptyString = "";
             signature = cstring(emptyString, 0);
         } else {
@@ -967,7 +967,7 @@ void ArgumentList::Reader::advanceState()
 
     case BeginArray: {
         uint32 arrayLength = 0;
-        if (likely(!d->m_zeroLengthArrayNesting)) {
+        if (likely(!d->m_nilArrayNesting)) {
             if (unlikely(d->m_dataPosition + 4 > d->m_data.length)) {
                 goto out_needMoreData;
             }
@@ -984,7 +984,7 @@ void ArgumentList::Reader::advanceState()
         Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
 
         // ### are we supposed to align d->m_dataPosition if the array is empty?
-        if (likely(!d->m_zeroLengthArrayNesting)) {
+        if (likely(!d->m_nilArrayNesting)) {
             int padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
@@ -1004,7 +1004,7 @@ void ArgumentList::Reader::advanceState()
         // position at the 'a' or '{' because we increment d->m_signaturePosition before reading a char
         arrayInfo.containedTypeBegin = d->m_signaturePosition;
         if (!arrayLength) {
-            d->m_zeroLengthArrayNesting++;
+            d->m_nilArrayNesting++;
         }
 
         d->m_aggregateStack.push_back(aggregateInfo);
@@ -1041,10 +1041,10 @@ void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
     assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
     if (isEmpty) {
-        *isEmpty = d->m_zeroLengthArrayNesting;
+        *isEmpty = d->m_nilArrayNesting;
     }
 
-    if (unlikely(d->m_zeroLengthArrayNesting)) {
+    if (unlikely(d->m_nilArrayNesting)) {
         if (!isEmpty) {
             // TODO this whole branch seems to be not covered by the tests
             // need to move d->m_signaturePosition to the end of the array signature *here* or it won't happen
@@ -1088,7 +1088,7 @@ bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
     assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
     Private::ArrayInfo &arrayInfo = aggregateInfo.arr;
 
-    if (unlikely(d->m_zeroLengthArrayNesting)) {
+    if (unlikely(d->m_nilArrayNesting)) {
         if (d->m_signaturePosition <= arrayInfo.containedTypeBegin) {
             // do one iteration to read the types; read the next type...
             advanceState();
@@ -1097,7 +1097,7 @@ bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
             return m_state != InvalidData;
         } else {
             // second iteration or skipping an empty array
-            d->m_zeroLengthArrayNesting--;
+            d->m_nilArrayNesting--;
         }
     } else {
         if (d->m_dataPosition < arrayInfo.dataEnd) {
@@ -1198,7 +1198,7 @@ public:
          m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
          m_dataCapacity(InitialDataCapacity),
          m_dataPosition(0),
-         m_zeroLengthArrayNesting(0)
+         m_nilArrayNesting(0)
     {}
 
     struct ArrayInfo
@@ -1262,9 +1262,9 @@ public:
     std::vector<ElementInfo> m_elements;
     std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
 
-    int m_dataElementsCountBeforeZeroLengthArray;
-    int m_variantSignaturesCountBeforeZeroLengthArray;
-    int m_dataPositionBeforeZeroLengthArray;
+    int m_dataElementsCountBeforeNilArray;
+    int m_variantSignaturesCountBeforeNilArray;
+    int m_dataPositionBeforeNilArray;
 
     ArgumentList *m_argList;
     NestingWithParenCounter m_nesting;
@@ -1279,7 +1279,7 @@ public:
     int m_dataCapacity;
     int m_dataPosition;
 
-    int m_zeroLengthArrayNesting;
+    int m_nilArrayNesting;
     // this keeps track of which aggregates we are currently in
     std::vector<AggregateInfo> m_aggregateStack;
 };
@@ -1561,9 +1561,9 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         VALID_IF(!d->m_aggregateStack.empty());
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginVariant);
-        if (likely(!d->m_zeroLengthArrayNesting)) {
-            // apparently, empty variants are not allowed. as an exception, in zero length arrays they are
-            // suitable for writing a type signature like "av" in the shortest possible way.
+        if (likely(!d->m_nilArrayNesting)) {
+            // apparently, empty variants are not allowed. as an exception, in nil arrays they are
+            // allowed for writing a type signature like "av" in the shortest possible way.
             VALID_IF(d->m_signaturePosition > 0);
         }
         d->m_signature.begin[d->m_signaturePosition] = '\0';
@@ -1612,15 +1612,15 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
         VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1));
         d->m_aggregateStack.pop_back();
-        if (unlikely(d->m_zeroLengthArrayNesting)) {
-            if (!--d->m_zeroLengthArrayNesting) {
+        if (unlikely(d->m_nilArrayNesting)) {
+            if (!--d->m_nilArrayNesting) {
                 // last chance to erase data inside the empty array so it doesn't end up in the output
                 d->m_variantSignatures.erase(d->m_variantSignatures.begin() +
-                                             d->m_variantSignaturesCountBeforeZeroLengthArray,
+                                             d->m_variantSignaturesCountBeforeNilArray,
                                              d->m_variantSignatures.end());
-                d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeZeroLengthArray,
+                d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
                                     d->m_elements.end());
-                d->m_dataPosition = d->m_dataPositionBeforeZeroLengthArray;
+                d->m_dataPosition = d->m_dataPositionBeforeNilArray;
             }
         }
 
@@ -1638,16 +1638,16 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
 
 void ArgumentList::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
 {
-    isEmpty = isEmpty || d->m_zeroLengthArrayNesting;
+    isEmpty = isEmpty || d->m_nilArrayNesting;
     if (isEmpty) {
-        if (!d->m_zeroLengthArrayNesting++) {
+        if (!d->m_nilArrayNesting++) {
             // for simplictiy and performance in the fast path, we keep storing the data chunks and any
             // variant signatures written inside an empty array. when we close the array, though, we
             // throw away all that data and signatures and keep only changes in the signature containing
             // the topmost empty array.
-            d->m_variantSignaturesCountBeforeZeroLengthArray = d->m_variantSignatures.size();
-            d->m_dataElementsCountBeforeZeroLengthArray = d->m_elements.size() + 1; // +1 -> keep ArrayLengthField
-            d->m_dataPositionBeforeZeroLengthArray = d->m_dataPosition;
+            d->m_variantSignaturesCountBeforeNilArray = d->m_variantSignatures.size();
+            d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // +1 -> keep ArrayLengthField
+            d->m_dataPositionBeforeNilArray = d->m_dataPosition;
         }
     }
     if (isDict) {
@@ -1670,7 +1670,7 @@ void ArgumentList::Writer::nextArrayOrDictEntry(bool isDict)
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
     VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
-    if (unlikely(d->m_zeroLengthArrayNesting)) {
+    if (unlikely(d->m_nilArrayNesting)) {
         // allow one iteration to write the types
         VALID_IF(d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
     } else {
@@ -1751,7 +1751,7 @@ void ArgumentList::Writer::finish()
         return;
     }
     assert(d->m_nesting.total() == 0);
-    assert(!d->m_zeroLengthArrayNesting);
+    assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
     d->m_signature.begin[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
