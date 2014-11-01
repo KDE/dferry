@@ -662,12 +662,17 @@ static void test_writerMisuse()
 
 void addSomeVariantStuff(ArgumentList::Writer *writer)
 {
+    // maybe should have typed the following into hackertyper.com to make it look more "legit" ;)
+    static const char *aVeryLongString = "ujfgosuideuvcevfgeoauiyetoraedtmzaubeodtraueonuljfgonuiljofnuilojf"
+                                         "0ij948h534ownlyejglunh4owny9hw3v9woni09ulgh4wuvc<l9foehujfigosuij"
+                                         "ofgnua0j3409k0ae9nyatrnoadgiaeh0j98hejuohslijolsojiaeojaufhesoujh";
     writer->beginVariant();
         writer->beginVariant();
             writer->beginVariant();
                 writer->beginStruct();
                     writer->writeString(cstring("Smoerebroed smoerebroed"));
                     writer->beginStruct();
+                        writer->writeString(cstring(aVeryLongString));
                         writer->writeString(cstring("Bork bork bork"));
                         writer->beginVariant();
                             writer->beginStruct();
