@@ -15,7 +15,8 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/client
                     ${CMAKE_SOURCE_DIR}/connection
                     ${CMAKE_SOURCE_DIR}/events
-                    ${CMAKE_SOURCE_DIR}/serialization)
+                    ${CMAKE_SOURCE_DIR}/serialization
+                    ${CMAKE_SOURCE_DIR}/util)
 
 set(DFER_SOURCES
     buslogic/itransceiverclient.cpp
@@ -36,7 +37,7 @@ set(DFER_SOURCES
     serialization/argumentlist.cpp
     serialization/icompletionclient.cpp
     serialization/message.cpp
-    serialization/types.cpp)
+    util/types.cpp)
 
 set(DFER_HEADERS
     buslogic/itransceiverclient.h
@@ -60,7 +61,7 @@ set(DFER_HEADERS
     serialization/basictypeio.h
     serialization/icompletionclient.h
     serialization/message.h
-    serialization/types.h)
+    util/types.h)
 
 add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 
