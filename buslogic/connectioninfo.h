@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef PEERADDRESS_H
-#define PEERADDRESS_H
+#ifndef CONNECTIONINFO_H
+#define CONNECTIONINFO_H
 
 #include "export.h"
 
@@ -31,38 +31,55 @@
 // I think we don't need to bother with subclasses, which will add boilerplate
 // while on the other hand all-in-one isn't particularly easy to misuse.
 
-class DFERRY_EXPORT PeerAddress
+class DFERRY_EXPORT ConnectionInfo
 {
 public:
-    enum PeerType
+    enum class Bus : unsigned char
     {
-        NoPeer = 0,
-        SystemBus,
-        SessionBus,
-        DirectConnection
+        None = 0,
+        System,
+        Session,
+        PeerToPeer
     };
 
-    enum SocketType
+    enum SocketType : unsigned char
     {
-        NoSocket = 0,
-        UnixSocket,
-        AbstractUnixSocket,
-        TcpSocket
+        None = 0,
+        Unix,
+        AbstractUnix,
+        Tcp
     };
 
-    PeerAddress();
+    enum class Role : unsigned char
+    {
+        None = 0,
+        Client,
+        Server
+    };
+
+    ConnectionInfo();
     // Intentionally not explicit; it resolves the details of a bus address
-    PeerAddress(PeerType bus);
-    PeerAddress(const PeerAddress &other);
-    ~PeerAddress();
+    ConnectionInfo(Bus bus);
+    ConnectionInfo(const ConnectionInfo &other);
+    ConnectionInfo &operator=(const ConnectionInfo &other);
+    ~ConnectionInfo();
 
-    PeerType peerType() const;
+    void setBus(Bus bus);
+    Bus bus() const;
+
+    void setSocketType(SocketType socketType);
     SocketType socketType() const;
-    std::string path() const;
-    int port() const; // only for TcpSocket
-    std::string guid() const;
 
-    PeerAddress &operator=(const PeerAddress &other);
+    void setRole(Role role);
+    Role role() const;
+
+    void setPath(const std::string &path);
+    std::string path() const; // only for Unix domain sockets
+
+    void setPort(int port);
+    int port() const; // only for TcpSocket
+
+    std::string guid() const;
 
     // TODO comparison operators
 
@@ -71,4 +88,4 @@ private:
     Private *d;
 };
 
-#endif
+#endif // CONNECTIONINFO_H

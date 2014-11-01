@@ -27,6 +27,7 @@
 #include "argumentlist.h"
 #include "authnegotiator.h"
 #include "icompletionclient.h"
+#include "iserver.h"
 #include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
@@ -41,17 +42,33 @@ using namespace std;
 class HelloReceiver : public ICompletionClient
 {
 public:
-    void notifyCompletion(void *task) override;
+    void notifyCompletion(void *) override
+    {
+        m_parent->handleHelloReply();
+    }
+
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
     TransceiverPrivate *m_parent;
 };
 
-void HelloReceiver::notifyCompletion(void *)
+class ClientConnectedHandler : public ICompletionClient
 {
-    m_parent->processHello();
-}
+public:
+    ~ClientConnectedHandler()
+    {
+        delete m_server;
+    }
 
-TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const PeerAddress &peer)
+    void notifyCompletion(void *) override
+    {
+        m_parent->handleClientConnected();
+    }
+
+    IServer *m_server;
+    TransceiverPrivate *m_parent;
+};
+
+TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const ConnectionInfo &ci)
    : m_client(nullptr),
      m_receivingMessage(nullptr),
      m_sendSerial(1),
@@ -59,21 +76,48 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const PeerAd
      m_connection(nullptr),
      m_mainThreadTransceiver(nullptr),
      m_helloReceiver(nullptr),
+     m_clientConnectedHandler(nullptr),
      m_eventDispatcher(dispatcher),
-     m_peerAddress(peer),
+     m_connectionInfo(ci),
      m_authNegotiator(nullptr)
 {
 }
 
-Transceiver::Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer)
-   : d(new TransceiverPrivate(dispatcher, peer))
+Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
+   : d(new TransceiverPrivate(dispatcher, ci))
 {
-    cout << "session bus socket type: " << peer.socketType() << '\n';
-    cout << "session bus path: " << peer.path() << '\n';
-    d->m_connection = IConnection::create(peer);
-    d->m_connection->setEventDispatcher(dispatcher);
-    cout << "connection is " << (d->m_connection->isOpen() ? "open" : "closed") << ".\n";
-    d->authAndHello(this);
+    cout << "session bus socket type: " << ci.socketType() << '\n';
+    cout << "session bus path: " << ci.path() << '\n';
+
+    if (ci.bus() == ConnectionInfo::Bus::None || ci.socketType() == ConnectionInfo::SocketType::None ||
+        ci.role() == ConnectionInfo::Role::None) {
+        return;
+    }
+
+    if (ci.role() == ConnectionInfo::Role::Server) {
+        if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
+            // this sets up a server that will be destroyed after accepting exactly one connection
+            cout << "Transceiver constructor: setting up server.\n";
+            d->m_clientConnectedHandler = new ClientConnectedHandler;
+            d->m_clientConnectedHandler->m_server = IServer::create(ci);
+            d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
+            d->m_clientConnectedHandler->m_server->setNewConnectionClient(d->m_clientConnectedHandler);
+            d->m_clientConnectedHandler->m_parent = d;
+        } else {
+            cerr << "Transceiver constructor: bus server not supported.\n";
+        }
+    } else {
+        d->m_connection = IConnection::create(ci);
+        d->m_connection->setEventDispatcher(dispatcher);
+        cout << "connection is " << (d->m_connection->isOpen() ? "open" : "closed") << ".\n";
+        if (ci.bus() == ConnectionInfo::Bus::Session || ci.bus() == ConnectionInfo::Bus::System) {
+            cerr << "Transceiver constructor: authAndHello." << endl;
+            d->authAndHello(this);
+        } else if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
+            cerr << "Transceiver constructor: direct to message exchange" << endl;
+            d->receiveNextMessage();
+        }
+    }
 }
 
 Transceiver::~Transceiver()
@@ -107,7 +151,7 @@ void TransceiverPrivate::authAndHello(Transceiver *parent)
     m_helloReceiver->m_parent = this;
 }
 
-void TransceiverPrivate::processHello()
+void TransceiverPrivate::handleHelloReply()
 {
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
@@ -119,6 +163,17 @@ void TransceiverPrivate::processHello()
     cstring busName = reader.readString();
     assert(reader.state() == ArgumentList::Finished);
     cout << "teh bus name is:" << busName.begin << endl;
+}
+
+void TransceiverPrivate::handleClientConnected()
+{
+    m_connection = m_clientConnectedHandler->m_server->takeNextConnection();
+    delete m_clientConnectedHandler;
+    m_clientConnectedHandler = nullptr;
+
+    assert(m_connection);
+    m_connection->setEventDispatcher(m_eventDispatcher);
+    receiveNextMessage();
 }
 
 void Transceiver::setDefaultReplyTimeout(int msecs)

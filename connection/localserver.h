@@ -21,46 +21,29 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef LOCALSOCKET_H
-#define LOCALSOCKET_H
+#ifndef LOCALSERVER_H
+#define LOCALSERVER_H
 
-#include "iconnection.h"
+#include "iserver.h"
 
-#include <map>
 #include <string>
 
-class IConnectionListener;
-struct SessionBusInfo;
-
-class LocalSocket : public IConnection
+class LocalServer : public IServer
 {
 public:
-    // Connect to local socket at socketFilePath
-    LocalSocket(const std::string &socketFilePath);
-    // Use an already open file descriptor
-    LocalSocket(int fd);
+    LocalServer(const std::string &socketFilePath);
+    ~LocalServer();
 
-    ~LocalSocket();
+    bool isListening() const override;
 
-    // pure virtuals from IConnection
-    int write(chunk data) override;
-    int availableBytesForReading() override;
-    chunk read(byte *buffer, int maxSize) override;
     void close() override;
-    bool isOpen() override;
-    int fileDescriptor() const override;
+
+    FileDescriptor fileDescriptor() const override;
+
     void notifyRead() override;
-    // end IConnection
 
 private:
-    friend class IEventLoop;
-    friend class IConnectionListener;
-
-    LocalSocket(); // not implemented
-    LocalSocket(const LocalSocket &); // not implemented, disable copying
-    LocalSocket &operator=(const LocalSocket &); // dito
-
-    int m_fd;
+    int m_listenFd;
 };
 
-#endif // LOCALSOCKET_H
+#endif // LOCALSERVER_H

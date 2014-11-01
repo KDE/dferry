@@ -41,10 +41,6 @@ static const int maxFds = 12;
 
 using namespace std;
 
-LocalSocket::LocalSocket(int fd)
-   : m_fd(fd)
-{}
-
 LocalSocket::LocalSocket(const string &socketFilePath)
    : m_fd(-1)
 {
@@ -71,6 +67,11 @@ LocalSocket::LocalSocket(const string &socketFilePath)
     }
 }
 
+LocalSocket::LocalSocket(int fd)
+   : m_fd(fd)
+{
+}
+
 LocalSocket::~LocalSocket()
 {
     close();
@@ -78,7 +79,7 @@ LocalSocket::~LocalSocket()
 
 void LocalSocket::close()
 {
-    setEventDispatcher(0);
+    setEventDispatcher(nullptr);
     if (m_fd >= 0) {
         ::close(m_fd);
     }

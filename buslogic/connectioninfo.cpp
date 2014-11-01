@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "peeraddress.h"
+#include "connectioninfo.h"
 
 #include "stringtools.h"
 
@@ -89,89 +89,125 @@ static string sessionInfoFile()
     return ret;
 }
 
-class PeerAddress::Private
+class ConnectionInfo::Private
 {
 public:
     Private()
-       : m_peerType(NoPeer),
-         m_socketType(NoSocket),
+       : m_bus(ConnectionInfo::Bus::None),
+         m_socketType(ConnectionInfo::SocketType::None),
+         m_role(ConnectionInfo::Role::None),
          m_port(-1)
     {}
 
     void fetchSessionBusInfo();
     void parseSessionBusInfo(std::string info);
 
-    PeerAddress::PeerType m_peerType;
-    PeerAddress::SocketType m_socketType;
+    ConnectionInfo::Bus m_bus;
+    ConnectionInfo::SocketType m_socketType;
+    ConnectionInfo::Role m_role;
     std::string m_path;
     int m_port;
     std::string m_guid;
 };
 
-PeerAddress::PeerAddress()
+ConnectionInfo::ConnectionInfo()
    : d(new Private)
 {
 }
 
-PeerAddress::PeerAddress(PeerType bus)
+ConnectionInfo::ConnectionInfo(Bus bus)
    : d(new Private)
 {
-    d->m_peerType = bus;
-    if (bus == SessionBus) {
+    d->m_bus = bus;
+    d->m_role = Role::Client;
+
+    if (bus == Bus::Session) {
         d->fetchSessionBusInfo();
-    } else if (bus == SystemBus) {
+    } else if (bus == Bus::System) {
         // TODO non-Linux
-        d->m_socketType = UnixSocket;
+        d->m_socketType = SocketType::Unix;
         d->m_path = "/var/run/dbus/system_bus_socket";
     } else {
-        // TODO error
+        assert(bus <= Bus::PeerToPeer);
     }
 }
 
-PeerAddress::PeerAddress(const PeerAddress &other)
+ConnectionInfo::ConnectionInfo(const ConnectionInfo &other)
    : d(new Private(*other.d))
 {
 }
 
-PeerAddress &PeerAddress::operator=(const PeerAddress &other)
+ConnectionInfo &ConnectionInfo::operator=(const ConnectionInfo &other)
 {
-    *d = *other.d;
+    if (this != &other) {
+        *d = *other.d;
+    }
     return *this;
 }
 
-PeerAddress::~PeerAddress()
+ConnectionInfo::~ConnectionInfo()
 {
     delete d;
-    d = 0;
+    d = nullptr;
 }
 
-PeerAddress::PeerType PeerAddress::peerType() const
+void ConnectionInfo::setBus(Bus bus)
 {
-    return d->m_peerType;
+    d->m_bus = bus;
 }
 
-PeerAddress::SocketType PeerAddress::socketType() const
+ConnectionInfo::Bus ConnectionInfo::bus() const
+{
+    return d->m_bus;
+}
+
+void ConnectionInfo::setSocketType(SocketType socketType)
+{
+    d->m_socketType = socketType;
+}
+
+ConnectionInfo::SocketType ConnectionInfo::socketType() const
 {
     return d->m_socketType;
 }
 
-string PeerAddress::path() const
+void ConnectionInfo::setRole(Role role)
+{
+    d->m_role = role;
+}
+
+ConnectionInfo::Role ConnectionInfo::role() const
+{
+    return d->m_role;
+}
+
+void ConnectionInfo::setPath(const std::string &path)
+{
+    d->m_path = path;
+}
+
+string ConnectionInfo::path() const
 {
     return d->m_path;
 }
 
-int PeerAddress::port() const
+void ConnectionInfo::setPort(int port)
+{
+    d->m_port = port;
+}
+
+int ConnectionInfo::port() const
 {
     return d->m_port;
 }
 
-string PeerAddress::guid() const
+string ConnectionInfo::guid() const
 {
     return d->m_guid;
 }
 
 
-void PeerAddress::Private::fetchSessionBusInfo()
+void ConnectionInfo::Private::fetchSessionBusInfo()
 {
     ifstream infoFile(sessionInfoFile().c_str());
     string line;
@@ -197,22 +233,22 @@ void PeerAddress::Private::fetchSessionBusInfo()
     parseSessionBusInfo(line);
 }
 
-void PeerAddress::Private::parseSessionBusInfo(string info)
+void ConnectionInfo::Private::parseSessionBusInfo(string info)
 {
-    SocketType provisionalType = NoSocket;
+    SocketType provisionalType = SocketType::None;
 
     string unixAddressLiteral = "unix:";
     string guidLiteral = "guid=";
 
     if (info.find(unixAddressLiteral) == 0) {
-        provisionalType = UnixSocket;
+        provisionalType = SocketType::Unix;
         info.erase(0, unixAddressLiteral.length());
     }
 
     // TODO is there any escaping?
     const vector<string> parts = split(info, ',');
 
-    if (provisionalType == UnixSocket) {
+    if (provisionalType == SocketType::Unix) {
         string pathLiteral = "path=";
         string abstractLiteral = "abstract=";
         // TODO what about "tmpdir=..."?
@@ -220,16 +256,16 @@ void PeerAddress::Private::parseSessionBusInfo(string info)
         for (int i = 0; i < parts.size(); i++) {
             const string &part = parts[i];
             if (part.find(pathLiteral) == 0) {
-                if (m_socketType != NoSocket) {
+                if (m_socketType != SocketType::None) {
                     goto invalid; // error - duplicate path specification
                 }
-                m_socketType = UnixSocket;
+                m_socketType = SocketType::Unix;
                 m_path = part.substr(pathLiteral.length());
             } else if (part.find(abstractLiteral) == 0) {
-                if (m_socketType != NoSocket) {
+                if (m_socketType != SocketType::None) {
                     goto invalid;
                 }
-                m_socketType = AbstractUnixSocket;
+                m_socketType = SocketType::AbstractUnix;
                 m_path = part.substr(abstractLiteral.length());
             }
         }
@@ -246,6 +282,6 @@ void PeerAddress::Private::parseSessionBusInfo(string info)
 
     return;
 invalid:
-    m_socketType = NoSocket;
+    m_socketType = SocketType::None;
     m_path.clear();
 }

@@ -30,9 +30,9 @@
 
 #include <vector>
 
+class ConnectionInfo;
 class EventDispatcher;
 class IConnectionClient;
-class PeerAddress;
 
 class IConnection : public IioEventClient
 {
@@ -58,7 +58,7 @@ public:
     EventDispatcher *eventDispatcher() const override;
 
     // factory method - creates a suitable subclass to connect to address
-    static IConnection *create(const PeerAddress &address);
+    static IConnection *create(const ConnectionInfo &connectionInfo);
 
 protected:
     friend class EventDispatcher;

@@ -27,11 +27,10 @@
 #include "eventdispatcher_p.h"
 #include "iconnectionclient.h"
 #include "localsocket.h"
-#include "peeraddress.h"
+#include "connectioninfo.h"
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 
 using namespace std;
 
@@ -141,15 +140,15 @@ void IConnection::notifyWrite()
 }
 
 //static
-IConnection *IConnection::create(const PeerAddress &address)
+IConnection *IConnection::create(const ConnectionInfo &ci)
 {
-    switch (address.socketType()) {
-    case PeerAddress::UnixSocket:
-        return new LocalSocket(address.path());
-    case PeerAddress::AbstractUnixSocket:
-        return new LocalSocket(string(1, '\0') + address.path());
+    switch (ci.socketType()) {
+        case ConnectionInfo::SocketType::Unix:
+        return new LocalSocket(ci.path());
+    case ConnectionInfo::SocketType::AbstractUnix:
+        return new LocalSocket(string(1, '\0') + ci.path());
     default:
         assert(false);
-        return 0;
+        return nullptr;
     }
 }

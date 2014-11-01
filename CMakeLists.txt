@@ -21,13 +21,15 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/util)
 
 set(DFER_SOURCES
+    buslogic/connectioninfo.cpp
     buslogic/itransceiverclient.cpp
-    buslogic/peeraddress.cpp
     buslogic/pendingreply.cpp
     buslogic/transceiver.cpp
     connection/authnegotiator.cpp
     connection/iconnection.cpp
     connection/iconnectionclient.cpp
+    connection/iserver.cpp
+    connection/localserver.cpp
     connection/localsocket.cpp
     connection/stringtools.cpp
     events/epolleventpoller.cpp
@@ -42,14 +44,16 @@ set(DFER_SOURCES
     util/types.cpp)
 
 set(DFER_HEADERS
+    buslogic/connectioninfo.h
     buslogic/itransceiverclient.h
-    buslogic/peeraddress.h
     buslogic/pendingreply.h
     buslogic/transceiver.h
     connection/authnegotiator.h
     connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
+    connection/iserver.h
+    connection/localserver.h
     connection/localsocket.h
     connection/platform.h
     connection/stringtools.h

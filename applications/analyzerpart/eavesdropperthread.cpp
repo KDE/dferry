@@ -24,11 +24,11 @@
 #include "eavesdropperthread.h"
 
 #include "argumentlist.h"
+#include "connectioninfo.h"
 #include "eavesdroppermodel.h"
 #include "eventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"
-#include "peeraddress.h"
 #include "transceiver.h"
 
 EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
@@ -69,7 +69,7 @@ void EavesdropperThread::run()
     m_timer.start();
     m_dispatcher = new EventDispatcher;
 
-    m_transceiver = new Transceiver(m_dispatcher, PeerAddress::SessionBus);
+    m_transceiver = new Transceiver(m_dispatcher, ConnectionInfo::Bus::Session);
     m_transceiver->setClient(this);
     {
         static const int messageTypeCount = 4;

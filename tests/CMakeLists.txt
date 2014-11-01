@@ -8,6 +8,7 @@ set(TESTUTIL_HEADERS
 
 add_library(testutil SHARED ${TESTUTIL_SOURCES} ${TESTUTIL_HEADERS})
 
+add_subdirectory(buslogic)
 add_subdirectory(client)
 add_subdirectory(events)
 add_subdirectory(serialization)

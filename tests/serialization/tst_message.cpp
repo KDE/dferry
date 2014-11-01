@@ -21,6 +21,89 @@
    http://www.mozilla.org/MPL/
 */
 
+#include "argumentlist.h"
+#include "connectioninfo.h"
+#include "eventdispatcher.h"
+#include "itransceiverclient.h"
+#include "message.h"
+#include "testutil.h"
+#include "transceiver.h"
+
+#include <iostream>
+
+using namespace std;
+
+class PrintAndTerminateClient : public ITransceiverClient
+{
+public:
+    void messageReceived(Message *msg) override
+    {
+        cout << msg->prettyPrint();
+        m_eventDispatcher->interrupt();
+    }
+    EventDispatcher *m_eventDispatcher;
+};
+
+class PrintAndReplyClient : public ITransceiverClient
+{
+public:
+    void messageReceived(Message *msg) override
+    {
+        cout << msg->prettyPrint();
+        Message *reply = Message::createErrorReplyTo(*msg, "Unable to get out of hammock!");
+        m_transceiver->sendNoReply(reply);
+        //m_transceiver->eventDispatcher()->interrupt();
+    }
+    Transceiver *m_transceiver;
+};
+
+// used during implementation, is supposed to not crash and be valgrind-clean afterwards
+void testBasic()
+{
+    EventDispatcher dispatcher;
+
+    ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
+    clientConnection.setSocketType(ConnectionInfo::SocketType::AbstractUnix);
+    clientConnection.setRole(ConnectionInfo::Role::Client);
+    clientConnection.setPath("dferry.Test.Message");
+
+    ConnectionInfo serverConnection = clientConnection;
+    serverConnection.setRole(ConnectionInfo::Role::Server);
+
+    Transceiver serverTransceiver(&dispatcher, serverConnection);
+    cout << "Created server transceiver. " << &serverTransceiver << endl;
+    Transceiver clientTransceiver(&dispatcher, clientConnection);
+    cout << "Created client transceiver. " << &clientTransceiver << endl;
+
+    PrintAndReplyClient printAndReplyClient;
+    printAndReplyClient.m_transceiver = &serverTransceiver;
+    serverTransceiver.setClient(&printAndReplyClient);
+
+    PrintAndTerminateClient printAndTerminateClient;
+    printAndTerminateClient.m_eventDispatcher = &dispatcher;
+    clientTransceiver.setClient(&printAndTerminateClient);
+
+    Message *msg = Message::createCall("/foo", "org.foo.interface", "laze");
+    ArgumentList argList;
+    ArgumentList::Writer writer = argList.beginWrite();
+    writer.writeString("couch");
+    writer.finish();
+    msg->setArgumentList(argList);
+#if 0 // maybe future API
+    Message *msg = new Message::makeCall("/foo", "org.foo.interface", "laze");
+    ArgumentList::Writer writer = msg->writeArguments();
+    writer.writeString("couch");
+    // writer finalizes automatically, at the latest when sending the message
+#endif
+
+    clientTransceiver.sendNoReply(msg);
+
+    while (dispatcher.poll()) {
+    }
+}
+
 int main(int argc, char *argv[])
 {
+    testBasic();
+    // TODO testDeepCopy();
 }

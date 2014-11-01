@@ -48,7 +48,7 @@ static void addressMessageToBus(Message *msg)
 static void testBusAddress()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, PeerAddress::SessionBus);
+    Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
 
     Message *busNameRequest = new Message;
     addressMessageToBus(busNameRequest);

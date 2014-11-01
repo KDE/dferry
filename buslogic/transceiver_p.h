@@ -33,16 +33,19 @@
 
 class AuthNegotiator;
 class HelloReceiver;
+class ClientConnectedHandler;
 
 class TransceiverPrivate : public ICompletionClient
 {
 public:
     static TransceiverPrivate *get(Transceiver *t) { return t->d; }
 
-    TransceiverPrivate(EventDispatcher *dispatcher, const PeerAddress &peer);
+    TransceiverPrivate(EventDispatcher *dispatcher, const ConnectionInfo &connectionInfo);
 
     void authAndHello(Transceiver *parent);
-    void processHello();
+    void handleHelloReply();
+    void handleClientConnected();
+
     void enqueueSendFromOtherThread(Message *m);
     void addReplyFromOtherThread(Message *m);
     void notifyCompletion(void *task) override;
@@ -65,9 +68,10 @@ public:
     Transceiver *m_mainThreadTransceiver;
 
     HelloReceiver *m_helloReceiver;
+    ClientConnectedHandler *m_clientConnectedHandler;
 
     EventDispatcher *m_eventDispatcher;
-    PeerAddress m_peerAddress;
+    ConnectionInfo m_connectionInfo;
     AuthNegotiator *m_authNegotiator;
 };
 

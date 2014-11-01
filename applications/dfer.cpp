@@ -22,11 +22,10 @@
 */
 
 #include "argumentlist.h"
+#include "connectioninfo.h"
 #include "eventdispatcher.h"
 #include "itransceiverclient.h"
-#include "localsocket.h"
 #include "message.h"
-#include "peeraddress.h"
 #include "transceiver.h"
 
 #include <iostream>
@@ -63,7 +62,7 @@ void ReplyPrinter::messageReceived(Message *m)
 int main(int argc, char *argv[])
 {
     EventDispatcher dispatcher;
-    Transceiver transceiver(&dispatcher, PeerAddress::SessionBus);
+    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::Session);
     ReplyPrinter receiver;
     transceiver.setClient(&receiver);
     {
