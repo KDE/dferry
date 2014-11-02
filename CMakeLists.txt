@@ -39,8 +39,8 @@ set(DFER_SOURCES
     events/platformtime.cpp
     events/timer.cpp
     serialization/argumentlist.cpp
-    serialization/icompletionclient.cpp
     serialization/message.cpp
+    util/icompletionclient.cpp
     util/types.cpp)
 
 set(DFER_PUBLIC_HEADERS
@@ -52,9 +52,9 @@ set(DFER_PUBLIC_HEADERS
     events/eventdispatcher.h
     events/timer.h
     serialization/message.h
-    serialization/icompletionclient.h
     serialization/argumentlist.h
-    util/export.h)
+    util/export.h
+    util/icompletionclient.h)
 
 set(DFER_PRIVATE_HEADERS
     connection/authnegotiator.h
