@@ -43,11 +43,20 @@ set(DFER_SOURCES
     serialization/message.cpp
     util/types.cpp)
 
-set(DFER_HEADERS
+set(DFER_PUBLIC_HEADERS
     buslogic/connectioninfo.h
     buslogic/itransceiverclient.h
     buslogic/pendingreply.h
     buslogic/transceiver.h
+    client/introspection.h
+    events/eventdispatcher.h
+    events/timer.h
+    serialization/message.h
+    serialization/icompletionclient.h
+    serialization/argumentlist.h
+    util/export.h)
+
+set(DFER_PRIVATE_HEADERS
     connection/authnegotiator.h
     connection/iauthmechanism.h
     connection/iconnection.h
@@ -58,19 +67,15 @@ set(DFER_HEADERS
     connection/platform.h
     connection/stringtools.h
     events/epolleventpoller.h
-    events/eventdispatcher.h
     events/ieventpoller.h
     events/iioeventclient.h
     events/platformtime.h
-    events/timer.h
-    serialization/argumentlist.h
     serialization/basictypeio.h
-    serialization/icompletionclient.h
-    serialization/message.h
     util/types.h)
 
-add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
+set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
+add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
 include_directories(${LIBTINYXML2_INCLUDE_DIRS})
@@ -85,6 +90,7 @@ add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
 target_link_libraries(dferclient dfer ${LIBTINYXML2_LIBRARIES})
 
 install(TARGETS dfer dferclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
+install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/dferry)
 
 enable_testing() # need this here to get the "test" target in the toplevel build dir
 add_subdirectory(tests)
