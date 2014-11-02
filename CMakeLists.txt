@@ -7,6 +7,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
 add_definitions(-std=c++11)
 
+include(TestBigEndian)
+if(${BIGENDIAN})
+    add_definitions(-DBIGENDIAN)
+endif()
+
 option(DFERRY_BUILD_ANALYZER "Build the dfer-analyzer bus analyzer GUI" TRUE)
 
 include(GNUInstallDirs)

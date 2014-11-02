@@ -37,8 +37,11 @@
 
 using namespace std;
 
-// TODO
-static const byte thisMachineEndianness = 'l';
+#ifdef BIGENDIAN
+static const byte s_thisMachineEndianness = 'b';
+#else
+static const byte s_thisMachineEndianness = 'l';
+#endif
 
 static const byte s_storageForHeader[Message::UnixFdsHeader + 1] = {
     0, // dummy entry: there is no enum value for 0
