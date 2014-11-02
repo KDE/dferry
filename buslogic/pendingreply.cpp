@@ -40,10 +40,15 @@ PendingReply::~PendingReply()
     if (!d)  {
         return;
     }
-    if (d->m_transceiver) {
-        d->m_transceiver->unregisterPendingReply(d);
+    if (!d->m_isFinished) {
+        if (d->m_transceiverOrReply.transceiver) {
+            d->m_transceiverOrReply.transceiver->unregisterPendingReply(d);
+        }
+    } else {
+        if (d->m_transceiverOrReply.reply) {
+            delete d->m_transceiverOrReply.reply;
+        }
     }
-    delete d->m_reply;
     delete d;
     d = nullptr;
 }
@@ -79,9 +84,11 @@ PendingReply &PendingReply::operator=(PendingReply &&other)
     return *this;
 }
 
-void PendingReplyPrivate::notifyDone()
+void PendingReplyPrivate::notifyDone(Message *reply)
 {
-    m_transceiver = nullptr; // we don't need it anymore, and this tells the destructor not to unregister
+    m_isFinished = true;
+    // Transceiver has already unregistered us because it knows this reply is done
+    m_transceiverOrReply.reply = reply;
     m_replyTimeout.stop();
     if (m_client) {
         m_client->notifyCompletion(m_owner);
@@ -92,19 +99,19 @@ void PendingReply::dumpState()
 {
     std::cerr << d << '\n';
     if (d) {
-        std::cerr << d->m_owner << " " << d->m_transceiver << " " << d->m_serial << " "
-                  << int(d->m_error) << " " << d->m_reply->type() << '\n';
+        //std::cerr << d->m_owner << " " << d->m_transceiverOrReply.reply << " " << d->m_serial << " "
+        //          << int(d->m_error) << " " << d->m_reply->type() << '\n';
     }
 }
 
 bool PendingReply::isFinished() const
 {
-    return !d || !d->m_transceiver;
+    return !d || d->m_isFinished;
 }
 
 bool PendingReply::hasNonErrorReply() const
 {
-    return isFinished() && !isError();
+    return d && d->m_isFinished && d->m_error == Error::None;
 }
 
 PendingReply::Error PendingReply::error() const
@@ -120,6 +127,16 @@ bool PendingReply::isError() const
     return error() != Error::None;
 }
 
+void PendingReply::setCookie(void *cookie)
+{
+    d->m_cookie = cookie;
+}
+
+void *PendingReply::cookie() const
+{
+    return d->m_cookie;
+}
+
 void PendingReply::setCompletionClient(ICompletionClient *client)
 {
     if (d) {
@@ -130,24 +147,40 @@ void PendingReply::setCompletionClient(ICompletionClient *client)
     }
 }
 
-const Message &PendingReply::reply() const
+const Message *PendingReply::reply() const
 {
-    return *d->m_reply;
+    return d->m_isFinished ? d->m_transceiverOrReply.reply : nullptr;
+}
+
+std::unique_ptr<Message> PendingReply::takeReply()
+{
+    Message *reply = nullptr;
+    if (d->m_isFinished) {
+        reply = d->m_transceiverOrReply.reply;
+        d->m_transceiverOrReply.reply = nullptr;
+    }
+    return std::unique_ptr<Message>(reply);
 }
 
 ICompletionClient *PendingReply::completionClient() const
 {
-    return d ? d->m_client : 0;
+    return d ? d->m_client : nullptr;
 }
-
 
 void PendingReplyPrivate::notifyCompletion(void *task)
 {
     assert(task == &m_replyTimeout);
-    // never notify *our* client twice - if a reply comes after the timout, we won't get it
-    if (m_transceiver) {
-        m_transceiver->unregisterPendingReply(this);
+    assert(!m_isFinished);
+    // if a reply comes after the timout, it's too late and the reply is probably served as a spontaneous
+    // message by Transceiver
+    if (m_transceiverOrReply.transceiver) {
+        m_transceiverOrReply.transceiver->unregisterPendingReply(this);
     }
+
     m_error = PendingReply::Error::Timeout;
-    notifyDone();
+    m_isFinished = true;
+    m_transceiverOrReply.reply = nullptr;
+    if (m_client) {
+        m_client->notifyCompletion(m_owner);
+    }
 }

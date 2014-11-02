@@ -50,17 +50,17 @@ EavesdropperThread::~EavesdropperThread()
     delete m_dispatcher;
 }
 
-static Message *createEavesdropMessage(const char *messageType)
+static Message createEavesdropMessage(const char *messageType)
 {
-    Message *ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
-    ret->setDestination("org.freedesktop.DBus");
+    Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
+    ret.setDestination("org.freedesktop.DBus");
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
     writer.finish();
-    ret->setArgumentList(argList);
+    ret.setArgumentList(argList);
     return ret;
 }
 
@@ -70,7 +70,7 @@ void EavesdropperThread::run()
     m_dispatcher = new EventDispatcher;
 
     m_transceiver = new Transceiver(m_dispatcher, ConnectionInfo::Bus::Session);
-    m_transceiver->setClient(this);
+    m_transceiver->setSpontaneousMessageReceiver(this);
     {
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {
@@ -89,7 +89,7 @@ void EavesdropperThread::run()
     m_thread.quit();
 }
 
-void EavesdropperThread::messageReceived(Message *message)
+void EavesdropperThread::spontaneousMessageReceived(Message message)
 {
-    emit messageReceived(message, m_timer.nsecsElapsed());
+    emit messageReceived(new Message(std::move(message)), m_timer.nsecsElapsed());
 }

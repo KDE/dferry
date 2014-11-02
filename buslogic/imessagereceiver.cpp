@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,8 +21,21 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "itransceiverclient.h"
+#include "imessagereceiver.h"
 
-ITransceiverClient::~ITransceiverClient()
+#include "message.h"
+
+IMessageReceiver::~IMessageReceiver()
 {
+}
+
+void IMessageReceiver::spontaneousMessageReceived(Message message)
+{
+    // *poof* goes the message when this method returns!
+}
+
+void IMessageReceiver::pendingReplyReceived(PendingReply *pendingReply)
+{
+    // if we get here that might be bad! but it also might not be under special circumstances, so
+    // don't complain.
 }

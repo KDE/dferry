@@ -33,6 +33,7 @@
 
 class AuthNegotiator;
 class HelloReceiver;
+class IMessageReceiver;
 class ClientConnectedHandler;
 
 class TransceiverPrivate : public ICompletionClient
@@ -54,11 +55,11 @@ public:
 
     void unregisterPendingReply(PendingReplyPrivate *p);
 
-    ITransceiverClient *m_client;
+    IMessageReceiver *m_client;
     Message *m_receivingMessage;
     int m_sendSerial; // TODO handle recycling of serials
     int m_defaultTimeout;
-    std::deque<Message *> m_sendQueue; // waiting to be sent
+    std::deque<Message> m_sendQueue; // waiting to be sent
     std::unordered_map<uint32, PendingReplyPrivate *> m_pendingReplies; // replies we're waiting for
 
     // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver

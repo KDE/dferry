@@ -254,38 +254,38 @@ void Message::setSignal(const string &path, const string &interface, const strin
     setMethod(method);
 }
 
-Message *Message::createCall(const string &path, const string &interface, const string &method)
+Message Message::createCall(const string &path, const string &interface, const string &method)
 {
-    Message *ret = new Message;
-    ret->setCall(path, interface, method);
+    Message ret;
+    ret.setCall(path, interface, method);
     return ret;
 }
 
-Message *Message::createCall(const string &path, const string &method)
+Message Message::createCall(const string &path, const string &method)
 {
-    Message *ret = new Message;
-    ret->setCall(path, method);
+    Message ret;
+    ret.setCall(path, method);
     return ret;
 }
 
-Message *Message::createReplyTo(const Message &call)
+Message Message::createReplyTo(const Message &call)
 {
-    Message *ret = new Message;
-    ret->setReplyTo(call);
+    Message ret;
+    ret.setReplyTo(call);
     return ret;
 }
 
-Message *Message::createErrorReplyTo(const Message &call, const string &errorName)
+Message Message::createErrorReplyTo(const Message &call, const string &errorName)
 {
-    Message *ret = new Message;
-    ret->setErrorReplyTo(call, errorName);
+    Message ret;
+    ret.setErrorReplyTo(call, errorName);
     return ret;
 }
 
-Message *Message::createSignal(const string &path, const string &interface, const string &method)
+Message Message::createSignal(const string &path, const string &interface, const string &method)
 {
-    Message *ret = new Message;
-    ret->setSignal(path, interface, method);
+    Message ret;
+    ret.setSignal(path, interface, method);
     return ret;
 }
 

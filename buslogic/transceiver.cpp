@@ -27,8 +27,8 @@
 #include "argumentlist.h"
 #include "authnegotiator.h"
 #include "icompletionclient.h"
+#include "imessagereceiver.h"
 #include "iserver.h"
-#include "itransceiverclient.h"
 #include "localsocket.h"
 #include "message.h"
 #include "pendingreply.h"
@@ -137,16 +137,16 @@ void TransceiverPrivate::authAndHello(Transceiver *parent)
     m_authNegotiator->setCompletionClient(this);
 
     // Announce our presence to the bus and have it send some introductory information of its own
-    Message *hello = new Message();
-    hello->setType(Message::MethodCallMessage);
-    hello->setExpectsReply(false);
-    hello->setDestination(std::string("org.freedesktop.DBus"));
-    hello->setInterface(std::string("org.freedesktop.DBus"));
-    hello->setPath(std::string("/org/freedesktop/DBus"));
-    hello->setMethod(std::string("Hello"));
+    Message hello;
+    hello.setType(Message::MethodCallMessage);
+    hello.setExpectsReply(false);
+    hello.setDestination(std::string("org.freedesktop.DBus"));
+    hello.setInterface(std::string("org.freedesktop.DBus"));
+    hello.setPath(std::string("/org/freedesktop/DBus"));
+    hello.setMethod(std::string("Hello"));
 
     m_helloReceiver = new HelloReceiver;
-    m_helloReceiver->m_helloReply = parent->send(hello);
+    m_helloReceiver->m_helloReply = parent->send(std::move(hello));
     m_helloReceiver->m_helloReply.setCompletionClient(m_helloReceiver);
     m_helloReceiver->m_parent = this;
 }
@@ -155,7 +155,7 @@ void TransceiverPrivate::handleHelloReply()
 {
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
-    ArgumentList argList = m_helloReceiver->m_helloReply.reply().argumentList();
+    ArgumentList argList = m_helloReceiver->m_helloReply.reply()->argumentList();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 
@@ -186,32 +186,36 @@ int Transceiver::defaultReplyTimeout() const
     return d->m_defaultTimeout;
 }
 
-PendingReply Transceiver::send(Message *m, int timeoutMsecs)
+PendingReply Transceiver::send(Message m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
         timeoutMsecs = d->m_defaultTimeout;
     }
 
     PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(d->m_eventDispatcher, timeoutMsecs);
-    pendingPriv->m_transceiver = d;
+    pendingPriv->m_transceiverOrReply.transceiver = d;
     pendingPriv->m_client = nullptr;
     pendingPriv->m_serial = d->m_sendSerial;
     d->m_pendingReplies.emplace(d->m_sendSerial, pendingPriv);
 
-    sendNoReply(m);
+    sendNoReply(std::move(m));
 
     return PendingReply(pendingPriv);
 }
 
-PendingReply::Error Transceiver::sendNoReply(Message *m)
+PendingReply::Error Transceiver::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
-    m->setSerial(d->m_sendSerial++);
-    d->m_sendQueue.push_back(m);
-    m->setCompletionClient(d);
+    m.setSerial(d->m_sendSerial++);
+    m.setCompletionClient(d);
+    // pass ownership to the send queue now because if the IO system decided to send the message without
+    // going through an event loop iteration, notifyCompletion would be called and expects the message to
+    // be in the queue
+    d->m_sendQueue.push_back(std::move(m));
+    // TODO check errors in serialization - even if we can't send right away!
     if (!d->m_authNegotiator && d->m_sendQueue.size() == 1) {
-        m->send(d->m_connection);
+         d->m_sendQueue.back().send(d->m_connection);
     }
     return PendingReply::Error::None;// ###
 }
@@ -226,14 +230,14 @@ EventDispatcher *Transceiver::eventDispatcher() const
     return d->m_eventDispatcher;
 }
 
-ITransceiverClient *Transceiver::client() const
+IMessageReceiver *Transceiver::spontaneousMessageReceiver() const
 {
     return d->m_client;
 }
 
-void Transceiver::setClient(ITransceiverClient *client)
+void Transceiver::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
 {
-    d->m_client = client;
+    d->m_client = receiver;
 }
 
 void TransceiverPrivate::notifyCompletion(void *task)
@@ -244,15 +248,14 @@ void TransceiverPrivate::notifyCompletion(void *task)
         m_authNegotiator = nullptr;
         // cout << "Authenticated.\n";
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
-        m_sendQueue.front()->send(m_connection);
+        m_sendQueue.front().send(m_connection);
         receiveNextMessage();
     } else {
-        if (!m_sendQueue.empty() && task == m_sendQueue.front()) {
+        if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
             // cout << "Sent message.\n";
-            delete m_sendQueue.front();
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
-                m_sendQueue.front()->send(m_connection);
+                m_sendQueue.front().send(m_connection);
             }
         } else {
             assert(task == m_receivingMessage);
@@ -274,17 +277,14 @@ void TransceiverPrivate::notifyCompletion(void *task)
                     m_pendingReplies.erase(it);
 
                     cout << "Received message: dispatching to PendingReply.\n";
-                    cout << "Received message: argumentList A " << receivedMessage->argumentList().prettyPrint() << '\n';
-                    pr->m_reply = receivedMessage;
-                    cout << "Received message: argumentList B " << pr->m_reply->argumentList().prettyPrint() << '\n';
-                    pr->notifyDone();
+                    pr->notifyDone(receivedMessage);
                 }
             }
 
             if (!replyDispatched) {
                 if (m_client) {
                     cout << "Received message: dispatching to catch-all.\n";
-                    m_client->messageReceived(receivedMessage);
+                    m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
                 } else {
                     cerr << "warning, dropping message on the floor because no client is registered.\n";
                     delete receivedMessage;

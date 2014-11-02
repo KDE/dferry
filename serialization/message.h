@@ -59,11 +59,13 @@ public:
     void setErrorReplyTo(const Message &call, const std::string &errorName);
     void setSignal(const std::string &path, const std::string &interface, const std::string &method);
     // decadence
-    static Message *createCall(const std::string &path, const std::string &interface, const std::string &method);
-    static Message *createCall(const std::string &path, const std::string &method);
-    static Message *createReplyTo(const Message &call);
-    static Message *createErrorReplyTo(const Message &call, const std::string &errorName);
-    static Message *createSignal(const std::string &path, const std::string &interface, const std::string &method);
+    static Message createCall(const std::string &path, const std::string &interface,
+                              const std::string &method);
+    static Message createCall(const std::string &path, const std::string &method);
+    static Message createReplyTo(const Message &call);
+    static Message createErrorReplyTo(const Message &call, const std::string &errorName);
+    static Message createSignal(const std::string &path, const std::string &interface,
+                                const std::string &method);
 
     std::string prettyPrint() const;
 

@@ -21,18 +21,26 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ITRANSCEIVERCLIENT_H
-#define ITRANSCEIVERCLIENT_H
+#ifndef IMESSAGERECEIVER_H
+#define IMESSAGERECEIVER_H
 
 #include "export.h"
 
 class Message;
+class PendingReply;
 
-class DFERRY_EXPORT ITransceiverClient
+class DFERRY_EXPORT IMessageReceiver
 {
 public:
-    virtual ~ITransceiverClient();
-    virtual void messageReceived(Message *m) = 0;
+    virtual ~IMessageReceiver();
+    // This hands over ownership of the Message. The default implementation is empty, which means that
+    // the unique_ptr destructor deletes the message.
+    virtual void spontaneousMessageReceived(Message message);
+    // This assumes that client code already owns the PendingReply; if the PendingReply was destroyed, the
+    // reply would be considered a spontaneous message. The received message is owned by the PendingReply.
+    // The default implementation does nothing since somebody must still have the PendingReply, so the
+    // Message is still reachable. That's a somewhat strange but valid situation.
+    virtual void pendingReplyReceived(PendingReply *pendingReply);
 };
 
-#endif // ITRANSCEIVERCLIENT_H
+#endif // IMESSAGERECEIVER_H

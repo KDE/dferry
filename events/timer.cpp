@@ -47,7 +47,7 @@ Timer::~Timer()
 {
     if (m_reentrancyGuard) {
         *m_reentrancyGuard = false;
-        m_reentrancyGuard = 0;
+        m_reentrancyGuard = nullptr;
     }
     if (m_isRunning) {
         EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
@@ -153,7 +153,7 @@ void Timer::trigger()
     // if we we've been destroyed, we don't touch the member variable
     if (alive) {
         assert(m_reentrancyGuard);
-        m_reentrancyGuard = 0;
+        m_reentrancyGuard = nullptr;
     }
 }
 

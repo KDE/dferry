@@ -35,7 +35,9 @@ class PendingReplyPrivate : public ICompletionClient
 {
 public:
     PendingReplyPrivate(EventDispatcher *dispatcher, int timeout)
-       : m_replyTimeout(dispatcher)
+       : m_replyTimeout(dispatcher),
+         m_error(PendingReply::Error::None),
+         m_isFinished(false)
     {
         if (timeout >= 0) {
             m_replyTimeout.setRepeating(false);
@@ -44,17 +46,21 @@ public:
     }
 
     // for Transceiver
-    void notifyDone();
+    void notifyDone(Message *reply);
     // for m_replyTimeout
     void notifyCompletion(void *task) override;
 
     PendingReply *m_owner;
-    TransceiverPrivate *m_transceiver;
+    union {
+        TransceiverPrivate *transceiver;
+        Message *reply;
+    } m_transceiverOrReply;
+    void *m_cookie;
     Timer m_replyTimeout;
     ICompletionClient *m_client;
     uint32 m_serial;
-    PendingReply::Error m_error = PendingReply::Error::None;
-    Message *m_reply = nullptr;
+    PendingReply::Error m_error : 24;
+    bool m_isFinished : 1;
 };
 
 #endif // PENDINGREPLY_P_H

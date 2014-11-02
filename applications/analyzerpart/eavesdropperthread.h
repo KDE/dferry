@@ -24,7 +24,7 @@
 #ifndef EAVESDROPPERTHREAD_H
 #define EAVESDROPPERTHREAD_H
 
-#include "itransceiverclient.h"
+#include "imessagereceiver.h"
 
 #include <QElapsedTimer>
 #include <QThread>
@@ -38,15 +38,15 @@ class Transceiver;
 // thread, GUI and other processing would delay the calls to messageReceived() and therefore
 // QDateTime::currentDateTime().
 
-class EavesdropperThread : public QObject, public ITransceiverClient
+class EavesdropperThread : public QObject, public IMessageReceiver
 {
 Q_OBJECT
 public:
     EavesdropperThread(EavesdropperModel *model);
     ~EavesdropperThread();
 
-    // reimplemented ITransceiverClient method
-    void messageReceived(Message *message);
+    // reimplemented IMessageReceiver method
+    void spontaneousMessageReceived(Message message) override;
 
 signals:
     void messageReceived(Message *message, qint64 timestamp);

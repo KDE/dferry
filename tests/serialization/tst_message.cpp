@@ -24,7 +24,7 @@
 #include "argumentlist.h"
 #include "connectioninfo.h"
 #include "eventdispatcher.h"
-#include "itransceiverclient.h"
+#include "imessagereceiver.h"
 #include "message.h"
 #include "testutil.h"
 #include "transceiver.h"
@@ -33,25 +33,24 @@
 
 using namespace std;
 
-class PrintAndTerminateClient : public ITransceiverClient
+class PrintAndTerminateClient : public IMessageReceiver
 {
 public:
-    void messageReceived(Message *msg) override
+    void spontaneousMessageReceived(Message msg) override
     {
-        cout << msg->prettyPrint();
+        cout << msg.prettyPrint();
         m_eventDispatcher->interrupt();
     }
     EventDispatcher *m_eventDispatcher;
 };
 
-class PrintAndReplyClient : public ITransceiverClient
+class PrintAndReplyClient : public IMessageReceiver
 {
 public:
-    void messageReceived(Message *msg) override
+    void spontaneousMessageReceived(Message msg) override
     {
-        cout << msg->prettyPrint();
-        Message *reply = Message::createErrorReplyTo(*msg, "Unable to get out of hammock!");
-        m_transceiver->sendNoReply(reply);
+        cout << msg.prettyPrint();
+        m_transceiver->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
         //m_transceiver->eventDispatcher()->interrupt();
     }
     Transceiver *m_transceiver;
@@ -77,18 +76,18 @@ void testBasic()
 
     PrintAndReplyClient printAndReplyClient;
     printAndReplyClient.m_transceiver = &serverTransceiver;
-    serverTransceiver.setClient(&printAndReplyClient);
+    serverTransceiver.setSpontaneousMessageReceiver(&printAndReplyClient);
 
     PrintAndTerminateClient printAndTerminateClient;
     printAndTerminateClient.m_eventDispatcher = &dispatcher;
-    clientTransceiver.setClient(&printAndTerminateClient);
+    clientTransceiver.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
-    Message *msg = Message::createCall("/foo", "org.foo.interface", "laze");
+    Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     writer.writeString("couch");
     writer.finish();
-    msg->setArgumentList(argList);
+    msg.setArgumentList(argList);
 #if 0 // maybe future API
     Message *msg = new Message::makeCall("/foo", "org.foo.interface", "laze");
     ArgumentList::Writer writer = msg->writeArguments();
@@ -96,7 +95,7 @@ void testBasic()
     // writer finalizes automatically, at the latest when sending the message
 #endif
 
-    clientTransceiver.sendNoReply(msg);
+    clientTransceiver.sendNoReply(move(msg));
 
     while (dispatcher.poll()) {
     }

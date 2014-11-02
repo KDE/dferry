@@ -26,6 +26,8 @@
 
 #include "types.h"
 
+#include <memory>
+
 class ICompletionClient;
 class Message;
 class Transceiver;
@@ -79,10 +81,14 @@ public:
     Error error() const;
     bool isError() const; // convenience: error() == Error::None
 
+    void setCookie(void *cookie);
+    void *cookie() const;
+
     void setCompletionClient(ICompletionClient *client);
     ICompletionClient *completionClient() const;
 
-    const Message &reply() const;
+    const Message *reply() const;
+    std::unique_ptr<Message> takeReply();
 
     void dumpState(); // H4X
 

@@ -24,7 +24,7 @@
 #include "argumentlist.h"
 #include "connectioninfo.h"
 #include "eventdispatcher.h"
-#include "itransceiverclient.h"
+#include "imessagereceiver.h"
 #include "message.h"
 #include "transceiver.h"
 
@@ -33,30 +33,29 @@
 
 using namespace std;
 
-static Message *createEavesdropMessage(const char *messageType)
+static Message createEavesdropMessage(const char *messageType)
 {
-    Message *ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
-    ret->setDestination("org.freedesktop.DBus");
+    Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
+    ret.setDestination("org.freedesktop.DBus");
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
     writer.finish();
-    ret->setArgumentList(argList);
+    ret.setArgumentList(argList);
     return ret;
 }
 
-class ReplyPrinter : public ITransceiverClient
+class ReplyPrinter : public IMessageReceiver
 {
-    // reimplemented from ITransceiverClient
-    virtual void messageReceived(Message *m);
+    // reimplemented from IMessageReceiver
+    void spontaneousMessageReceived(Message m) override;
 };
 
-void ReplyPrinter::messageReceived(Message *m)
+void ReplyPrinter::spontaneousMessageReceived(Message m)
 {
-    cout << '\n' << m->prettyPrint();
-    delete m;
+    cout << '\n' << m.prettyPrint();
 }
 
 int main(int argc, char *argv[])
@@ -64,7 +63,7 @@ int main(int argc, char *argv[])
     EventDispatcher dispatcher;
     Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::Session);
     ReplyPrinter receiver;
-    transceiver.setClient(&receiver);
+    transceiver.setSpontaneousMessageReceiver(&receiver);
     {
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {

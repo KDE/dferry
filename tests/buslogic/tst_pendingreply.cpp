@@ -50,23 +50,23 @@ static void testBusAddress()
     EventDispatcher eventDispatcher;
     Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
 
-    Message *busNameRequest = new Message;
-    addressMessageToBus(busNameRequest);
-    busNameRequest->setMethod(string("RequestName"));
+    Message busNameRequest;
+    addressMessageToBus(&busNameRequest);
+    busNameRequest.setMethod(string("RequestName"));
 
     ArgumentList argList;
     ArgumentList::Writer writer = argList.beginWrite();
     writer.writeString("Bana.nana"); // requested name
     writer.writeUint32(4); // TODO proper enum or so: 4 == DBUS_NAME_FLAG_DO_NOT_QUEUE
     writer.finish();
-    busNameRequest->setArgumentList(argList);
+    busNameRequest.setArgumentList(argList);
 
-    PendingReply busNameReply = trans.send(busNameRequest);
+    PendingReply busNameReply = trans.send(move(busNameRequest));
     CompletionFunc replyCheck([&eventDispatcher] (void *task)
     {
         PendingReply *pr = static_cast<PendingReply *>(task);
         pr->dumpState();
-        std::cout << "got it!\n" << pr->reply().argumentList().prettyPrint();
+        std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();
         TEST(pr->isFinished());
         TEST(!pr->isError());
         eventDispatcher.interrupt();

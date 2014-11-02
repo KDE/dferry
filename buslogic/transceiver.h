@@ -53,7 +53,7 @@
 
 class EventDispatcher;
 class IConnection;
-class ITransceiverClient;
+class IMessageReceiver;
 class Message;
 class TransceiverPrivate;
 
@@ -85,10 +85,10 @@ public:
     // does not expect (request) a reply, but we get it if it comes - not terribly useful in most cases
     // NOTE: this takes ownership of the message! The message will be deleted after sending in some future
     //       event loop iteration, so it is guaranteed to stay valid until then.
-    PendingReply send(Message *m, int timeoutMsecs = DefaultTimeout);
+    PendingReply send(Message m, int timeoutMsecs = DefaultTimeout);
     // Mostly same as above.
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
-    PendingReply::Error sendNoReply(Message *m);
+    PendingReply::Error sendNoReply(Message m);
 
     ConnectionInfo connectionInfo() const;
 
@@ -99,8 +99,8 @@ public:
     //      "method" (signal name) of sender
     void subscribeToSignal();
 
-    ITransceiverClient *client() const;
-    void setClient(ITransceiverClient *client); // setDefaultReceiver()?
+    IMessageReceiver *spontaneousMessageReceiver() const;
+    void setSpontaneousMessageReceiver(IMessageReceiver *receiver);
 
 private:
     friend class TransceiverPrivate;
