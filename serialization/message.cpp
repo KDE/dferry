@@ -760,7 +760,7 @@ bool MessagePrivate::deserializeFixedHeaders()
     if (endianness != 'l' && endianness != 'B') {
         return false;
     }
-    m_isByteSwapped = endianness != thisMachineEndianness;
+    m_isByteSwapped = endianness != s_thisMachineEndianness;
 
     // TODO validate the values read here
     m_messageType = static_cast<Message::Type>(*p++);
@@ -909,7 +909,7 @@ void MessagePrivate::serializeFixedHeaders()
     assert(m_buffer.size() >= s_extendedFixedHeaderLength);
     byte *p = &m_buffer.front();
 
-    *p++ = thisMachineEndianness;
+    *p++ = s_thisMachineEndianness;
     *p++ = byte(m_messageType);
     *p++ = m_flags;
     *p++ = m_protocolVersion;
