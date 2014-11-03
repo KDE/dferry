@@ -231,6 +231,8 @@ static void doRoundtrip(ArgumentList arg_in, bool skipNextEntryAtArrayStart, int
             break;
         }
     }
+    TEST(reader.state() == ArgumentList::Finished);
+    TEST(writer.state() == ArgumentList::Finished);
     cstring argSignature = arg.signature();
     cstring copySignature = copy.signature();
     TEST(ArgumentList::isSignatureValid(copySignature));

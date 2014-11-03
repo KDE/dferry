@@ -1763,6 +1763,11 @@ void ArgumentList::Writer::finish()
     }
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
+
+    // since we are only going to process already validated data here, no error in the realm of
+    // defined behavior should be possible
+    m_state = Finished;
+
     d->m_signature.begin[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
