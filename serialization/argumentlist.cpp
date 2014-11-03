@@ -827,7 +827,10 @@ void ArgumentList::Reader::advanceState()
     if (unlikely(m_state == InvalidData)) { // nonrecoverable...
         return;
     }
-
+    // can't do the following because a dict is one aggregate in our counting, but two according to
+    // the spec: an array (one) containing dict entries (two)
+    // assert(d->m_nesting.total() == d->m_aggregateStack.size());
+    assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
     assert(d->m_signaturePosition < d->m_signature.length);
 
     const int savedSignaturePosition = d->m_signaturePosition;
@@ -1446,6 +1449,10 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
     if (unlikely(m_state == InvalidData)) {
         return;
     }
+    // can't do the following because a dict is one aggregate in our counting, but two according to
+    // the spec: an array (one) containing dict entries (two)
+    // assert(d->m_nesting.total() == d->m_aggregateStack.size());
+    assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
 
     m_state = newState;
     uint32 alignment = 1;
