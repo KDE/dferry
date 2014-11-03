@@ -125,7 +125,7 @@ Transceiver::~Transceiver()
     delete d->m_connection;
     delete d->m_authNegotiator;
     delete d->m_helloReceiver;
-    // TODO delete d->m_receivingMessage ?
+    delete d->m_receivingMessage;
 
     delete d;
     d = nullptr;
@@ -287,10 +287,9 @@ void TransceiverPrivate::notifyCompletion(void *task)
                     m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
                 } else {
                     cerr << "warning, dropping message on the floor because no client is registered.\n";
-                    delete receivedMessage;
                 }
+                delete receivedMessage;
             }
-
         }
     }
 }
