@@ -1622,9 +1622,12 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         if (unlikely(d->m_nilArrayNesting)) {
             if (!--d->m_nilArrayNesting) {
                 // last chance to erase data inside the empty array so it doesn't end up in the output
-                d->m_variantSignatures.erase(d->m_variantSignatures.begin() +
-                                             d->m_variantSignaturesCountBeforeNilArray,
-                                             d->m_variantSignatures.end());
+                auto sigBeginIt = d->m_variantSignatures.begin() + d->m_variantSignaturesCountBeforeNilArray;
+                auto sigEndIt = d->m_variantSignatures.end();
+                for (auto it = sigBeginIt; it < sigEndIt; ++it) {
+                    free(it->begin);
+                }
+                d->m_variantSignatures.erase(sigBeginIt, sigEndIt);
                 d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
                                     d->m_elements.end());
                 d->m_dataPosition = d->m_dataPositionBeforeNilArray;
