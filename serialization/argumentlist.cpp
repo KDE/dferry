@@ -1757,7 +1757,10 @@ void ArgumentList::Writer::finish()
     if (m_state == InvalidData) {
         return;
     }
-    assert(d->m_nesting.total() == 0);
+    if (d->m_nesting.total() != 0) {
+        m_state = InvalidData;
+        return;
+    }
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
     d->m_signature.begin[d->m_signaturePosition] = '\0';

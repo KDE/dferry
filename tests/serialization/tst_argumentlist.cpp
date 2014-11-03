@@ -658,6 +658,16 @@ static void test_writerMisuse()
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
+    {
+        ArgumentList arg;
+        ArgumentList::Writer writer = arg.beginWrite();
+        writer.beginStruct();
+        writer.writeByte(1);
+        TEST(writer.state() != ArgumentList::InvalidData);
+        writer.finish();
+        TEST(writer.state() == ArgumentList::InvalidData); // can't finish while inside an aggregate
+        TEST(arg.signature().length == 0); // should not be written on error
+    }
 }
 
 void addSomeVariantStuff(ArgumentList::Writer *writer)
