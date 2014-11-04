@@ -28,7 +28,7 @@
 
 #include <memory>
 
-class ICompletionClient;
+class IMessageReceiver;
 class Message;
 class Transceiver;
 class PendingReplyPrivate;
@@ -84,8 +84,8 @@ public:
     void setCookie(void *cookie);
     void *cookie() const;
 
-    void setCompletionClient(ICompletionClient *client);
-    ICompletionClient *completionClient() const;
+    void setReceiver(IMessageReceiver *receiver);
+    IMessageReceiver *receiver() const;
 
     const Message *reply() const;
     std::unique_ptr<Message> takeReply();

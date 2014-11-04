@@ -24,6 +24,7 @@
 #include "pendingreply.h"
 #include "pendingreply_p.h"
 
+#include "imessagereceiver.h"
 #include "transceiver.h"
 #include "transceiver_p.h"
 
@@ -90,8 +91,8 @@ void PendingReplyPrivate::notifyDone(Message *reply)
     // Transceiver has already unregistered us because it knows this reply is done
     m_transceiverOrReply.reply = reply;
     m_replyTimeout.stop();
-    if (m_client) {
-        m_client->notifyCompletion(m_owner);
+    if (m_receiver) {
+        m_receiver->pendingReplyReceived(m_owner);
     }
 }
 
@@ -137,14 +138,19 @@ void *PendingReply::cookie() const
     return d->m_cookie;
 }
 
-void PendingReply::setCompletionClient(ICompletionClient *client)
+void PendingReply::setReceiver(IMessageReceiver *receiver)
 {
     if (d) {
-        d->m_client = client;
+        d->m_receiver = receiver;
     } else {
         // if !d, this is a detached (invalid) instance, and that can't be changed.
-        std::cerr << "PendingReply::setCompletionClient() on a detached instance does nothing.\n";
+        std::cerr << "PendingReply::setReceiver() on a detached instance does nothing.\n";
     }
+}
+
+IMessageReceiver *PendingReply::receiver() const
+{
+    return d ? d->m_receiver : nullptr;
 }
 
 const Message *PendingReply::reply() const
@@ -162,11 +168,6 @@ std::unique_ptr<Message> PendingReply::takeReply()
     return std::unique_ptr<Message>(reply);
 }
 
-ICompletionClient *PendingReply::completionClient() const
-{
-    return d ? d->m_client : nullptr;
-}
-
 void PendingReplyPrivate::notifyCompletion(void *task)
 {
     assert(task == &m_replyTimeout);
@@ -180,7 +181,7 @@ void PendingReplyPrivate::notifyCompletion(void *task)
     m_error = PendingReply::Error::Timeout;
     m_isFinished = true;
     m_transceiverOrReply.reply = nullptr;
-    if (m_client) {
-        m_client->notifyCompletion(m_owner);
+    if (m_receiver) {
+        m_receiver->pendingReplyReceived(m_owner);
     }
 }

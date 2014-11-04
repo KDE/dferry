@@ -23,7 +23,7 @@
 
 #include "argumentlist.h"
 #include "eventdispatcher.h"
-#include "icompletionclient.h"
+#include "imessagereceiver.h"
 #include "message.h"
 #include "pendingreply.h"
 //#include "platformtime.h"
@@ -45,6 +45,20 @@ static void addressMessageToBus(Message *msg)
     msg->setPath("/org/freedesktop/DBus");
 }
 
+class ReplyCheck : public IMessageReceiver
+{
+public:
+    EventDispatcher *m_eventDispatcher;
+    void pendingReplyReceived(PendingReply *pr) override
+    {
+        pr->dumpState();
+        std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();
+        TEST(pr->isFinished());
+        TEST(!pr->isError());
+        m_eventDispatcher->interrupt();
+    }
+};
+
 static void testBusAddress()
 {
     EventDispatcher eventDispatcher;
@@ -62,16 +76,9 @@ static void testBusAddress()
     busNameRequest.setArgumentList(argList);
 
     PendingReply busNameReply = trans.send(move(busNameRequest));
-    CompletionFunc replyCheck([&eventDispatcher] (void *task)
-    {
-        PendingReply *pr = static_cast<PendingReply *>(task);
-        pr->dumpState();
-        std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();
-        TEST(pr->isFinished());
-        TEST(!pr->isError());
-        eventDispatcher.interrupt();
-    });
-    busNameReply.setCompletionClient(&replyCheck);
+    ReplyCheck replyCheck;
+    replyCheck.m_eventDispatcher = &eventDispatcher;
+    busNameReply.setReceiver(&replyCheck);
 
     while (eventDispatcher.poll()) {
     }

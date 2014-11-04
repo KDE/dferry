@@ -57,7 +57,7 @@ public:
     } m_transceiverOrReply;
     void *m_cookie;
     Timer m_replyTimeout;
-    ICompletionClient *m_client;
+    IMessageReceiver *m_receiver;
     uint32 m_serial;
     PendingReply::Error m_error : 24;
     bool m_isFinished : 1;

@@ -39,11 +39,12 @@
 
 using namespace std;
 
-class HelloReceiver : public ICompletionClient
+class HelloReceiver : public IMessageReceiver
 {
 public:
-    void notifyCompletion(void *) override
+    void pendingReplyReceived(PendingReply *pr) override
     {
+        assert(pr == &m_helloReply);
         m_parent->handleHelloReply();
     }
 
@@ -147,7 +148,7 @@ void TransceiverPrivate::authAndHello(Transceiver *parent)
 
     m_helloReceiver = new HelloReceiver;
     m_helloReceiver->m_helloReply = parent->send(std::move(hello));
-    m_helloReceiver->m_helloReply.setCompletionClient(m_helloReceiver);
+    m_helloReceiver->m_helloReply.setReceiver(m_helloReceiver);
     m_helloReceiver->m_parent = this;
 }
 
@@ -194,7 +195,7 @@ PendingReply Transceiver::send(Message m, int timeoutMsecs)
 
     PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(d->m_eventDispatcher, timeoutMsecs);
     pendingPriv->m_transceiverOrReply.transceiver = d;
-    pendingPriv->m_client = nullptr;
+    pendingPriv->m_receiver = nullptr;
     pendingPriv->m_serial = d->m_sendSerial;
     d->m_pendingReplies.emplace(d->m_sendSerial, pendingPriv);
 
