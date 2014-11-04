@@ -364,12 +364,8 @@ bool ArgumentList::isStringValid(cstring string)
     if (!string.begin || string.begin[string.length] != 0) {
         return false;
     }
-    for (int i = 0; i < string.length; i++) {
-        if (string.begin[i] == 0) {
-            return false;
-        }
-    }
-    return true;
+    // check that there are no embedded nulls, exploiting the highly optimized strlen...
+    return strlen(reinterpret_cast<char *>(string.begin)) == string.length;
 }
 
 static inline bool isObjectNameLetter(byte b)
