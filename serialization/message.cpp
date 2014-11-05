@@ -788,7 +788,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     cstring varHeadersSig("ia(yv)");
     ArgumentList argList(varHeadersSig, headerData, m_isByteSwapped);
 
-    ArgumentList::Reader reader = argList.beginRead();
+    ArgumentList::Reader reader(argList);
     assert(reader.isValid());
 
     if (reader.state() != ArgumentList::Int32) {
@@ -934,7 +934,7 @@ static void doVarHeaderEpilogue(ArgumentList::Writer *writer)
 
 void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
 {
-    ArgumentList::Writer writer = headerArgs->beginWrite();
+    ArgumentList::Writer writer(headerArgs);
 
     // note that we don't have to deal with zero-length arrays because all valid message types require
     // at least one of the variable headers

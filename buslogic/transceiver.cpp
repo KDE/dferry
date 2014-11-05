@@ -160,7 +160,7 @@ void TransceiverPrivate::handleHelloReply()
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 
-    ArgumentList::Reader reader = argList.beginRead();
+    ArgumentList::Reader reader(argList);
     cstring busName = reader.readString();
     assert(reader.state() == ArgumentList::Finished);
     cout << "teh bus name is:" << busName.begin << endl;

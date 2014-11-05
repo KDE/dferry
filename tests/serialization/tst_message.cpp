@@ -84,7 +84,7 @@ void testBasic()
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
     ArgumentList argList;
-    ArgumentList::Writer writer = argList.beginWrite();
+    ArgumentList::Writer writer(&argList);
     writer.writeString("couch");
     writer.finish();
     msg.setArgumentList(argList);

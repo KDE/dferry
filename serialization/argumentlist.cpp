@@ -207,7 +207,7 @@ std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeNam
 
 std::string ArgumentList::prettyPrint() const
 {
-    Reader reader = const_cast<ArgumentList*>(this)->beginRead();
+    Reader reader(*this);
     if (!reader.isValid()) {
         return std::string();
     }
@@ -332,24 +332,22 @@ std::string ArgumentList::prettyPrint() const
     return ret.str();
 }
 
-ArgumentList::Reader ArgumentList::beginRead()
+bool ArgumentList::beginRead() const
 {
-    ArgumentList *thisInstance = 0;
-    if (!d->m_hasWriter) {
+    const bool ret = !d->m_hasWriter;
+    if (ret) {
         d->m_readerCount++;
-        thisInstance = this;
     }
-    return Reader(thisInstance);
+    return ret;
 }
 
-ArgumentList::Writer ArgumentList::beginWrite()
+bool ArgumentList::beginWrite()
 {
-    ArgumentList *thisInstance = 0;
-    if (!d->m_readerCount && !d->m_hasWriter) {
+    const bool ret = !d->m_readerCount && !d->m_hasWriter;
+    if (ret) {
         d->m_hasWriter = true;
-        thisInstance = this;
     }
-    return Writer(thisInstance);
+    return ret;
 }
 
 static void chopFirst(cstring *s)
@@ -557,13 +555,13 @@ class ArgumentList::Reader::Private
 {
 public:
     Private()
-       : m_argList(0),
+       : m_argList(nullptr),
          m_signaturePosition(-1),
          m_dataPosition(0),
          m_nilArrayNesting(0)
     {}
 
-    ArgumentList *m_argList;
+    const ArgumentList *m_argList;
     Nesting m_nesting;
     cstring m_signature;
     chunk m_data;
@@ -598,11 +596,13 @@ public:
     std::vector<AggregateInfo> m_aggregateStack;
 };
 
-ArgumentList::Reader::Reader(ArgumentList *al)
+ArgumentList::Reader::Reader(const ArgumentList &al)
    : d(new Private),
      m_state(NotStarted)
 {
-    d->m_argList = al;
+    if (al.beginRead()) {
+        d->m_argList = &al;
+    }
 
     VALID_IF(d->m_argList);
     d->m_signature = d->m_argList->d->m_signature;
@@ -1191,7 +1191,7 @@ class ArgumentList::Writer::Private
 {
 public:
     Private()
-       : m_argList(0),
+       : m_argList(nullptr),
          m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
          m_signaturePosition(0),
          m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
@@ -1285,9 +1285,12 @@ public:
 
 ArgumentList::Writer::Writer(ArgumentList *al)
    : d(new Private),
-     m_state(AnyData)
+     m_state(InvalidData)
 {
-    d->m_argList = al;
+    if (al->beginWrite()) {
+        d->m_argList = al;
+        m_state = AnyData;
+    }
 }
 
 ArgumentList::Writer::Writer(Writer &&other)
@@ -1831,6 +1834,10 @@ void ArgumentList::Writer::finish()
 
     d->m_argList->d->m_signature = d->m_signature;
     d->m_argList->d->m_data = chunk(buffer, bufferPos);
+
+    assert(d->m_argList->d->m_hasWriter);
+    d->m_argList->d->m_hasWriter = false;
+    d->m_argList = nullptr;
 }
 
 std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const

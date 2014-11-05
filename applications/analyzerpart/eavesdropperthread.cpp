@@ -55,7 +55,7 @@ static Message createEavesdropMessage(const char *messageType)
     Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
     ret.setDestination("org.freedesktop.DBus");
     ArgumentList argList;
-    ArgumentList::Writer writer = argList.beginWrite();
+    ArgumentList::Writer writer(&argList);
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));

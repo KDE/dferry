@@ -54,11 +54,6 @@ public:
     cstring signature() const;
     chunk data() const;
 
-    class Reader;
-    class Writer;
-    Reader beginRead();
-    Writer beginWrite();
-
     enum SignatureType {
         MethodSignature = 0,
         VariantSignature
@@ -113,6 +108,10 @@ public:
     };
 
 private:
+    // ### sort-of-const - the only thing this changes is that it prevents opening a Writer
+    bool beginRead() const;
+    bool beginWrite();
+
     struct podCstring // Same as cstring but without ctor.
                       // Can't put the cstring type into a union because it has a constructor :/
     {
@@ -141,6 +140,7 @@ public:
     class Reader
     {
     public:
+        explicit Reader(const ArgumentList &al);
         Reader(Reader &&other);
         void operator=(Reader &&other);
         Reader(const Reader &other) = delete;
@@ -204,8 +204,6 @@ public:
     private:
         class Private;
         friend class Private;
-        friend class ArgumentList;
-        explicit Reader(ArgumentList *al);
         IoState doReadPrimitiveType();
         IoState doReadString(int lengthPrefixSize);
         void advanceState();
@@ -227,6 +225,7 @@ public:
     class Writer
     {
     public:
+        explicit Writer(ArgumentList *al);
         Writer(Writer &&other);
         void operator=(Writer &&other);
         Writer(const Writer &other) = delete;
@@ -274,10 +273,8 @@ public:
         void writeUnixFd(uint32 fd);
 
     private:
-        friend class ArgumentList;
         class Private;
         friend class Private;
-        explicit Writer(ArgumentList *al);
 
         IoState doWritePrimitiveType(uint32 alignAndSize);
         IoState doWriteString(int lengthPrefixSize);

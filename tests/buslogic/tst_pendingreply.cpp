@@ -69,7 +69,7 @@ static void testBusAddress()
     busNameRequest.setMethod(string("RequestName"));
 
     ArgumentList argList;
-    ArgumentList::Writer writer = argList.beginWrite();
+    ArgumentList::Writer writer(&argList);
     writer.writeString("Bana.nana"); // requested name
     writer.writeUint32(4); // TODO proper enum or so: 4 == DBUS_NAME_FLAG_DO_NOT_QUEUE
     writer.finish();
