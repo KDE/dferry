@@ -158,14 +158,14 @@ const Message *PendingReply::reply() const
     return d->m_isFinished ? d->m_transceiverOrReply.reply : nullptr;
 }
 
-std::unique_ptr<Message> PendingReply::takeReply()
+Message PendingReply::takeReply()
 {
-    Message *reply = nullptr;
+    Message reply;
     if (d->m_isFinished) {
-        reply = d->m_transceiverOrReply.reply;
+        reply = std::move(*d->m_transceiverOrReply.reply);
         d->m_transceiverOrReply.reply = nullptr;
     }
-    return std::unique_ptr<Message>(reply);
+    return reply;
 }
 
 void PendingReplyPrivate::notifyCompletion(void *task)

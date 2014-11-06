@@ -33,8 +33,8 @@ class DFERRY_EXPORT IMessageReceiver
 {
 public:
     virtual ~IMessageReceiver();
-    // This hands over ownership of the Message. The default implementation is empty, which means that
-    // the unique_ptr destructor deletes the message.
+    // This hands over ownership of the Message. The default implementation is empty, so the Message
+    // is destroyed upon going out of scope there.
     virtual void spontaneousMessageReceived(Message message);
     // This assumes that client code already owns the PendingReply; if the PendingReply was destroyed, the
     // reply would be considered a spontaneous message. The received message is owned by the PendingReply.

@@ -88,7 +88,7 @@ public:
     IMessageReceiver *receiver() const;
 
     const Message *reply() const;
-    std::unique_ptr<Message> takeReply();
+    Message takeReply();
 
     void dumpState(); // H4X
 
