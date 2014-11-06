@@ -133,7 +133,7 @@ public:
     //      values, mandatory variable header fields for the message type are present, ...?
 
     // setArgumentList also sets the signature header of the message
-    void setArgumentList(const ArgumentList &arguments);
+    void setArgumentList(ArgumentList arguments);
     const ArgumentList &argumentList() const;
 
     std::vector<byte> save();

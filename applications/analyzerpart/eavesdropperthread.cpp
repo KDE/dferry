@@ -60,7 +60,7 @@ static Message createEavesdropMessage(const char *messageType)
     str += messageType;
     writer.writeString(cstring(str.c_str()));
     writer.finish();
-    ret.setArgumentList(argList);
+    ret.setArgumentList(std::move(argList));
     return ret;
 }
 

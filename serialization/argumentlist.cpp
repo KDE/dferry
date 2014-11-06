@@ -141,6 +141,22 @@ ArgumentList::ArgumentList(cstring signature, chunk data, bool isByteSwapped)
     d->m_data = data;
 }
 
+ArgumentList::ArgumentList(ArgumentList &&other)
+   : d(other.d)
+{
+    other.d = nullptr;
+}
+
+ArgumentList &ArgumentList::operator=(ArgumentList &&other)
+{
+    if (this != &other) {
+        delete d;
+        d = other.d;
+        other.d = nullptr;
+    }
+    return *this;
+}
+
 ArgumentList::ArgumentList(const ArgumentList &other)
 {
     d = new Private(*other.d);

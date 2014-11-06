@@ -568,10 +568,10 @@ void Message::setCompletionClient(ICompletionClient *client)
     d->m_completionClient = client;
 }
 
-void Message::setArgumentList(const ArgumentList &arguments)
+void Message::setArgumentList(ArgumentList arguments)
 {
     d->m_buffer.clear();
-    d->m_mainArguments = arguments;
+    d->m_mainArguments = std::move(arguments);
 }
 
 const ArgumentList &Message::argumentList() const

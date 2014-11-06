@@ -38,6 +38,10 @@ public:
      // constructs an argument list to deserialize data in @p data with signature @p signature
     ArgumentList(cstring signature, chunk data, bool isByteSwapped = false);
 
+    // use these wherever possible if you care at all about efficiency!!
+    ArgumentList(ArgumentList &&other);
+    ArgumentList &operator=(ArgumentList &&other);
+
     // copying needs special treatment due to the d-pointer
     ArgumentList(const ArgumentList &other);
     void operator=(const ArgumentList &other);
