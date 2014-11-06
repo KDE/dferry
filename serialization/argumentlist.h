@@ -44,7 +44,7 @@ public:
 
     // copying needs special treatment due to the d-pointer
     ArgumentList(const ArgumentList &other);
-    void operator=(const ArgumentList &other);
+    ArgumentList &operator=(const ArgumentList &other);
 
     ~ArgumentList();
 

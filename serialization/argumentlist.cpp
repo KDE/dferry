@@ -158,15 +158,17 @@ ArgumentList &ArgumentList::operator=(ArgumentList &&other)
 }
 
 ArgumentList::ArgumentList(const ArgumentList &other)
+   : d(new Private(*other.d))
 {
-    d = new Private(*other.d);
 }
 
-void ArgumentList::operator=(const ArgumentList &other)
+ArgumentList &ArgumentList::operator=(const ArgumentList &other)
 {
-    if (&other != this) {
+    if (this != &other) {
+        delete d;
         *d = *other.d; // ### unsafe, it contains pointers itself. really needs a deep copy.
     }
+    return *this;
 }
 
 ArgumentList::~ArgumentList()
