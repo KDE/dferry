@@ -223,6 +223,15 @@ std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeNam
     return ret.str();
 }
 
+static bool strEndsWith(const std::string &str, const std::string &ending)
+{
+    if (str.length() >= ending.length()) {
+        return str.compare(str.length() - ending.length(), ending.length(), ending) == 0;
+    } else {
+        return false;
+    }
+}
+
 std::string ArgumentList::prettyPrint() const
 {
     Reader reader(*this);
@@ -236,6 +245,13 @@ std::string ArgumentList::prettyPrint() const
     int emptyNesting = 0;
 
     while (!isDone) {
+        // HACK use nestingPrefix to determine when we're switching from key to value - this can be done
+        //      more cleanly with an aggregate stack if translation or similar makes this approach too ugly
+        if (strEndsWith(nestingPrefix, "{")) {
+            nestingPrefix += "K ";
+        } else if (strEndsWith(nestingPrefix, "K ")) {
+            nestingPrefix.replace(nestingPrefix.size() - strlen("K "), strlen("V "), "V ");
+        }
         switch(reader.state()) {
         case ArgumentList::Finished:
             assert(nestingPrefix.empty());
@@ -282,15 +298,19 @@ std::string ArgumentList::prettyPrint() const
             reader.beginDict(&isEmpty);
             emptyNesting += isEmpty ? 1 : 0;
             ret << nestingPrefix << "begin dict\n";
-            nestingPrefix += "{ ";
+            nestingPrefix += "{K ";
             break; }
         case ArgumentList::NextDictEntry:
             reader.nextDictEntry();
+            if (strEndsWith(nestingPrefix, "V ")) {
+                nestingPrefix.resize(nestingPrefix.size() - strlen("V "));
+                assert(strEndsWith(nestingPrefix, "{"));
+            }
             break;
         case ArgumentList::EndDict:
             reader.endDict();
             emptyNesting = std::max(emptyNesting - 1, 0);
-            nestingPrefix.resize(nestingPrefix.size() - 2);
+            nestingPrefix.resize(nestingPrefix.size() - strlen("{V "));
             ret << nestingPrefix << "end dict\n";
             break;
         case ArgumentList::Byte:
