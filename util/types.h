@@ -40,7 +40,7 @@ typedef unsigned long long int uint64;
 
 struct DFERRY_EXPORT chunk
 {
-    chunk() : begin(0), length(0) {}
+    chunk() : begin(nullptr), length(0) {}
     chunk(byte *b, int l) : begin(b), length(l) {}
     chunk(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
     chunk(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
@@ -50,7 +50,7 @@ struct DFERRY_EXPORT chunk
 
 struct DFERRY_EXPORT cstring
 {
-    cstring() : begin(0), length(0) {}
+    cstring() : begin(nullptr), length(0) {}
     cstring(byte *b, int l) : begin(b), length(l) {}
     cstring(char *b, int l) : begin(reinterpret_cast<byte *>(b)), length(l) {}
     cstring(const char *b, int l) : begin(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}

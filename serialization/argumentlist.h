@@ -35,8 +35,14 @@ class DFERRY_EXPORT ArgumentList
 {
 public:
     ArgumentList(); // constructs an empty argument list
-     // constructs an argument list to deserialize data in @p data with signature @p signature
-    ArgumentList(cstring signature, chunk data, bool isByteSwapped = false);
+    // constructs an argument list to deserialize data in @p data with signature @p signature;
+    // if memOwnership is non-null, this means that signature and data's memory is contained in
+    // a malloc()ed block starting at memOwnership, and ~ArgumentList will free it.
+    // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
+    // you need to make sure that the memory lives as long as the ArgumentList.
+    // The copy contructor and assignment operator will always copy the data, so copying is safe
+    // regarding memory correctness but has a significant performance impact.
+    ArgumentList(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
 
     // use these wherever possible if you care at all about efficiency!!
     ArgumentList(ArgumentList &&other);

@@ -33,21 +33,96 @@
 #include <cstring>
 #include <sstream>
 
+static const int s_specMaxArrayLength = 67108864; // 64 MiB
+// Maximum message length is a good upper bound for maximum ArgumentList data length. In order to limit
+// excessive memory consumption in error cases and prevent integer overflow exploits, enforce a maximum
+// data length already in ArgumentList.
+static const int s_specMaxMessageLength = 134217728; // 128 MiB
+
 class ArgumentList::Private
 {
 public:
     Private()
        : m_isByteSwapped(false),
          m_readerCount(0),
-         m_hasWriter(false)
+         m_hasWriter(false),
+         m_memOwnership(nullptr)
     {}
 
-    int m_isByteSwapped;
+    Private(const Private &other);
+    Private &operator=(const Private &other);
+    void initFrom(const Private &other);
+    ~Private();
+
+    bool m_isByteSwapped;
     int m_readerCount;
     bool m_hasWriter;
+    byte *m_memOwnership;
     cstring m_signature;
     chunk m_data;
 };
+
+ArgumentList::Private::Private(const Private &other)
+{
+    initFrom(other);
+}
+
+ArgumentList::Private &ArgumentList::Private::operator=(const Private &other)
+{
+    if (this != &other) {
+        initFrom(other);
+    }
+    return *this;
+}
+
+void ArgumentList::Private::initFrom(const Private &other)
+{
+    m_isByteSwapped = other.m_isByteSwapped;
+    // we don't copy "relation to other objects" aspects, which wouldn't make much sense
+    m_readerCount = 0;
+    m_hasWriter = false;
+
+    // make a deep copy
+    // use only one malloced block for signature and main data - this saves one malloc and free
+    // and also saves a pointer
+    // (if it weren't for the ArgumentList(..., cstring signature, chunk data, ...) constructor
+    //  we could save more size, and it would be very ugly, if we stored m_signature and m_data
+    //  as offsets to m_memOwnership)
+    m_memOwnership = nullptr;
+    m_signature.length = other.m_signature.length;
+    m_data.length = other.m_data.length;
+
+    const int alignedSigLength = other.m_signature.length ? align(other.m_signature.length + 1, 8) : 0;
+    const int fullLength = alignedSigLength + other.m_data.length;
+
+    if (fullLength != 0) {
+        // deep copy if there is any data
+        m_memOwnership = reinterpret_cast<byte *>(malloc(fullLength));
+
+        m_signature.begin = m_memOwnership;
+        memcpy(m_signature.begin, other.m_signature.begin, other.m_signature.length);
+        int bufferPos = other.m_signature.length;
+        zeroPad(m_signature.begin, 8, &bufferPos);
+        assert(bufferPos == alignedSigLength);
+
+        if (other.m_data.length) {
+            m_data.begin = m_memOwnership + alignedSigLength;
+            memcpy(m_data.begin, other.m_data.begin, other.m_data.length);
+        } else {
+            m_data.begin = nullptr;
+        }
+    } else {
+        m_signature.begin = nullptr;
+        m_data.begin = nullptr;
+    }
+}
+
+ArgumentList::Private::~Private()
+{
+    if (m_memOwnership) {
+        free(m_memOwnership);
+    }
+}
 
 // Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
 // "data is good if X" instead of "data is bad if !X". That stuff should end up the same after
@@ -133,10 +208,11 @@ ArgumentList::ArgumentList()
 {
 }
 
-ArgumentList::ArgumentList(cstring signature, chunk data, bool isByteSwapped)
+ArgumentList::ArgumentList(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped)
    : d(new Private)
 {
     d->m_isByteSwapped = isByteSwapped;
+    d->m_memOwnership = memOwnership;
     d->m_signature = signature;
     d->m_data = data;
 }
@@ -165,8 +241,12 @@ ArgumentList::ArgumentList(const ArgumentList &other)
 ArgumentList &ArgumentList::operator=(const ArgumentList &other)
 {
     if (this != &other) {
-        delete d;
-        *d = *other.d; // ### unsafe, it contains pointers itself. really needs a deep copy.
+        if (!d) {
+            // assigning to a moved-from object: that's fine!
+            d = new Private(*other.d);
+        } else {
+            *d = *other.d;
+        }
     }
     return *this;
 }
@@ -645,7 +725,10 @@ ArgumentList::Reader::Reader(const ArgumentList &al)
     VALID_IF(d->m_argList);
     d->m_signature = d->m_argList->d->m_signature;
     d->m_data = d->m_argList->d->m_data;
-    VALID_IF(ArgumentList::isSignatureValid(d->m_signature));
+    // as a slightly hacky optimizaton, we allow empty ArgumentLists to allocate no space for d->m_buffer.
+    if (d->m_signature.length) {
+        VALID_IF(ArgumentList::isSignatureValid(d->m_signature));
+    }
     advanceState();
 }
 
@@ -1095,7 +1178,8 @@ void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
 
             // parse the array signature in order to skip it
             // barring bugs, must have been too deep nesting inside variants if parsing fails
-            cstring sigTail(d->m_signature.begin + d->m_signaturePosition, d->m_signature.length - d->m_signaturePosition);
+            cstring sigTail(d->m_signature.begin + d->m_signaturePosition,
+                            d->m_signature.length - d->m_signaturePosition);
             VALID_IF(parseSingleCompleteType(&sigTail, &d->m_nesting));
             // TODO tests don't seem to cover the next line - is it really correct and is d->m_signaturePosition
             // not overwritten (to the correct value) ?
@@ -1357,8 +1441,26 @@ ArgumentList::Writer::~Writer()
         assert(d->m_argList->d->m_hasWriter);
         d->m_argList->d->m_hasWriter = false;
     }
+    for (int i = 0; i < d->m_variantSignatures.size(); i++) {
+        free(d->m_variantSignatures[i].begin);
+        if (d->m_variantSignatures[i].begin == d->m_signature.begin) {
+            d->m_signature = cstring(); // don't free it again
+        }
+    }
+    if (d->m_signature.begin) {
+        free(d->m_signature.begin);
+        d->m_signature = cstring();
+    }
+    // free the original signature, which is the prevSignature lowest on the stack
+    for (int i = 0; i < d->m_aggregateStack.size(); i++) {
+        if (d->m_aggregateStack[i].aggregateType == BeginVariant) {
+            free(d->m_aggregateStack[i].var.prevSignature.begin);
+            break;
+        }
+    }
+
     free(d->m_data);
-    d->m_data = 0;
+    d->m_data = nullptr;
     delete d;
     d = 0;
 }
@@ -1661,7 +1763,7 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
                 // last chance to erase data inside the empty array so it doesn't end up in the output
                 auto sigBeginIt = d->m_variantSignatures.begin() + d->m_variantSignaturesCountBeforeNilArray;
                 auto sigEndIt = d->m_variantSignatures.end();
-                for (auto it = sigBeginIt; it < sigEndIt; ++it) {
+                for (auto it = sigBeginIt; it != sigEndIt; ++it) {
                     free(it->begin);
                 }
                 d->m_variantSignatures.erase(sigBeginIt, sigEndIt);
@@ -1803,79 +1905,103 @@ void ArgumentList::Writer::finish()
     }
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
-
-    // since we are only going to process already validated data here, no error in the realm of
-    // defined behavior should be possible
-    m_state = Finished;
-
     d->m_signature.begin[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
+    if (d->m_argList->d->m_memOwnership) {
+        free(d->m_argList->d->m_memOwnership);
+    }
+
+    const uint32 count = d->m_elements.size();
     d->m_dataPosition = 0;
+    if (count) {
+        // Note: if one of signature or data is nonempty, the other must also be nonempty. think about it.
 
-    // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
-    // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
-    // each (when they contain a byte).
-    // Those estimates are very conservative (but easy!), so some space optimization is possible.
-    const int bufferSize = d->m_dataCapacity * 2 + d->m_nesting.parenCount * 7;
-    byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(Private::InitialDataCapacity), bufferSize)));
-    int bufferPos = 0;
-    uint32 count = d->m_elements.size();
-    int variantSignatureIndex = 0;
+        // Copy the signature and main data into one block to avoid one allocation; the signature's usually
+        // small size makes it cheap enough to copy.
 
-    std::vector<ArrayLengthField> lengthFieldStack;
+        // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
+        // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
+        // each (when they contain a byte).
+        // Those estimates are very conservative (but easy!), so some space optimization is possible.
+        const int alignedSigLength = align(d->m_signature.length + 1, 8);
+        const int bufferSize = alignedSigLength +
+                               d->m_dataCapacity * 2 + d->m_nesting.parenCount * 7;
+        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(Private::InitialDataCapacity), bufferSize)));
+        memcpy(buffer, d->m_signature.begin, d->m_signature.length + 1);
+        int bufferPos = d->m_signature.length + 1;
+        zeroPad(buffer, 8, &bufferPos);
+        int variantSignatureIndex = 0;
 
-    for (uint32 i = 0; i < count; i++) {
-        Private::ElementInfo ei = d->m_elements[i];
-        if (ei.size <= Private::ElementInfo::LargestSize) {
-            // copy data chunks while applying the proper alignment
-            zeroPad(buffer, ei.alignment(), &bufferPos);
-            // if !ei.size, it's alignment padding which does not apply to source data
-            if (ei.size) {
-                d->m_dataPosition = align(d->m_dataPosition, ei.alignment());
-                memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, ei.size);
-                bufferPos += ei.size;
-                d->m_dataPosition += ei.size;
-            }
-        } else {
-            // the value of ei.size has special meaning
-            ArrayLengthField al;
-            if (ei.size == Private::ElementInfo::ArrayLengthField) {
-                // start of an array
-                // reserve space for the array length prefix
+        std::vector<ArrayLengthField> lengthFieldStack;
+
+        for (uint32 i = 0; i < count; i++) {
+            Private::ElementInfo ei = d->m_elements[i];
+            if (ei.size <= Private::ElementInfo::LargestSize) {
+                // copy data chunks while applying the proper alignment
                 zeroPad(buffer, ei.alignment(), &bufferPos);
-                al.lengthFieldPosition = bufferPos;
-                bufferPos += 4;
-                // array data starts aligned to the first array element
-                zeroPad(buffer, d->m_elements[i + 1].alignment(), &bufferPos);
-                al.dataStartPosition = bufferPos;
-                lengthFieldStack.push_back(al);
-            } else if (ei.size == Private::ElementInfo::ArrayLengthEndMark) {
-                // end of an array - just put the now known array length in front of the array
-                al = lengthFieldStack.back();
-                basic::writeUint32(buffer + al.lengthFieldPosition, bufferPos - al.dataStartPosition);
-                lengthFieldStack.pop_back();
-            } else { // ei.size == Private::ElementInfo::VariantSignature
-                // fill in signature (should already include trailing null)
-                cstring signature = d->m_variantSignatures[variantSignatureIndex++];
-                buffer[bufferPos++] = signature.length;
-                memcpy(buffer + bufferPos, signature.begin, signature.length + 1);
-                bufferPos += signature.length + 1;
-                free(signature.begin);
+                // if !ei.size, it's alignment padding which does not apply to source data
+                if (ei.size) {
+                    d->m_dataPosition = align(d->m_dataPosition, ei.alignment());
+                    memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, ei.size);
+                    bufferPos += ei.size;
+                    d->m_dataPosition += ei.size;
+                }
+            } else {
+                // the value of ei.size has special meaning
+                ArrayLengthField al;
+                if (ei.size == Private::ElementInfo::ArrayLengthField) {
+                    // start of an array
+                    // reserve space for the array length prefix
+                    zeroPad(buffer, ei.alignment(), &bufferPos);
+                    al.lengthFieldPosition = bufferPos;
+                    bufferPos += sizeof(uint32);
+                    // array data starts aligned to the first array element
+                    zeroPad(buffer, d->m_elements[i + 1].alignment(), &bufferPos);
+                    al.dataStartPosition = bufferPos;
+                    lengthFieldStack.push_back(al);
+                } else if (ei.size == Private::ElementInfo::ArrayLengthEndMark) {
+                    // end of an array - just put the now known array length in front of the array
+                    al = lengthFieldStack.back();
+                    const int arrayLength = bufferPos - al.dataStartPosition;
+                    // TODO error if arrayLength greater than allowed
+                    basic::writeUint32(buffer + al.lengthFieldPosition, arrayLength);
+                    lengthFieldStack.pop_back();
+                } else { // ei.size == Private::ElementInfo::VariantSignature
+                    // fill in signature (should already include trailing null)
+                    cstring signature = d->m_variantSignatures[variantSignatureIndex++];
+                    buffer[bufferPos++] = signature.length;
+                    memcpy(buffer + bufferPos, signature.begin, signature.length + 1);
+                    bufferPos += signature.length + 1;
+                    free(signature.begin);
+                }
             }
         }
-    }
-    assert(variantSignatureIndex == d->m_variantSignatures.size());
-    assert(lengthFieldStack.empty());
-    d->m_elements.clear();
-    d->m_variantSignatures.clear();
 
-    d->m_argList->d->m_signature = d->m_signature;
-    d->m_argList->d->m_data = chunk(buffer, bufferPos);
+        assert(variantSignatureIndex == d->m_variantSignatures.size());
+        assert(lengthFieldStack.empty());
+        // prevent double delete of signatures
+        d->m_aggregateStack.clear();
+        d->m_variantSignatures.clear();
+
+        // TODO error if message length greater than allowed
+
+        d->m_argList->d->m_memOwnership = buffer;
+        d->m_argList->d->m_signature = cstring(buffer, d->m_signature.length);
+        d->m_argList->d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+    } else {
+        d->m_argList->d->m_memOwnership = nullptr;
+        d->m_argList->d->m_signature = cstring();
+        d->m_argList->d->m_data = chunk();
+    }
+
+    d->m_elements.clear();
 
     assert(d->m_argList->d->m_hasWriter);
     d->m_argList->d->m_hasWriter = false;
     d->m_argList = nullptr;
+
+    m_state = Finished;
 }
 
 std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const

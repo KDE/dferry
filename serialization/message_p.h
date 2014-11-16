@@ -88,11 +88,15 @@ public:
     void serializeFixedHeaders();
     void serializeVariableHeaders(ArgumentList *headerArgs);
 
+    void clearBuffer();
+    void reserveBuffer(int newSize);
+
     void notifyCompletionClient();
 
     Message *m_message;
     // there is no explicit dirty flag; the buffer is simply cleared when dirtying any of the data below.
-    std::vector<byte> m_buffer;
+    chunk m_buffer;
+    int m_bufferPos;
 
     bool m_isByteSwapped;
     enum {

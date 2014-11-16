@@ -90,8 +90,7 @@ public:
     void setReplySerial(uint32 replySerial);
     void setDestination(const std::string &destination);
     void setSender(const std::string &sender);
-    // you usually shouldn't need to call this; see setArgumentList()
-    void setSignature(const std::string &signature);
+    // no setSignature() - setArgumentList() also sets the signature
     void setUnixFdCount(uint32 fdCount);
 
     std::string path() const;

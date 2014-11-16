@@ -71,7 +71,7 @@ PendingReply::PendingReply(PendingReply &&other)
 
 PendingReply &PendingReply::operator=(PendingReply &&other)
 {
-    if (this != &other) {
+    if (this == &other) {
         return *this;
     }
     delete d;

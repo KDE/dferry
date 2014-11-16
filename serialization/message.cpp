@@ -180,6 +180,7 @@ void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
 
 MessagePrivate::MessagePrivate(Message *parent)
    : m_message(parent),
+     m_bufferPos(0),
      m_isByteSwapped(false),
      m_state(Empty),
      m_messageType(Message::InvalidMessage),
@@ -207,6 +208,7 @@ Message &Message::operator=(Message &&other)
     if (&other != this) {
         delete d;
         d = other.d;
+        other.d = nullptr;
         d->m_message = this;
     }
     return *this;
@@ -214,6 +216,9 @@ Message &Message::operator=(Message &&other)
 
 Message::~Message()
 {
+    if (d) {
+        d->clearBuffer();
+    }
     delete d;
     d = nullptr;
 }
@@ -365,7 +370,7 @@ void Message::setType(Type type)
     if (d->m_messageType == type) {
         return;
     }
-    d->m_buffer.clear(); // dirty
+    d->clearBuffer(); // dirty
     d->m_messageType = type;
     setExpectsReply(d->m_messageType == MethodCallMessage);
 }
@@ -460,11 +465,6 @@ std::string Message::signature() const
     return stringHeader(SignatureHeader, 0);
 }
 
-void Message::setSignature(const std::string &signature)
-{
-    setStringHeader(SignatureHeader, signature);
-}
-
 uint32 Message::unixFdCount() const
 {
     return intHeader(UnixFdsHeader, 0);
@@ -486,15 +486,11 @@ string Message::stringHeader(VariableHeader header, bool *isPresent) const
 
 void Message::setStringHeader(VariableHeader header, const string &value)
 {
-    if (header == SignatureHeader && value.empty()) {
-        // The spec allows no signature header when the signature is empty. Make use of that.
-        if (d->m_varHeaders.hasStringHeader(header)) {
-            d->m_buffer.clear();
-            d->m_varHeaders.clearStringHeader(header);
-        }
+    if (header == SignatureHeader) {
+        // ### warning? - this is a public method, and setting the signature separately does not make sense
         return;
     }
-    d->m_buffer.clear();
+    d->clearBuffer();
     d->m_varHeaders.setStringHeader(header, value);
 }
 
@@ -509,7 +505,7 @@ uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
 
 void Message::setIntHeader(VariableHeader header, uint32 value)
 {
-    d->m_buffer.clear();
+    d->clearBuffer();
     d->m_varHeaders.setIntHeader(header, value);
 }
 
@@ -549,7 +545,7 @@ void Message::send(IConnection *conn)
     if (d->m_state > MessagePrivate::LastSteadyState) {
         return;
     }
-    if (d->m_buffer.empty() && !d->fillOutBuffer()) {
+    if (!d->m_buffer.length && !d->fillOutBuffer()) {
         // TODO report error
         return;
     }
@@ -570,7 +566,8 @@ void Message::setCompletionClient(ICompletionClient *client)
 
 void Message::setArgumentList(ArgumentList arguments)
 {
-    d->m_buffer.clear();
+    d->clearBuffer();
+    //d->m_mainArguments = arguments);
     d->m_mainArguments = std::move(arguments);
 }
 
@@ -592,22 +589,29 @@ void Message::load(const std::vector<byte> &data)
     }
     d->m_headerLength = 0;
     d->m_bodyLength = 0;
-    d->m_buffer = data;
 
-    bool ok = d->m_buffer.size() >= s_extendedFixedHeaderLength;
+    d->clearBuffer();
+    d->m_buffer.length = data.size();
+    d->m_bufferPos = d->m_buffer.length;
+    d->m_buffer.begin = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
+    memcpy(d->m_buffer.begin, &data[0], d->m_buffer.length);
+
+    bool ok = d->m_buffer.length >= s_extendedFixedHeaderLength;
     ok = ok && d->deserializeFixedHeaders();
-    ok = ok && d->m_buffer.size() >= d->m_headerLength;
+    ok = ok && d->m_buffer.length >= d->m_headerLength;
     ok = ok && d->deserializeVariableHeaders();
+    ok = ok && d->m_buffer.length == d->m_headerLength + d->m_bodyLength;
 
     if (!ok) {
         d->m_state = MessagePrivate::Empty;
-        d->m_buffer.clear();
+        d->clearBuffer();
         return;
     }
-    assert(d->m_buffer.size() == d->m_headerLength + d->m_bodyLength);
+
     std::string sig = signature();
-    chunk bodyData(&d->m_buffer.front() + d->m_headerLength, d->m_bodyLength);
-    d->m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, d->m_isByteSwapped);
+    chunk bodyData(d->m_buffer.begin + d->m_headerLength, d->m_bodyLength);
+    d->m_mainArguments = ArgumentList(nullptr, cstring(sig.c_str(), sig.length()),
+                                      bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Deserialized;
 }
 
@@ -617,52 +621,52 @@ void MessagePrivate::notifyConnectionReadyRead()
         return;
     }
     bool isError = false;
-    byte buffer[4096];
     chunk in;
     do {
-        int readMax = 4096;
+        int readMax = 0;
         if (!m_headerLength) {
             // the message might only consist of the header, so we must be careful to avoid reading
             // data meant for the next message
-            readMax = std::min(readMax, int(s_extendedFixedHeaderLength - m_buffer.size()));
+            readMax = s_extendedFixedHeaderLength - m_bufferPos;
         } else {
             // reading variable headers and/or body
-            readMax = std::min(readMax, int(m_headerLength + m_bodyLength - m_buffer.size()));
+            readMax = m_headerLength + m_bodyLength - m_bufferPos;
         }
+        reserveBuffer(m_bufferPos + readMax);
 
-        const bool headersDone = m_headerLength > 0 && m_buffer.size() >= m_headerLength;
+        const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
-        in = connection()->read(buffer, readMax);
-        assert(in.length > 0);
+        in = connection()->read(m_buffer.begin + m_bufferPos, readMax);
+        assert(in.length > 0); // TODO real error checking - abort if there was a connection problem
+        m_bufferPos += in.length;
+        assert(m_bufferPos <= m_buffer.length);
 
-        for (int i = 0; i < in.length; i++) {
-            m_buffer.push_back(in.begin[i]);
-        }
         if (!headersDone) {
-            if (m_headerLength == 0 && m_buffer.size() >= s_extendedFixedHeaderLength) {
+            if (m_headerLength == 0 && m_bufferPos >= s_extendedFixedHeaderLength) {
                 if (!deserializeFixedHeaders()) {
                     isError = true;
                     break;
                 }
             }
-            if (m_headerLength > 0 && m_buffer.size() >= m_headerLength) {
+            if (m_headerLength > 0 && m_bufferPos >= m_headerLength) {
                 if (!deserializeVariableHeaders()) {
                     isError = true;
                     break;
                 }
             }
         }
-        if (m_headerLength > 0 && m_buffer.size() >= m_headerLength + m_bodyLength) {
+        if (m_headerLength > 0 && m_bufferPos >= m_headerLength + m_bodyLength) {
             // all done!
-            assert(m_buffer.size() == m_headerLength + m_bodyLength);
+            assert(m_bufferPos == m_headerLength + m_bodyLength);
             setIsReadNotificationEnabled(false);
             m_state = Deserialized;
             std::string sig;
             if (m_varHeaders.hasStringHeader(Message::SignatureHeader)) {
                 sig = m_varHeaders.stringHeader(Message::SignatureHeader);
             }
-            chunk bodyData(&m_buffer.front() + m_headerLength, m_bodyLength);
-            m_mainArguments = ArgumentList(cstring(sig.c_str(), sig.length()), bodyData, m_isByteSwapped);
+            chunk bodyData(m_buffer.begin + m_headerLength, m_bodyLength);
+            m_mainArguments = ArgumentList(nullptr, cstring(sig.c_str(), sig.length()),
+                                           bodyData, m_isByteSwapped);
             assert(!isError);
             connection()->removeClient(this);
             notifyCompletionClient(); // do not access members after this because it might delete us!
@@ -677,7 +681,7 @@ void MessagePrivate::notifyConnectionReadyRead()
     if (isError) {
         setIsReadNotificationEnabled(false);
         m_state = Empty;
-        m_buffer.clear();
+        clearBuffer();
         connection()->removeClient(this);
         notifyCompletionClient();
         // TODO reset other data members
@@ -686,14 +690,19 @@ void MessagePrivate::notifyConnectionReadyRead()
 
 std::vector<byte> Message::save()
 {
+    vector<byte> ret;
     if (d->m_state > MessagePrivate::LastSteadyState) {
-        return vector<byte>();
+        return ret;
     }
-    if (d->m_buffer.empty() && !d->fillOutBuffer()) {
+    if (!d->m_buffer.length && !d->fillOutBuffer()) {
         // TODO report error?
-        return vector<byte>();
+        return ret;
     }
-    return d->m_buffer;
+    ret.reserve(d->m_buffer.length);
+    for (int i = 0; i < d->m_buffer.length; i++) {
+        ret.push_back(d->m_buffer.begin[i]);
+    }
+    return ret;
 }
 
 void MessagePrivate::notifyConnectionReadyWrite()
@@ -703,10 +712,11 @@ void MessagePrivate::notifyConnectionReadyWrite()
     }
     int written = 0;
     do {
-        written = connection()->write(chunk(&m_buffer.front(), m_buffer.size())); // HACK
+        // TODO handle short writes
+        written = connection()->write(chunk(m_buffer.begin, m_bufferPos));
         setIsWriteNotificationEnabled(false);
         m_state = Serialized;
-        m_buffer.clear();
+        clearBuffer();
 
     } while (written > 0);
     connection()->removeClient(this);
@@ -753,8 +763,8 @@ bool MessagePrivate::requiredHeadersPresent() const
 
 bool MessagePrivate::deserializeFixedHeaders()
 {
-    assert(m_buffer.size() >= s_extendedFixedHeaderLength);
-    byte *p = &m_buffer.front();
+    assert(m_bufferPos >= s_extendedFixedHeaderLength);
+    byte *p = m_buffer.begin;
 
     byte endianness = *p++;
     if (endianness != 'l' && endianness != 'B') {
@@ -783,10 +793,10 @@ bool MessagePrivate::deserializeVariableHeaders()
 {
     // use ArgumentList to parse the variable header fields
     // HACK: the fake first int argument is there to start the ArgumentList's data 8 byte aligned
-    byte *base = &m_buffer.front() + s_properFixedHeaderLength - sizeof(int32);
+    byte *base = m_buffer.begin + s_properFixedHeaderLength - sizeof(int32);
     chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
     cstring varHeadersSig("ia(yv)");
-    ArgumentList argList(varHeadersSig, headerData, m_isByteSwapped);
+    ArgumentList argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
 
     ArgumentList::Reader reader(argList);
     assert(reader.isValid());
@@ -843,7 +853,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     reader.endArray();
 
     // check that header->body padding is in fact zero filled
-    base = &m_buffer.front();
+    base = m_buffer.begin;
     for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
         if (base[i] != '\0') {
             return false;
@@ -855,6 +865,7 @@ bool MessagePrivate::deserializeVariableHeaders()
 
 bool MessagePrivate::fillOutBuffer()
 {
+    clearBuffer();
     if (!requiredHeadersPresent()) {
         return false;
     }
@@ -879,35 +890,36 @@ bool MessagePrivate::fillOutBuffer()
     const int headerLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
     m_headerLength = align(headerLength, 8);
     m_bodyLength = m_mainArguments.data().length;
+    const int messageLength = m_headerLength + m_bodyLength;
 
-    if (m_headerLength + m_bodyLength > s_maxMessageLength) {
-        // TODO free buffer(s) of headerArgs?
+    if (messageLength > s_maxMessageLength) {
         return false;
     }
 
-    m_buffer.resize(m_headerLength + m_bodyLength);
+    reserveBuffer(messageLength);
 
     serializeFixedHeaders();
 
     // copy header data: uint32 length...
-    memcpy(&m_buffer.front() + s_properFixedHeaderLength, headerArgs.data().begin, sizeof(uint32));
+    memcpy(m_buffer.begin + s_properFixedHeaderLength, headerArgs.data().begin, sizeof(uint32));
     // skip four bytes of padding and copy the rest
-    memcpy(&m_buffer.front() + s_properFixedHeaderLength + sizeof(uint32),
+    memcpy(m_buffer.begin + s_properFixedHeaderLength + sizeof(uint32),
            headerArgs.data().begin + 2 * sizeof(uint32),
            headerArgs.data().length - 2 * sizeof(uint32));
     // zero padding between variable headers and message body
     for (int i = headerLength; i < m_headerLength; i++) {
-        m_buffer[i] = '\0';
+        m_buffer.begin[i] = '\0';
     }
     // copy message body
-    memcpy(&m_buffer.front() + m_headerLength, m_mainArguments.data().begin, m_mainArguments.data().length);
+    memcpy(m_buffer.begin + m_headerLength, m_mainArguments.data().begin, m_mainArguments.data().length);
+    m_bufferPos = m_headerLength + m_mainArguments.data().length;
     return true;
 }
 
 void MessagePrivate::serializeFixedHeaders()
 {
-    assert(m_buffer.size() >= s_extendedFixedHeaderLength);
-    byte *p = &m_buffer.front();
+    assert(m_buffer.length >= s_extendedFixedHeaderLength);
+    byte *p = m_buffer.begin;
 
     *p++ = s_thisMachineEndianness;
     *p++ = byte(m_messageType);
@@ -969,6 +981,48 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
 
     writer.endArray();
     writer.finish();
+}
+
+void MessagePrivate::clearBuffer()
+{
+    if (m_buffer.begin) {
+        free (m_buffer.begin);
+        m_buffer = chunk();
+        m_bufferPos = 0;
+    } else {
+        assert(m_buffer.length == 0);
+        assert(m_bufferPos == 0);
+    }
+}
+
+static int nextPowerOf2(int x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return ++x;
+}
+
+void MessagePrivate::reserveBuffer(int newLen)
+{
+    const int oldLen = m_buffer.length;
+    if (newLen <= oldLen) {
+        return;
+    }
+#ifdef NDEBUG
+    newLen = std::max(newLen, 255); // nextPowerOf2(255) == 256
+#else
+    newLen = std::max(newLen, 1); // more likely to trigger errors due to reallocation during testing
+#endif
+    newLen = nextPowerOf2(newLen);
+    assert(newLen >= oldLen);
+    if (newLen > oldLen) {
+        m_buffer.begin = reinterpret_cast<byte *>(realloc(m_buffer.begin, newLen));
+        m_buffer.length = newLen;
+    }
 }
 
 void MessagePrivate::notifyCompletionClient()
