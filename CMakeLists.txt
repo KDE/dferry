@@ -45,6 +45,7 @@ set(DFER_SOURCES
     events/timer.cpp
     serialization/argumentlist.cpp
     serialization/message.cpp
+    util/error.cpp
     util/icompletionclient.cpp
     util/types.cpp)
 
@@ -58,6 +59,7 @@ set(DFER_PUBLIC_HEADERS
     events/timer.h
     serialization/message.h
     serialization/argumentlist.h
+    util/error.h
     util/export.h
     util/icompletionclient.h)
 

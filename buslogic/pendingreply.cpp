@@ -32,7 +32,7 @@
 #include <iostream>
 
 PendingReply::PendingReply()
-   : d(0)
+   : d(nullptr)
 {
 }
 
@@ -98,10 +98,10 @@ void PendingReplyPrivate::notifyDone(Message *reply)
 
 void PendingReply::dumpState()
 {
-    std::cerr << d << '\n';
+    std::cerr << "PendingReply::dumpState() " << d << '\n';
     if (d) {
-        //std::cerr << d->m_owner << " " << d->m_transceiverOrReply.reply << " " << d->m_serial << " "
-        //          << int(d->m_error) << " " << d->m_reply->type() << '\n';
+        std::cerr << d->m_owner << " " << d->m_transceiverOrReply.reply << " " << d->m_serial << " "
+                  << int(d->m_error.code()) << " " /* << d->m_reply->type() */ << '\n';
     }
 }
 
@@ -112,20 +112,20 @@ bool PendingReply::isFinished() const
 
 bool PendingReply::hasNonErrorReply() const
 {
-    return d && d->m_isFinished && d->m_error == Error::None;
+    return d && d->m_isFinished && !d->m_error.isError();
 }
 
-PendingReply::Error PendingReply::error() const
+Error PendingReply::error() const
 {
     if (!d) {
-        return Error::Detached;
+        return Error::DetachedPendingReply;
     }
     return d->m_error;
 }
 
 bool PendingReply::isError() const
 {
-    return error() != Error::None;
+    return d->m_error.isError();
 }
 
 void PendingReply::setCookie(void *cookie)
@@ -178,7 +178,12 @@ void PendingReplyPrivate::notifyCompletion(void *task)
         m_transceiverOrReply.transceiver->unregisterPendingReply(this);
     }
 
-    m_error = PendingReply::Error::Timeout;
+    // When there is an error before or during sending, we already have an error, and the timeout it set to
+    // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
+    // to API clients. In that case, the timeout itself is not the error.
+    if (!m_error.isError()) {
+        m_error.setCode(Error::Timeout);
+    }
     m_isFinished = true;
     m_transceiverOrReply.reply = nullptr;
     if (m_receiver) {

@@ -953,6 +953,8 @@ int main(int argc, char *argv[])
     test_nesting();
     test_roundtrip();
     test_writerMisuse();
+    // TODO test_maxArrayLength
+    // TODO test_maxFullLength
     test_complicated();
     test_alignment();
     test_arrayOfVariant();

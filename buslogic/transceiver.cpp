@@ -31,6 +31,7 @@
 #include "iserver.h"
 #include "localsocket.h"
 #include "message.h"
+#include "message_p.h"
 #include "pendingreply.h"
 #include "pendingreply_p.h"
 
@@ -199,26 +200,37 @@ PendingReply Transceiver::send(Message m, int timeoutMsecs)
     pendingPriv->m_serial = d->m_sendSerial;
     d->m_pendingReplies.emplace(d->m_sendSerial, pendingPriv);
 
-    sendNoReply(std::move(m));
+    Error sendError = sendNoReply(std::move(m));
+    if (sendError.isError()) {
+        // Signal the error asynchronously, in order to get the same delayed completion callback as in
+        // the non-error case. This should make the behavior more predictable and client code harder to
+        // accidentally get wrong. To detect errors immediately, PendingReply::error() can be used.
+        pendingPriv->m_error = sendError;
+        pendingPriv->m_replyTimeout.setInterval(0);
+    }
 
     return PendingReply(pendingPriv);
 }
 
-PendingReply::Error Transceiver::sendNoReply(Message m)
+Error Transceiver::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
     m.setSerial(d->m_sendSerial++);
-    m.setCompletionClient(d);
+    MessagePrivate *const mpriv = MessagePrivate::get(&m); // this is unchanged by move()ing the owning Message.
+    mpriv->setCompletionClient(d);
+    if (!mpriv->serialize()) {
+        return mpriv->m_error;
+    }
+
     // pass ownership to the send queue now because if the IO system decided to send the message without
     // going through an event loop iteration, notifyCompletion would be called and expects the message to
     // be in the queue
     d->m_sendQueue.push_back(std::move(m));
-    // TODO check errors in serialization - even if we can't send right away!
     if (!d->m_authNegotiator && d->m_sendQueue.size() == 1) {
-         d->m_sendQueue.back().send(d->m_connection);
+        mpriv->send(d->m_connection);
     }
-    return PendingReply::Error::None;// ###
+    return Error::NoError;
 }
 
 IConnection *Transceiver::connection() const
@@ -249,14 +261,14 @@ void TransceiverPrivate::notifyCompletion(void *task)
         m_authNegotiator = nullptr;
         // cout << "Authenticated.\n";
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
-        m_sendQueue.front().send(m_connection);
+        MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
         receiveNextMessage();
     } else {
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
             // cout << "Sent message.\n";
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
-                m_sendQueue.front().send(m_connection);
+                MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
             }
         } else {
             assert(task == m_receivingMessage);
@@ -292,8 +304,9 @@ void TransceiverPrivate::notifyCompletion(void *task)
 void TransceiverPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
-    m_receivingMessage->setCompletionClient(this);
-    m_receivingMessage->receive(m_connection);
+    MessagePrivate *const mpriv = MessagePrivate::get(m_receivingMessage);
+    mpriv->setCompletionClient(this);
+    mpriv->receive(m_connection);
 }
 
 void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)

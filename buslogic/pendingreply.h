@@ -24,7 +24,7 @@
 #ifndef PENDINGREPLY_H
 #define PENDINGREPLY_H
 
-#include "types.h"
+#include "error.h"
 
 #include <memory>
 
@@ -56,28 +56,7 @@ public:
     // If a malformed message is sent, the peer might close the connection without notice. That
     // would usually indicate a bug on the sender (this) side - we try to prevent sending malformed
     // messages as far as possible.
-    enum class Error : uint32 {
-        None = 0,
-        Detached,
-        Timeout,
-        Connection,
-        MalformedMessage,
-        MalformedReply, // Since the reply isn't fully pre-validated for performance reasons,
-                        // absence of this error is no guarantee of well-formedness.
-        InvalidReceiver,
-        NoSuchReceiver,
-        InvalidPath,
-        NoSuchPath,
-        InvalidInterface,
-        NoSuchInterface,
-        InvalidMethod,
-        NoSuchMethod,
-        ArgumentTypeMismatch,
-        InvalidProperty,
-        NoSuchProperty,
-        AccessDenied, // for now(?) only properties: writing to read-only / reading from write-only
-        Unknown // new ones may be added, so better check for >= UnknownError
-    };
+
     Error error() const;
     bool isError() const; // convenience: error() == Error::None
 

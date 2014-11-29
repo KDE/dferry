@@ -51,6 +51,7 @@
 #include "pendingreply.h"
 #include "types.h"
 
+class Error;
 class EventDispatcher;
 class IConnection;
 class IMessageReceiver;
@@ -88,7 +89,7 @@ public:
     PendingReply send(Message m, int timeoutMsecs = DefaultTimeout);
     // Mostly same as above.
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
-    PendingReply::Error sendNoReply(Message m);
+    Error sendNoReply(Message m);
 
     ConnectionInfo connectionInfo() const;
 

@@ -24,6 +24,7 @@
 #ifndef PENDINGREPLY_P_H
 #define PENDINGREPLY_P_H
 
+#include "error.h"
 #include "icompletionclient.h"
 #include "message.h"
 #include "timer.h"
@@ -36,7 +37,6 @@ class PendingReplyPrivate : public ICompletionClient
 public:
     PendingReplyPrivate(EventDispatcher *dispatcher, int timeout)
        : m_replyTimeout(dispatcher),
-         m_error(PendingReply::Error::None),
          m_isFinished(false)
     {
         if (timeout >= 0) {
@@ -58,9 +58,10 @@ public:
     void *m_cookie;
     Timer m_replyTimeout;
     IMessageReceiver *m_receiver;
+    Error m_error;
     uint32 m_serial;
-    PendingReply::Error m_error : 24;
     bool m_isFinished : 1;
+    uint32 m_reserved : 31;
 };
 
 #endif // PENDINGREPLY_P_H

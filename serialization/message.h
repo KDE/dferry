@@ -30,6 +30,7 @@
 #include <vector>
 
 class ArgumentList;
+class Error;
 class IConnection;
 class ICompletionClient;
 class MessagePrivate;
@@ -51,6 +52,9 @@ public:
     // might need to implement them later
     Message(const Message &other) = delete;
     Message &operator=(const Message &other) = delete;
+
+    // error (if any) propagates to PendingReply, so it is still available later
+    Error error() const;
 
     // convenience
     void setCall(const std::string &path, const std::string &interface, const std::string &method);
@@ -143,18 +147,11 @@ public:
     void setSerial(uint32 serial);
     uint32 serial() const;
 
-    void receive(IConnection *connection); // fills in this message from connection
     bool isReceiving() const;
-    void send(IConnection *connection); // sends this message over connection
     bool isSending() const;
 
-    // for read or write completion (it should be clear which because reading and writing can't
-    // happen simultaneously)
-    // ### might want to remove it: this is a value class, the completion client is kind of an identity aspect
-    //     because what would the completion client of a copy be? same pointer or null? both are bad. see std::auto_ptr.
-    void setCompletionClient(ICompletionClient *client);
-
 private:
+    friend class MessagePrivate;
     MessagePrivate *d;
 };
 

@@ -25,6 +25,7 @@
 
 #include "iconnection.h"
 
+
 IConnectionClient::IConnectionClient()
    : m_isReadNotificationEnabled(false),
      m_isWriteNotificationEnabled(false),

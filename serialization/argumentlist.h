@@ -31,6 +31,8 @@
 #include <string>
 #include <vector>
 
+class Error;
+
 class DFERRY_EXPORT ArgumentList
 {
 public:
@@ -53,6 +55,9 @@ public:
     ArgumentList &operator=(const ArgumentList &other);
 
     ~ArgumentList();
+
+    // error (if any) propagates to Message, so it is still available later
+    Error error() const;
 
     std::string prettyPrint() const;
 
@@ -159,6 +164,7 @@ public:
         ~Reader();
 
         bool isValid() const;
+        Error error() const; // see also: aggregateStack()
 
         IoState state() const { return m_state; }
         cstring stateString() const;
@@ -214,8 +220,8 @@ public:
     private:
         class Private;
         friend class Private;
-        IoState doReadPrimitiveType();
-        IoState doReadString(int lengthPrefixSize);
+        void doReadPrimitiveType();
+        void doReadString(int lengthPrefixSize);
         void advanceState();
         void advanceStateFrom(IoState expectedState);
         void beginArrayOrDict(bool isDict, bool *isEmpty);
@@ -231,7 +237,6 @@ public:
         DataUnion m_u;
     };
 
-    // TODO: try to share code with ReadIterator
     class Writer
     {
     public:
@@ -244,6 +249,9 @@ public:
         ~Writer();
 
         bool isValid() const;
+        // error propagates to ArgumentList (if the error wasn't that the ArgumentList is not writable),
+        // so it is still available later
+        Error error() const; // see also: aggregateStack()
 
         IoState state() const { return m_state; }
         cstring stateString() const;
@@ -286,11 +294,12 @@ public:
         class Private;
         friend class Private;
 
-        IoState doWritePrimitiveType(uint32 alignAndSize);
-        IoState doWriteString(int lengthPrefixSize);
+        void doWritePrimitiveType(uint32 alignAndSize);
+        void doWriteString(int lengthPrefixSize);
         void advanceState(chunk signatureFragment, IoState newState);
         void beginArrayOrDict(bool isDict, bool isEmpty);
         void nextArrayOrDictEntry(bool isDict);
+        void finishInternal();
 
         Private *d;
 

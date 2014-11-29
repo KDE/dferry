@@ -24,6 +24,7 @@
 #include "argumentlist.h"
 
 #include "basictypeio.h"
+#include "error.h"
 #include "stringtools.h"
 
 #include <algorithm>
@@ -57,6 +58,7 @@ public:
     bool m_isByteSwapped;
     int m_readerCount;
     bool m_hasWriter;
+    Error m_error;
     byte *m_memOwnership;
     cstring m_signature;
     chunk m_data;
@@ -128,7 +130,8 @@ ArgumentList::Private::~Private()
 // "data is good if X" instead of "data is bad if !X". That stuff should end up the same after
 // optimization anyway.
 // funny condition to avoid the dangling-else problem
-#define VALID_IF(cond) if (likely(cond)) {} else { m_state = InvalidData; return; }
+#define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
+    m_state = InvalidData; d->m_error.setCode(errCode); return; }
 
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
@@ -255,6 +258,11 @@ ArgumentList::~ArgumentList()
 {
     delete d;
     d = 0;
+}
+
+Error ArgumentList::error() const
+{
+    return d->m_error;
 }
 
 bool ArgumentList::isReading() const
@@ -686,6 +694,7 @@ public:
     int m_signaturePosition;
     int m_dataPosition;
     int m_nilArrayNesting; // this keeps track of how many nil arrays we are in
+    Error m_error;
 
     struct ArrayInfo
     {
@@ -722,12 +731,12 @@ ArgumentList::Reader::Reader(const ArgumentList &al)
         d->m_argList = &al;
     }
 
-    VALID_IF(d->m_argList);
+    VALID_IF(d->m_argList, Error::NotAttachedToArgumentList);
     d->m_signature = d->m_argList->d->m_signature;
     d->m_data = d->m_argList->d->m_data;
     // as a slightly hacky optimizaton, we allow empty ArgumentLists to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
-        VALID_IF(ArgumentList::isSignatureValid(d->m_signature));
+        VALID_IF(ArgumentList::isSignatureValid(d->m_signature), Error::InvalidSignature);
     }
     advanceState();
 }
@@ -767,6 +776,11 @@ bool ArgumentList::Reader::isValid() const
     return d->m_argList;
 }
 
+Error ArgumentList::Reader::error() const
+{
+    return d->m_error;
+}
+
 cstring ArgumentList::Reader::stateString() const
 {
     return printableState(m_state);
@@ -774,7 +788,7 @@ cstring ArgumentList::Reader::stateString() const
 
 void ArgumentList::Reader::replaceData(chunk data)
 {
-    VALID_IF(data.length >= d->m_dataPosition);
+    VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
 
     ptrdiff_t offset = data.begin - d->m_data.begin;
 
@@ -856,7 +870,7 @@ static const TypeInfo &typeInfo(byte letterCode)
     return high[letterCode - 'a'];
 }
 
-ArgumentList::IoState ArgumentList::Reader::doReadPrimitiveType()
+void ArgumentList::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
     case Byte:
@@ -865,9 +879,7 @@ ArgumentList::IoState ArgumentList::Reader::doReadPrimitiveType()
     case Boolean: {
         uint32 num = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         m_u.Boolean = num == 1;
-        if (num > 1) {
-            return InvalidData;
-        }
+        VALID_IF(num <= 1, Error::MalformedMessageData);
         break; }
     case Int16:
         m_u.Int16 = basic::readInt16(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
@@ -897,12 +909,11 @@ ArgumentList::IoState ArgumentList::Reader::doReadPrimitiveType()
         break; }
     default:
         assert(false);
-        return InvalidData;
+        VALID_IF(false, Error::MalformedMessageData);
     }
-    return m_state;
 }
 
-ArgumentList::IoState ArgumentList::Reader::doReadString(int lengthPrefixSize)
+void ArgumentList::Reader::doReadString(int lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
@@ -910,10 +921,12 @@ ArgumentList::IoState ArgumentList::Reader::doReadString(int lengthPrefixSize)
     } else {
         stringLength += basic::readUint32(d->m_data.begin + d->m_dataPosition,
                                           d->m_argList->d->m_isByteSwapped);
+        VALID_IF(stringLength + 1 < s_specMaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
     if (unlikely(d->m_dataPosition + stringLength > d->m_data.length)) {
-        return NeedMoreData;
+        m_state = NeedMoreData;
+        return;
     }
     m_u.String.begin = d->m_data.begin + d->m_dataPosition;
     m_u.String.length = stringLength - 1; // terminating null is not counted
@@ -926,10 +939,7 @@ ArgumentList::IoState ArgumentList::Reader::doReadString(int lengthPrefixSize)
     } else if (m_state == Signature) {
         isValidString = ArgumentList::isSignatureValid(cstring(m_u.String.begin, m_u.String.length));
     }
-    if (unlikely(!isValidString)) {
-        return InvalidData;
-    }
-    return m_state;
+    VALID_IF(isValidString, Error::MalformedMessageData);
 }
 
 void ArgumentList::Reader::advanceState()
@@ -1000,9 +1010,7 @@ void ArgumentList::Reader::advanceState()
     const TypeInfo ty = typeInfo(d->m_signature.begin[d->m_signaturePosition]);
     m_state = ty.state();
 
-    if (unlikely(m_state == InvalidData)) {
-        return;
-    }
+    VALID_IF(m_state != InvalidData, Error::MalformedMessageData);
 
     // check if we have enough data for the next type, and read it
     // if we're in a nil array, we are iterating only over the types without reading any data
@@ -1013,7 +1021,7 @@ void ArgumentList::Reader::advanceState()
         if (unlikely(d->m_dataPosition > d->m_data.length)) {
             goto out_needMoreData;
         }
-        VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
+        VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
 
         if (ty.isPrimitive || ty.isString) {
             if (unlikely(d->m_dataPosition + ty.alignment > d->m_data.length)) {
@@ -1021,10 +1029,10 @@ void ArgumentList::Reader::advanceState()
             }
 
             if (ty.isPrimitive) {
-                m_state = doReadPrimitiveType();
+                doReadPrimitiveType();
                 d->m_dataPosition += ty.alignment;
             } else {
-                m_state = doReadString(ty.alignment);
+                doReadString(ty.alignment);
                 if (unlikely(m_state == NeedMoreData)) {
                     goto out_needMoreData;
                 }
@@ -1043,7 +1051,7 @@ void ArgumentList::Reader::advanceState()
 
     switch (m_state) {
     case BeginStruct:
-        VALID_IF(d->m_nesting.beginParen());
+        VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         aggregateInfo.aggregateType = BeginStruct;
         d->m_aggregateStack.push_back(aggregateInfo);
         break;
@@ -1070,10 +1078,11 @@ void ArgumentList::Reader::advanceState()
             if (unlikely(d->m_dataPosition > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature));
+            VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature),
+                     Error::MalformedMessageData);
         }
         // do not clobber nesting before potentially going to out_needMoreData!
-        VALID_IF(d->m_nesting.beginVariant());
+        VALID_IF(d->m_nesting.beginVariant(), Error::MalformedMessageData);
 
         aggregateInfo.aggregateType = BeginVariant;
         Private::VariantInfo &variantInfo = aggregateInfo.var;
@@ -1088,13 +1097,12 @@ void ArgumentList::Reader::advanceState()
     case BeginArray: {
         uint32 arrayLength = 0;
         if (likely(!d->m_nilArrayNesting)) {
-            if (unlikely(d->m_dataPosition + 4 > d->m_data.length)) {
+            if (unlikely(d->m_dataPosition + sizeof(uint32) > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            static const int maxArrayDataLength = 67108864; // from the spec
             arrayLength = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
-            VALID_IF(arrayLength <= maxArrayDataLength);
-            d->m_dataPosition += 4;
+            VALID_IF(arrayLength <= s_specMaxArrayLength, Error::MalformedMessageData);
+            d->m_dataPosition += sizeof(uint32);
         }
 
         const TypeInfo firstElementTy = typeInfo(d->m_signature.begin[d->m_signaturePosition + 1]);
@@ -1103,25 +1111,26 @@ void ArgumentList::Reader::advanceState()
         aggregateInfo.aggregateType = m_state;
         Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
 
-        // ### are we supposed to align d->m_dataPosition if the array is empty?
+        // no alignment of d->m_dataPosition if the array is nil
         if (likely(!d->m_nilArrayNesting)) {
             int padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
-            VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition));
+            VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
             arrayInfo.dataEnd = d->m_dataPosition + arrayLength;
             if (unlikely(arrayInfo.dataEnd > d->m_data.length)) {
                 // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
                 goto out_needMoreData;
             }
         }
-        VALID_IF(d->m_nesting.beginArray());
+        VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
         if (firstElementTy.state() == BeginDict) {
             d->m_signaturePosition++;
-            // not re-opened before each element: there is no observable difference for clients
-            VALID_IF(d->m_nesting.beginParen());
+            // only closed at end of dict - there is no observable difference for clients
+            VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         }
 
-        // position at the 'a' or '{' because we increment d->m_signaturePosition before reading a char
+        // position at the 'a' or '{' because we increment d->m_signaturePosition before reading contents -
+        // this saves a special case in that more generic code
         arrayInfo.containedTypeBegin = d->m_signaturePosition;
         if (!arrayLength) {
             d->m_nilArrayNesting++;
@@ -1140,7 +1149,7 @@ void ArgumentList::Reader::advanceState()
 out_needMoreData:
     // we only start an array when the data for it has fully arrived (possible due to the length
     // prefix), so if we still run out of data in an array the input is inconsistent.
-    VALID_IF(!d->m_nesting.array);
+    VALID_IF(!d->m_nesting.array, Error::MalformedMessageData);
     m_state = NeedMoreData;
     d->m_signaturePosition = savedSignaturePosition;
     d->m_dataPosition = savedDataPosition;
@@ -1150,7 +1159,7 @@ void ArgumentList::Reader::advanceStateFrom(IoState expectedState)
 {
     // Calling this method could be replaced with using VALID_IF in the callers, but it currently
     // seems more conventient like this.
-    VALID_IF(m_state == expectedState);
+    VALID_IF(m_state == expectedState, Error::ReadWrongType);
     advanceState();
 }
 
@@ -1180,9 +1189,9 @@ void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
             // barring bugs, must have been too deep nesting inside variants if parsing fails
             cstring sigTail(d->m_signature.begin + d->m_signaturePosition,
                             d->m_signature.length - d->m_signaturePosition);
-            VALID_IF(parseSingleCompleteType(&sigTail, &d->m_nesting));
-            // TODO tests don't seem to cover the next line - is it really correct and is d->m_signaturePosition
-            // not overwritten (to the correct value) ?
+            VALID_IF(parseSingleCompleteType(&sigTail, &d->m_nesting), Error::MalformedMessageData);
+            // TODO tests don't seem to cover the next line - is it really correct and is
+            // d->m_signaturePosition not overwritten (to the correct value) ?
             d->m_signaturePosition = d->m_signature.length - sigTail.length - 1;
 
             // un-fix up nesting
@@ -1195,10 +1204,9 @@ void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
     m_state = isDict ? NextDictEntry : NextArrayEntry;
 }
 
-// TODO introduce an error state different from InvalidData when the wrong method is called
 void ArgumentList::Reader::beginArray(bool *isEmpty)
 {
-    VALID_IF(m_state == BeginArray);
+    VALID_IF(m_state == BeginArray, Error::ReadWrongType);
     beginArrayOrDict(false, isEmpty);
 }
 
@@ -1260,7 +1268,7 @@ void ArgumentList::Reader::endArray()
 
 void ArgumentList::Reader::beginDict(bool *isEmpty)
 {
-    VALID_IF(m_state == BeginDict);
+    VALID_IF(m_state == BeginDict, Error::ReadWrongType);
     beginArrayOrDict(true, isEmpty);
 }
 
@@ -1270,6 +1278,7 @@ bool ArgumentList::Reader::nextDictEntry()
         return nextArrayOrDictEntry(true);
     } else {
         m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
 }
@@ -1322,6 +1331,27 @@ public:
          m_nilArrayNesting(0)
     {}
 
+    int m_dataElementsCountBeforeNilArray;
+    int m_variantSignaturesCountBeforeNilArray;
+    int m_dataPositionBeforeNilArray;
+
+    ArgumentList *m_argList;
+    NestingWithParenCounter m_nesting;
+    cstring m_signature;
+    int m_signaturePosition;
+
+    byte *m_data;
+    int m_dataCapacity;
+    int m_dataPosition;
+
+    int m_nilArrayNesting;
+    Error m_error;
+
+    enum {
+        // got a linker error with static const int...
+        InitialDataCapacity = 256
+    };
+
     struct ArrayInfo
     {
         uint32 dataBegin; // one past the last data byte of the array
@@ -1350,6 +1380,12 @@ public:
         };
     };
 
+    std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
+
+    // this keeps track of which aggregates we are currently in
+    std::vector<AggregateInfo> m_aggregateStack;
+
+
     // we don't know how long a variant signature is when starting the variant, but we have to
     // insert the signature into the datastream before the data. for that reason, we need a
     // postprocessing pass to insert the signatures when the stream is otherwise finished.
@@ -1368,7 +1404,7 @@ public:
             alignmentExponent = alignLog[alignment];
             assert(alignment < 2 || alignLog != 0);
         }
-        byte alignment() { return 1 << alignmentExponent; }
+        byte alignment() const { return 1 << alignmentExponent; }
 
         uint32 alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
         uint32 size : 6; // that's up to 63
@@ -1381,38 +1417,15 @@ public:
     };
 
     std::vector<ElementInfo> m_elements;
-    std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
-
-    int m_dataElementsCountBeforeNilArray;
-    int m_variantSignaturesCountBeforeNilArray;
-    int m_dataPositionBeforeNilArray;
-
-    ArgumentList *m_argList;
-    NestingWithParenCounter m_nesting;
-    cstring m_signature;
-    int m_signaturePosition;
-
-    enum {
-        // got a linker error with static const int...
-        InitialDataCapacity = 256
-    };
-    byte *m_data;
-    int m_dataCapacity;
-    int m_dataPosition;
-
-    int m_nilArrayNesting;
-    // this keeps track of which aggregates we are currently in
-    std::vector<AggregateInfo> m_aggregateStack;
 };
 
 ArgumentList::Writer::Writer(ArgumentList *al)
    : d(new Private),
      m_state(InvalidData)
 {
-    if (al->beginWrite()) {
-        d->m_argList = al;
-        m_state = AnyData;
-    }
+    VALID_IF(al->beginWrite(), Error::NotAttachedToArgumentList);
+    d->m_argList = al;
+    m_state = AnyData;
 }
 
 ArgumentList::Writer::Writer(Writer &&other)
@@ -1437,6 +1450,7 @@ void ArgumentList::Writer::operator=(Writer &&other)
 
 ArgumentList::Writer::~Writer()
 {
+    // TODO good API to finish() here if not done yet?
     if (d->m_argList) {
         assert(d->m_argList->d->m_hasWriter);
         d->m_argList->d->m_hasWriter = false;
@@ -1470,12 +1484,17 @@ bool ArgumentList::Writer::isValid() const
     return d->m_argList;
 }
 
+Error ArgumentList::Writer::error() const
+{
+    return d->m_error;
+}
+
 cstring ArgumentList::Writer::stateString() const
 {
     return printableState(m_state);
 }
 
-ArgumentList::IoState ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
+void ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
 {
     d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
     const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
@@ -1519,26 +1538,24 @@ ArgumentList::IoState ArgumentList::Writer::doWritePrimitiveType(uint32 alignAnd
         break; }
     default:
         assert(false);
-        return InvalidData;
+        VALID_IF(false, Error::InvalidType);
     }
 
     d->m_dataPosition = newDataPosition;
     d->m_elements.push_back(Private::ElementInfo(alignAndSize, alignAndSize));
-    return m_state;
 }
 
-ArgumentList::IoState ArgumentList::Writer::doWriteString(int lengthPrefixSize)
+void ArgumentList::Writer::doWriteString(int lengthPrefixSize)
 {
-    bool isValidString = false;
     if (m_state == String) {
-        isValidString = ArgumentList::isStringValid(cstring(m_u.String.begin, m_u.String.length));
+        VALID_IF(ArgumentList::isStringValid(cstring(m_u.String.begin, m_u.String.length)),
+                 Error::InvalidString);
     } else if (m_state == ObjectPath) {
-        isValidString = ArgumentList::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length));
+        VALID_IF(ArgumentList::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length)),
+                 Error::InvalidObjectPath);
     } else if (m_state == Signature) {
-        isValidString = ArgumentList::isSignatureValid(cstring(m_u.String.begin, m_u.String.length));
-    }
-    if (unlikely(!isValidString)) {
-        return InvalidData;
+        VALID_IF(ArgumentList::isSignatureValid(cstring(m_u.String.begin, m_u.String.length)),
+                 Error::InvalidSignature);
     }
 
     d->m_dataPosition = align(d->m_dataPosition, lengthPrefixSize);
@@ -1565,8 +1582,6 @@ ArgumentList::IoState ArgumentList::Writer::doWriteString(int lengthPrefixSize)
         d->m_elements.push_back(Private::ElementInfo(1, chunkSize));
         l -= chunkSize;
     }
-
-    return m_state;
 }
 
 void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newState)
@@ -1608,7 +1623,8 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
     bool isWritingSignature = d->m_signaturePosition == d->m_signature.length; // TODO correct?
     if (isWritingSignature) {
         // signature additions must conform to syntax
-        VALID_IF(d->m_signaturePosition + signatureFragment.length <= maxSignatureLength);
+        VALID_IF(d->m_signaturePosition + signatureFragment.length <= maxSignatureLength,
+                 Error::SignatureTooLong);
 
         if (!d->m_aggregateStack.empty()) {
             const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -1617,22 +1633,22 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
                 // arrays and variants may contain just one single complete type; note that this will
                 // trigger only when not inside an aggregate inside the variant or (see below) array
                 if (d->m_signaturePosition >= 1) {
-                    VALID_IF(m_state == EndVariant);
+                    VALID_IF(m_state == EndVariant, Error::NotSingleCompleteTypeInVariant);
                 }
                 break;
             case BeginArray:
                 if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1) {
-                    VALID_IF(m_state == EndArray);
+                    VALID_IF(m_state == EndArray, Error::NotSingleCompleteTypeInArray);
                 }
                 break;
             case BeginDict:
                 if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
-                    VALID_IF(isPrimitiveType || isStringType);
+                    VALID_IF(isPrimitiveType || isStringType, Error::InvalidKeyTypeInDict);
                 }
                 // first type has been checked already, second must be present (checked in EndDict
                 // state handler). no third type allowed.
                 if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2) {
-                    VALID_IF(m_state == EndDict);
+                    VALID_IF(m_state == EndDict, Error::GreaterTwoTypesInDict);
                 }
                 break;
             default:
@@ -1647,20 +1663,22 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         d->m_signature.length += signatureFragment.length;
     } else {
         // signature must match first iteration (of an array/dict)
-        VALID_IF(d->m_signaturePosition + signatureFragment.length <= d->m_signature.length);
+        VALID_IF(d->m_signaturePosition + signatureFragment.length <= d->m_signature.length,
+                 Error::TypeMismatchInSubsequentArrayIteration);
         // TODO need to apply special checks for state changes with no explicit signature char?
         // (end of array, end of variant)
         for (int i = 0; i < signatureFragment.length; i++) {
-            VALID_IF(d->m_signature.begin[d->m_signaturePosition++] == signatureFragment.begin[i]);
+            VALID_IF(d->m_signature.begin[d->m_signaturePosition++] == signatureFragment.begin[i],
+                     Error::TypeMismatchInSubsequentArrayIteration);
         }
     }
 
     if (isPrimitiveType) {
-        m_state = doWritePrimitiveType(alignment);
+        doWritePrimitiveType(alignment);
         return;
     }
     if (isStringType) {
-        m_state = doWriteString(alignment);
+        doWriteString(alignment);
         return;
     }
 
@@ -1668,7 +1686,7 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
 
     switch (m_state) {
     case BeginStruct:
-        VALID_IF(d->m_nesting.beginParen());
+        VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         aggregateInfo.aggregateType = BeginStruct;
         aggregateInfo.sct.containedTypeBegin = d->m_signaturePosition;
         d->m_aggregateStack.push_back(aggregateInfo);
@@ -1676,15 +1694,16 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         break;
     case EndStruct:
         d->m_nesting.endParen();
-        VALID_IF(!d->m_aggregateStack.empty());
+        VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndStructHere);
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginStruct &&
-                 d->m_signaturePosition > aggregateInfo.sct.containedTypeBegin + 1); // no empty structs
+                 d->m_signaturePosition > aggregateInfo.sct.containedTypeBegin + 1,
+                 Error::EmptyStruct); // empty structs are not allowed
         d->m_aggregateStack.pop_back();
         break;
 
     case BeginVariant: {
-        VALID_IF(d->m_nesting.beginVariant());
+        VALID_IF(d->m_nesting.beginVariant(), Error::ExcessiveNesting);
         aggregateInfo.aggregateType = BeginVariant;
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
@@ -1704,13 +1723,13 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         break; }
     case EndVariant: {
         d->m_nesting.endVariant();
-        VALID_IF(!d->m_aggregateStack.empty());
+        VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndVariantHere);
         aggregateInfo = d->m_aggregateStack.back();
-        VALID_IF(aggregateInfo.aggregateType == BeginVariant);
+        VALID_IF(aggregateInfo.aggregateType == BeginVariant, Error::CannotEndVariantHere);
         if (likely(!d->m_nilArrayNesting)) {
             // apparently, empty variants are not allowed. as an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
-            VALID_IF(d->m_signaturePosition > 0);
+            VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
         }
         d->m_signature.begin[d->m_signaturePosition] = '\0';
 
@@ -1728,10 +1747,10 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
 
     case BeginDict:
     case BeginArray: {
-        VALID_IF(d->m_nesting.beginArray());
+        VALID_IF(d->m_nesting.beginArray(), Error::ExcessiveNesting);
         if (m_state == BeginDict) {
             // not re-opened before each element: there is no observable difference for clients
-            VALID_IF(d->m_nesting.beginParen());
+            VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         }
         aggregateInfo.aggregateType = m_state;
         aggregateInfo.arr.dataBegin = d->m_dataPosition;
@@ -1753,10 +1772,12 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
             d->m_nesting.endParen();
         }
         d->m_nesting.endArray();
-        VALID_IF(!d->m_aggregateStack.empty());
+        VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndArrayHere);
         aggregateInfo = d->m_aggregateStack.back();
-        VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
-        VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1));
+        VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray),
+                 Error::CannotEndArrayOrDictHere);
+        VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1),
+                 Error::TooFewTypesInArrayOrDict);
         d->m_aggregateStack.pop_back();
         if (unlikely(d->m_nilArrayNesting)) {
             if (!--d->m_nilArrayNesting) {
@@ -1778,7 +1799,7 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
         d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::ArrayLengthEndMark));
         break; }
     default:
-        VALID_IF(false);
+        VALID_IF(false, Error::InvalidType);
         break;
     }
 
@@ -1815,22 +1836,25 @@ void ArgumentList::Writer::nextArrayOrDictEntry(bool isDict)
 {
     // TODO sanity / syntax checks, data length check too?
 
-    VALID_IF(!d->m_aggregateStack.empty());
+    VALID_IF(!d->m_aggregateStack.empty(), Error::CannotStartNextArrayOrDictEntryHere);
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
-    VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+    VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray),
+             Error::CannotStartNextArrayOrDictEntryHere);
 
     if (unlikely(d->m_nilArrayNesting)) {
         // allow one iteration to write the types
-        VALID_IF(d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin);
+        VALID_IF(d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin,
+                 Error::SubsequentIterationInNilArray);
     } else {
         if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
             // first iteration, nothing to do.
             // this is due to the feature that nextFooEntry() is not required before the first element.
         } else if (isDict) {
             // a dict must have a key and value
-            VALID_IF(d->m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1);
+            VALID_IF(d->m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1,
+                     Error::TooFewTypesInArrayOrDict);
 
-            d->m_nesting.parenCount += 1; // for alignment accounting
+            d->m_nesting.parenCount += 1; // for alignment blowup accounting
             d->m_elements.push_back(Private::ElementInfo(structAlignment, 0)); // align to dict entry
         }
         // array case: we are not at start of contained type's signature, the array is at top of stack
@@ -1892,6 +1916,17 @@ struct ArrayLengthField
 
 void ArgumentList::Writer::finish()
 {
+    finishInternal();
+
+    d->m_argList->d->m_error = d->m_error;
+
+    assert(d->m_argList->d->m_hasWriter);
+    d->m_argList->d->m_hasWriter = false;
+    d->m_argList = nullptr;
+}
+
+void ArgumentList::Writer::finishInternal()
+{
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - assemble the message, inserting variant signatures and array lengths
@@ -1899,10 +1934,7 @@ void ArgumentList::Writer::finish()
     if (m_state == InvalidData) {
         return;
     }
-    if (d->m_nesting.total() != 0) {
-        m_state = InvalidData;
-        return;
-    }
+    VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentListHere);
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
     d->m_signature.begin[d->m_signaturePosition] = '\0';
@@ -1912,6 +1944,7 @@ void ArgumentList::Writer::finish()
         free(d->m_argList->d->m_memOwnership);
     }
 
+    bool success = true;
     const uint32 count = d->m_elements.size();
     d->m_dataPosition = 0;
     if (count) {
@@ -1964,7 +1997,11 @@ void ArgumentList::Writer::finish()
                     // end of an array - just put the now known array length in front of the array
                     al = lengthFieldStack.back();
                     const int arrayLength = bufferPos - al.dataStartPosition;
-                    // TODO error if arrayLength greater than allowed
+                    if (arrayLength > s_specMaxArrayLength) {
+                        d->m_error.setCode(Error::ArrayOrDictTooLong);
+                        success = false;
+                        break;
+                    }
                     basic::writeUint32(buffer + al.lengthFieldPosition, arrayLength);
                     lengthFieldStack.pop_back();
                 } else { // ei.size == Private::ElementInfo::VariantSignature
@@ -1978,18 +2015,33 @@ void ArgumentList::Writer::finish()
             }
         }
 
-        assert(variantSignatureIndex == d->m_variantSignatures.size());
-        assert(lengthFieldStack.empty());
-        // prevent double delete of signatures
-        d->m_aggregateStack.clear();
-        d->m_variantSignatures.clear();
+        if (success && bufferPos > s_specMaxMessageLength) {
+            success = false;
+            d->m_error.setCode(Error::ArgumentListTooLong);
+        }
 
-        // TODO error if message length greater than allowed
+        if (success) {
+            assert(variantSignatureIndex == d->m_variantSignatures.size());
+            assert(lengthFieldStack.empty());
+            // prevent double delete of signatures
+            d->m_aggregateStack.clear();
+            d->m_variantSignatures.clear();
 
-        d->m_argList->d->m_memOwnership = buffer;
-        d->m_argList->d->m_signature = cstring(buffer, d->m_signature.length);
-        d->m_argList->d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+            d->m_argList->d->m_memOwnership = buffer;
+            d->m_argList->d->m_signature = cstring(buffer, d->m_signature.length);
+            d->m_argList->d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+        } else {
+            d->m_aggregateStack.clear();
+            for (int i = 0; i < d->m_variantSignatures.size(); i++) {
+                free(d->m_variantSignatures[i].begin);
+            }
+        }
     } else {
+        assert(d->m_variantSignatures.empty());
+    }
+
+    if (!count || !success) {
+        d->m_variantSignatures.clear();
         d->m_argList->d->m_memOwnership = nullptr;
         d->m_argList->d->m_signature = cstring();
         d->m_argList->d->m_data = chunk();
@@ -1997,11 +2049,7 @@ void ArgumentList::Writer::finish()
 
     d->m_elements.clear();
 
-    assert(d->m_argList->d->m_hasWriter);
-    d->m_argList->d->m_hasWriter = false;
-    d->m_argList = nullptr;
-
-    m_state = Finished;
+    m_state = success ? Finished : InvalidData;
 }
 
 std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const

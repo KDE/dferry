@@ -57,8 +57,6 @@ LocalServer::LocalServer(const std::string &socketFilePath)
     ok = ok && (bind(fd, (struct sockaddr *)&addr, sizeof(sa_family_t) + socketFilePath.length()) == 0);
     ok = ok && (::listen(fd, /* max queued incoming connections */ 64) == 0);
 
-    // TODO register the fd in order to get notified when a client connects!
-
     if (ok) {
         m_listenFd = fd;
     } else {

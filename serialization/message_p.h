@@ -27,6 +27,7 @@
 #include "message.h"
 
 #include "argumentlist.h"
+#include "error.h"
 #include "iconnectionclient.h"
 
 class VarHeaderStorage {
@@ -76,15 +77,25 @@ public:
 class MessagePrivate : public IConnectionClient
 {
 public:
+    static MessagePrivate *get(Message *m) { return m->d; }
+
     MessagePrivate(Message *parent);
 
-    virtual void notifyConnectionReadyRead() override;
-    virtual void notifyConnectionReadyWrite() override;
+    void notifyConnectionReadyRead() override;
+    void notifyConnectionReadyWrite() override;
 
-    bool requiredHeadersPresent() const;
+    // IConnection is non-public API, so these make no sense in the public interface
+    void receive(IConnection *connection); // fills in this message from connection
+    void send(IConnection *connection); // sends this message over connection
+    // for receive or send completion (it should be clear which because receiving and sending can't
+    // happen simultaneously)
+    void setCompletionClient(ICompletionClient *client);
+
+    bool requiredHeadersPresent();
+    Error checkRequiredHeaders() const;
     bool deserializeFixedHeaders();
     bool deserializeVariableHeaders();
-    bool fillOutBuffer();
+    bool serialize();
     void serializeFixedHeaders();
     void serializeVariableHeaders(ArgumentList *headerArgs);
 
@@ -99,8 +110,8 @@ public:
     int m_bufferPos;
 
     bool m_isByteSwapped;
-    enum {
-        Empty,
+    enum { // ### we don't have an error state, the need hasn't arisen yet. strange!
+        Empty = 0,
         Serialized,
         Deserialized,
         LastSteadyState = Deserialized,
@@ -114,10 +125,13 @@ public:
     };
     byte m_flags;
     byte m_protocolVersion;
+    bool m_dirty : 1;
     uint32 m_headerLength;
     uint32 m_headerPadding;
     uint32 m_bodyLength;
     uint32 m_serial;
+
+    Error m_error;
 
     ArgumentList m_mainArguments;
 
