@@ -1420,7 +1420,7 @@ ArgumentList::Writer::Writer(Writer &&other)
      m_state(other.m_state),
      m_u(other.m_u)
 {
-    other.d = 0;
+    other.d = nullptr;
 }
 
 void ArgumentList::Writer::operator=(Writer &&other)
@@ -1432,7 +1432,7 @@ void ArgumentList::Writer::operator=(Writer &&other)
     m_state = other.m_state;
     m_u = other.m_u;
 
-    other.d = 0;
+    other.d = nullptr;
 }
 
 ArgumentList::Writer::~Writer()
@@ -1462,7 +1462,7 @@ ArgumentList::Writer::~Writer()
     free(d->m_data);
     d->m_data = nullptr;
     delete d;
-    d = 0;
+    d = nullptr;
 }
 
 bool ArgumentList::Writer::isValid() const
