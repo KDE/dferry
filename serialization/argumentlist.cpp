@@ -477,7 +477,7 @@ static void chopFirst(cstring *s)
 // static
 bool ArgumentList::isStringValid(cstring string)
 {
-    if (!string.begin || string.begin[string.length] != 0) {
+    if (!string.begin || string.length + 1 >= s_specMaxArrayLength || string.begin[string.length] != 0) {
         return false;
     }
     // check that there are no embedded nulls, exploiting the highly optimized strlen...
@@ -492,7 +492,7 @@ static inline bool isObjectNameLetter(byte b)
 // static
 bool ArgumentList::isObjectPathValid(cstring path)
 {
-    if (!path.begin || path.begin[path.length] != 0) {
+    if (!path.begin || path.length + 1 >= s_specMaxArrayLength || path.begin[path.length] != 0) {
         return false;
     }
     byte prevLetter = path.begin[0];
