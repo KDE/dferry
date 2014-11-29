@@ -261,7 +261,6 @@ void TransceiverPrivate::notifyCompletion(void *task)
         } else {
             assert(task == m_receivingMessage);
             Message *const receivedMessage = m_receivingMessage;
-            cout << "Received message; type:" << receivedMessage->type() << "\n";
 
             receiveNextMessage();
 
@@ -269,25 +268,20 @@ void TransceiverPrivate::notifyCompletion(void *task)
 
             if (receivedMessage->type() == Message::MethodReturnMessage ||
                 receivedMessage->type() == Message::ErrorMessage) {
-                uint32 rs = receivedMessage->replySerial();
-                cout << "Received message: looking for pending reply for serial " << rs << "\n";
-                auto it = m_pendingReplies.find(rs);
+
+                auto it = m_pendingReplies.find(receivedMessage->replySerial());
                 if (it != m_pendingReplies.end()) {
                     replyDispatched = true;
                     PendingReplyPrivate *pr = it->second;
                     m_pendingReplies.erase(it);
 
-                    cout << "Received message: dispatching to PendingReply.\n";
                     pr->notifyDone(receivedMessage);
                 }
             }
 
             if (!replyDispatched) {
                 if (m_client) {
-                    cout << "Received message: dispatching to catch-all.\n";
                     m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
-                } else {
-                    cerr << "warning, dropping message on the floor because no client is registered.\n";
                 }
                 delete receivedMessage;
             }
