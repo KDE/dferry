@@ -106,4 +106,5 @@ int main(int argc, char *argv[])
     testBasic();
     // TODO testSaveLoad();
     // TODO testDeepCopy();
+    std::cout << "\nNote that the hammock error is part of the test.\nPassed!\n";
 }
