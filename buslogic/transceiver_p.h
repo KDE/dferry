@@ -55,6 +55,14 @@ public:
 
     void unregisterPendingReply(PendingReplyPrivate *p);
 
+    enum {
+        Unconnected,
+        ServerWaitingForClient,
+        Authenticating,
+        AwaitingUniqueName,
+        Connected
+    } m_state;
+
     IMessageReceiver *m_client;
     Message *m_receivingMessage;
     int m_sendSerial; // TODO handle recycling of serials

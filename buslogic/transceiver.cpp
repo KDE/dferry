@@ -71,7 +71,8 @@ public:
 };
 
 TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const ConnectionInfo &ci)
-   : m_client(nullptr),
+   : m_state(Unconnected),
+     m_client(nullptr),
      m_receivingMessage(nullptr),
      m_sendSerial(1),
      m_defaultTimeout(25000),
@@ -105,8 +106,11 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
             d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
             d->m_clientConnectedHandler->m_server->setNewConnectionClient(d->m_clientConnectedHandler);
             d->m_clientConnectedHandler->m_parent = d;
+
+            d->m_state = TransceiverPrivate::ServerWaitingForClient;
         } else {
             cerr << "Transceiver constructor: bus server not supported.\n";
+            // state stays at Unconnected
         }
     } else {
         d->m_connection = IConnection::create(ci);
@@ -115,9 +119,13 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
         if (ci.bus() == ConnectionInfo::Bus::Session || ci.bus() == ConnectionInfo::Bus::System) {
             cerr << "Transceiver constructor: authAndHello." << endl;
             d->authAndHello(this);
+
+            d->m_state = TransceiverPrivate::Authenticating;
         } else if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
             cerr << "Transceiver constructor: direct to message exchange" << endl;
             d->receiveNextMessage();
+
+            d->m_state = TransceiverPrivate::Connected;
         }
     }
 }
@@ -176,6 +184,8 @@ void TransceiverPrivate::handleClientConnected()
     assert(m_connection);
     m_connection->setEventDispatcher(m_eventDispatcher);
     receiveNextMessage();
+
+    m_state = Connected;
 }
 
 void Transceiver::setDefaultReplyTimeout(int msecs)
@@ -227,7 +237,8 @@ Error Transceiver::sendNoReply(Message m)
     // going through an event loop iteration, notifyCompletion would be called and expects the message to
     // be in the queue
     d->m_sendQueue.push_back(std::move(m));
-    if (!d->m_authNegotiator && d->m_sendQueue.size() == 1) {
+    if (d->m_state == TransceiverPrivate::Connected && d->m_sendQueue.size() == 1) {
+        // first in queue, don't wait for an event (which might take a long time) with sending
         mpriv->send(d->m_connection);
     }
     return Error::NoError;
@@ -255,7 +266,8 @@ void Transceiver::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
 
 void TransceiverPrivate::notifyCompletion(void *task)
 {
-    if (m_authNegotiator) {
+    switch (m_state) {
+    case Authenticating: {
         assert(task == m_authNegotiator);
         delete m_authNegotiator;
         m_authNegotiator = nullptr;
@@ -263,7 +275,13 @@ void TransceiverPrivate::notifyCompletion(void *task)
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
         MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
         receiveNextMessage();
-    } else {
+
+        m_state = AwaitingUniqueName;
+        break;
+    }
+    case AwaitingUniqueName: // the code path for this only diverges in the PendingReply callback
+    case Connected: {
+        assert(!m_authNegotiator);
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
             // cout << "Sent message.\n";
             m_sendQueue.pop_front();
@@ -298,7 +316,12 @@ void TransceiverPrivate::notifyCompletion(void *task)
                 delete receivedMessage;
             }
         }
+        break;
     }
+    default:
+        // ### decide what to do here
+        break;
+    };
 }
 
 void TransceiverPrivate::receiveNextMessage()
