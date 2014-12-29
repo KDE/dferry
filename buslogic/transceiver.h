@@ -93,6 +93,8 @@ public:
 
     ConnectionInfo connectionInfo() const;
 
+    std::string uniqueName() const;
+
     IConnection *connection() const; // probably only needed for debugging
     EventDispatcher *eventDispatcher() const;
 

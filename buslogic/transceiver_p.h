@@ -81,6 +81,7 @@ public:
 
     EventDispatcher *m_eventDispatcher;
     ConnectionInfo m_connectionInfo;
+    std::string m_uniqueName;
     AuthNegotiator *m_authNegotiator;
 };
 

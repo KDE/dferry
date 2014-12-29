@@ -172,6 +172,7 @@ void TransceiverPrivate::handleHelloReply()
     ArgumentList::Reader reader(argList);
     cstring busName = reader.readString();
     assert(reader.state() == ArgumentList::Finished);
+    m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
     cout << "teh bus name is:" << busName.begin << endl;
 }
 
@@ -242,6 +243,11 @@ Error Transceiver::sendNoReply(Message m)
         mpriv->send(d->m_connection);
     }
     return Error::NoError;
+}
+
+std::string Transceiver::uniqueName() const
+{
+    return d->m_uniqueName;
 }
 
 IConnection *Transceiver::connection() const
