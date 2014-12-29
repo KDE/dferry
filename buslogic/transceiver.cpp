@@ -245,6 +245,11 @@ Error Transceiver::sendNoReply(Message m)
     return Error::NoError;
 }
 
+ConnectionInfo Transceiver::connectionInfo() const
+{
+    return d->m_connectionInfo;
+}
+
 std::string Transceiver::uniqueName() const
 {
     return d->m_uniqueName;
