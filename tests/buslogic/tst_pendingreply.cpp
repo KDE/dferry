@@ -26,8 +26,6 @@
 #include "imessagereceiver.h"
 #include "message.h"
 #include "pendingreply.h"
-//#include "platformtime.h"
-//#include "timer.h"
 #include "transceiver.h"
 
 #include "../testutil.h"
