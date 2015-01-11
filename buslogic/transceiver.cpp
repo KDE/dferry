@@ -174,6 +174,8 @@ void TransceiverPrivate::handleHelloReply()
     assert(reader.state() == ArgumentList::Finished);
     m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
     cout << "teh bus name is:" << busName.begin << endl;
+
+    m_state = Connected;
 }
 
 void TransceiverPrivate::handleClientConnected()

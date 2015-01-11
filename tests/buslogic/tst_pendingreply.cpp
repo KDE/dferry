@@ -57,7 +57,7 @@ public:
     }
 };
 
-static void testBusAddress()
+static void testBusAddress(bool waitForConnected)
 {
     EventDispatcher eventDispatcher;
     Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
@@ -73,6 +73,13 @@ static void testBusAddress()
     writer.finish();
     busNameRequest.setArgumentList(argList);
 
+    if (waitForConnected) {
+        // finish creating the connection
+        while (trans.uniqueName().empty()) {
+            eventDispatcher.poll();
+        }
+    }
+
     PendingReply busNameReply = trans.send(move(busNameRequest));
     ReplyCheck replyCheck;
     replyCheck.m_eventDispatcher = &eventDispatcher;
@@ -85,6 +92,7 @@ static void testBusAddress()
 
 int main(int argc, char *argv[])
 {
-    testBusAddress();
+    testBusAddress(false);
+    testBusAddress(true);
     std::cout << "Passed!\n";
 }
