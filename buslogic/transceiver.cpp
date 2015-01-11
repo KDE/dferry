@@ -47,6 +47,8 @@ public:
     {
         assert(pr == &m_helloReply);
         m_parent->handleHelloReply();
+        m_parent->m_helloReceiver = nullptr;
+        delete this;
     }
 
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
@@ -166,8 +168,6 @@ void TransceiverPrivate::handleHelloReply()
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
     ArgumentList argList = m_helloReceiver->m_helloReply.reply()->argumentList();
-    delete m_helloReceiver;
-    m_helloReceiver = nullptr;
 
     ArgumentList::Reader reader(argList);
     cstring busName = reader.readString();
