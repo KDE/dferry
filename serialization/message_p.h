@@ -105,7 +105,6 @@ public:
     void notifyCompletionClient();
 
     Message *m_message;
-    // there is no explicit dirty flag; the buffer is simply cleared when dirtying any of the data below.
     chunk m_buffer;
     int m_bufferPos;
 
