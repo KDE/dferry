@@ -241,12 +241,22 @@ ArgumentList::ArgumentList(const ArgumentList &other)
 
 ArgumentList &ArgumentList::operator=(const ArgumentList &other)
 {
-    if (this != &other) {
-        if (!d) {
-            // assigning to a moved-from object: that's fine!
-            d = new Private(*other.d);
-        } else {
+    if (this == &other) {
+        return *this;
+    }
+    if (d) {
+        if (other.d) {
+            // normal case: two non-null pointers
             *d = *other.d;
+        } else {
+            // other is a moved-from object
+            delete d;
+            d = nullptr;
+        }
+    } else {
+        // *this is a moved-from object
+        if (other.d) {
+            d = new Private(*other.d);
         }
     }
     return *this;
@@ -255,7 +265,7 @@ ArgumentList &ArgumentList::operator=(const ArgumentList &other)
 ArgumentList::~ArgumentList()
 {
     delete d;
-    d = 0;
+    d = nullptr;
 }
 
 Error ArgumentList::error() const
