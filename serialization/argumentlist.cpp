@@ -126,10 +126,8 @@ ArgumentList::Private::~Private()
     }
 }
 
-// Macros are really ugly, but here every use saves three lines, and it's nice to be able to write
-// "data is good if X" instead of "data is bad if !X". That stuff should end up the same after
-// optimization anyway.
-// funny condition to avoid the dangling-else problem
+// Macros are icky, but here every use saves three lines.
+// Funny condition to avoid the dangling-else problem.
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     m_state = InvalidData; d->m_error.setCode(errCode); return; }
 
