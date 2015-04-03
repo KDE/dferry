@@ -163,6 +163,7 @@ Message PendingReply::takeReply()
     Message reply;
     if (d->m_isFinished) {
         reply = std::move(*d->m_transceiverOrReply.reply);
+        delete d->m_transceiverOrReply.reply;
         d->m_transceiverOrReply.reply = nullptr;
     }
     return reply;

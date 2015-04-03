@@ -53,6 +53,10 @@ public:
         std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();
         TEST(pr->isFinished());
         TEST(!pr->isError());
+
+        // This is really a different test, it used to reproduce a memory leak under Valgrind
+        Message reply = pr->takeReply();
+
         m_eventDispatcher->interrupt();
     }
 };
