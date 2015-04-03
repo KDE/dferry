@@ -24,38 +24,18 @@
 #ifndef TRANSCEIVER_H
 #define TRANSCEIVER_H
 
-#include "icompletionclient.h"
-
-#include <deque>
-
-/* Transceiver must handle queueing of messages and shuffle messages that go through
- * a different thread's connection (MainConnection) to the right thread's Transceiver.
- * For example, an auxiliary thread calls sendAndAwaitReply(). While the aux thread is waiting,
- * the message must be picked up by the main thread in its event dispatcher, it must wait for
- * the reply and then forward it back to the aux thread.
- * In case the connection is in the current thread, it will simply send and block.
- *
- * When sendAsync() is used, the same things minus the blocking happen.
- *
- * Question1: Does sendAndAwaitReply() send its argument right away, or enqueue it and send
- * messages in order? The former seems less likely to cause "unplanned behavior", the latter might
- * deadlock more easily.
- * I think the second option is preferable because changing the order of calls is Evil.
- *
- * Question 2: How to detect deadlocks?
- * (maybe have a timeout before the full 20(?) seconds timeout where we look for suspicious
- * state, a certain pattern in the send and receive queues or some such)
- */
-
-#include "connectioninfo.h"
-#include "pendingreply.h"
+#include "commutex.h"
 #include "types.h"
 
+#include <string>
+
+class ConnectionInfo;
 class Error;
 class EventDispatcher;
 class IConnection;
 class IMessageReceiver;
 class Message;
+class PendingReply;
 class TransceiverPrivate;
 
 class DFERRY_EXPORT Transceiver
@@ -67,14 +47,25 @@ public:
         ThreadLocalConnection
     };
 
-    // TODO Transceiver(EventDispatcher *dispatcher, const PeerAddress &peer, enum ThreadAffinity);
-    // this sets up a connection ready to use
+    // Reference for passing to another thread; it guarantees that the target Transceiver
+    // either exists or not, but is not currently being destroyed. Yes, the data is all private.
+    class CommRef
+    {
+        friend class Transceiver;
+        TransceiverPrivate *transceiver;
+        CommutexPeer commutex;
+    };
 
-    // convenience, for connecting to the session or system bus
+    // for connecting to the session or system bus
     Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &connectionInfo);
+    // for reusing the connection of a Transceiver in another thread
+    Transceiver(EventDispatcher *dispatcher, CommRef otherTransceiver);
+
     ~Transceiver();
     Transceiver(Transceiver &other) = delete;
     Transceiver &operator=(Transceiver &other) = delete;
+
+    CommRef createCommRef();
 
     void setDefaultReplyTimeout(int msecs);
     int defaultReplyTimeout() const;
@@ -85,7 +76,7 @@ public:
     // if a message expects no reply, that is not absolutely binding; this method allows to send a message that
     // does not expect (request) a reply, but we get it if it comes - not terribly useful in most cases
     // NOTE: this takes ownership of the message! The message will be deleted after sending in some future
-    //       event loop iteration, so it is guaranteed to stay valid until then.
+    //       event loop iteration, so it is guaranteed to stay valid before the next event loop iteration.
     PendingReply send(Message m, int timeoutMsecs = DefaultTimeout);
     // Mostly same as above.
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.

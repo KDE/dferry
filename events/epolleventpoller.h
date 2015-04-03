@@ -33,8 +33,8 @@ class EpollEventPoller : public IEventPoller
 public:
     EpollEventPoller(EventDispatcher *dispatcher);
     ~EpollEventPoller();
-    bool poll(int timeout) override;
-    void interrupt() override;
+    IEventPoller::InterruptAction poll(int timeout) override;
+    void interrupt(IEventPoller::InterruptAction) override;
 
     // TODO figure out how to handle plugging into other event loops in the general case;
     //      there seems to be some single-fd mechanism available on most platforms and where

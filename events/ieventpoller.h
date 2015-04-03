@@ -33,14 +33,20 @@ class IioEventClient;
 class IEventPoller
 {
 public:
+    enum InterruptAction {
+        NoInterrupt = 0,
+        ProcessAuxEvents,
+        Stop
+    };
+
     // if you need to refer to the dispatcher, grab and save the value here - not all implementations
     // need it
     IEventPoller(EventDispatcher *dispatcher);
     virtual ~IEventPoller();
 
-    virtual bool poll(int timeout = -1) = 0; // returns false if interrupted by interrupt()
+    virtual InterruptAction poll(int timeout = -1) = 0;
     // interrupt the waiting for events (from another thread)
-    virtual void interrupt() = 0;
+    virtual void interrupt(InterruptAction action) = 0;
 
     virtual void addIoEventClient(IioEventClient *ioc) = 0;
     virtual void removeIoEventClient(IioEventClient *ioc) = 0;

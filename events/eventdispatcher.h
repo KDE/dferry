@@ -37,8 +37,8 @@ public:
     void operator=(EventDispatcher &other) = delete;
 
     bool poll(int timeout = -1); // returns false if interrupted by interrupt()
-    // asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
-    // explicitly allowed to be called from another thread, but not only
+    // Asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
+    // explicitly allowed to be called from another thread, but not only.
     void interrupt();
 
 private:

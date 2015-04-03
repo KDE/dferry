@@ -26,6 +26,7 @@
 #include "argumentlist.h"
 #include "connectioninfo.h"
 #include "eavesdroppermodel.h"
+#include "error.h"
 #include "eventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"

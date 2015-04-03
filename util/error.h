@@ -85,6 +85,7 @@ public:
         DetachedPendingReply,
         Timeout,
         Connection,
+        LocalDisconnect,
         MalformedReply, // Catch-all for failed reply validation - can't be corrected locally anyway.
                         // Since the reply isn't fully pre-validated for performance reasons,
                         // absence of this error is no guarantee of well-formedness.

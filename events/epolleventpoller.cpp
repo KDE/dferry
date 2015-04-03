@@ -55,41 +55,52 @@ EpollEventPoller::~EpollEventPoller()
     close(m_epollFd);
 }
 
-bool EpollEventPoller::poll(int timeout)
+IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
 {
+    IEventPoller::InterruptAction ret = IEventPoller::NoInterrupt;
+
     static const int maxEvPerPoll = 8;
     struct epoll_event results[maxEvPerPoll];
     int nresults = epoll_wait(m_epollFd, results, maxEvPerPoll, timeout);
     if (nresults < 0) {
         // error?
-        return true;
+        return ret;
     }
 
     for (int i = 0; i < nresults; i++) {
         struct epoll_event *evt = results + i;
         if (evt->events & EPOLLIN) {
-            if (evt->data.fd == m_interruptPipe[0]) {
-                // read any bytes written by the other side for cleanliness reasons
+            if (evt->data.fd != m_interruptPipe[0]) {
+                EventDispatcherPrivate::get(m_dispatcher)->notifyClientForReading(evt->data.fd);
+            } else {
+                // interrupt; read bytes from pipe to clear buffers and get the interrupt type
+                ret = IEventPoller::ProcessAuxEvents;
                 char buf;
                 while (read(m_interruptPipe[0], &buf, 1) > 0) {
+                    if (buf == 'S') {
+                        ret = IEventPoller::Stop;
+                    }
                 }
-                // HACK - we are discarding the rest of the events
+                // ### discarding the rest of the events
                 // this works in our currently only use case, interrupting poll once to reap a thread
-                return false;
+                if (ret == IEventPoller::Stop) {
+                    return ret;
+                }
             }
-            EventDispatcherPrivate::get(m_dispatcher)->notifyClientForReading(evt->data.fd);
         }
         if (evt->events & EPOLLOUT) {
             EventDispatcherPrivate::get(m_dispatcher)->notifyClientForWriting(evt->data.fd);
         }
     }
-    return true;
+    return ret;
 }
 
-void EpollEventPoller::interrupt()
+void EpollEventPoller::interrupt(IEventPoller::InterruptAction action)
 {
+    assert(action == IEventPoller::ProcessAuxEvents || action == IEventPoller::Stop);
+
     // write a byte to the write end so the poll waiting on the read end returns
-    char buf = 'I';
+    char buf = (action == IEventPoller::Stop) ? 'S' : 'N';
     write(m_interruptPipe[1], &buf, 1);
 }
 

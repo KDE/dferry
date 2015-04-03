@@ -26,34 +26,82 @@
 
 #include "transceiver.h"
 
+#include "connectioninfo.h"
+#include "eventdispatcher_p.h"
 #include "icompletionclient.h"
+#include "spinlock.h"
 
 #include <deque>
 #include <unordered_map>
+#include <vector>
 
 class AuthNegotiator;
 class HelloReceiver;
 class IMessageReceiver;
 class ClientConnectedHandler;
 
+/*
+ How to handle destruction of connected Transceivers
+
+ Main thread transceiver destroyed: Need to
+ - "cancel" registered PendingReplies from other threads
+   (I guess also own ones, we're not doing that, I think...)
+ - Make sure that other threads stop calling us because that's going to be a memory error when
+   our instance has been deleted
+
+ Secondary thread Transceiver destroyed: Need to
+  - "cancel" PendingReplies registered in main thread
+  - unregister from main thread as receiver of spontaneous messages because receiving events about
+    it is going to be a memory error when our instance has been deleted
+
+ Problem areas:
+  - destroying a Transceiver with a locked lock (locked from another thread, obviously)
+    - can solved by "thoroughly" disconnecting from everything before destruction
+  - deadlocks / locking order - preliminary solution: always main Transceiver first, then secondary
+    - what about the lock in EventDispatcher?
+  - blocking: secondary blocking (as in waiting for an event - both Transceivers wait on *locks* of
+    the other) on main is okay, it does that all the time anyway. main blocking on secondary is
+    probably (not sure) not okay.
+
+ Let's define some invariants:
+  - When a Transceiver is destroyed, all its PendingReply instances must have been  detached
+    (completed with or without error) or destroyed. "Its" means sent through that Transceiver's
+    send() method, not when a PendingReply is using the connection of the Transceiver but send()
+    was called on the Transceiver of another thread.
+  - When a master and a secondary transceiver try to communicate in any way, and the other party
+    has been destroyed, communication will fail gracefully and there will be no crash or undefined
+    behavior. Any pending replies that cannot finish successfully anymore will finish with an
+    LocalDisconnect error.
+ */
+
 class TransceiverPrivate : public ICompletionClient
 {
 public:
     static TransceiverPrivate *get(Transceiver *t) { return t->d; }
 
-    TransceiverPrivate(EventDispatcher *dispatcher, const ConnectionInfo &connectionInfo);
+    TransceiverPrivate(EventDispatcher *dispatcher);
+    void close();
 
     void authAndHello(Transceiver *parent);
     void handleHelloReply();
     void handleClientConnected();
 
-    void enqueueSendFromOtherThread(Message *m);
-    void addReplyFromOtherThread(Message *m);
-    void notifyCompletion(void *task) override;
+    int takeNextSerial();
 
+    Error prepareSend(Message *msg);
+    void sendPreparedMessage(Message msg);
+
+    void notifyCompletion(void *task) override;
+    bool maybeDispatchToPendingReply(Message *m);
     void receiveNextMessage();
 
     void unregisterPendingReply(PendingReplyPrivate *p);
+    void cancelAllPendingReplies();
+    void discardPendingRepliesForSecondaryThread(TransceiverPrivate *t);
+
+    // For cross-thread communication between thread Transceivers. We could have a more complete event
+    // system, but there is currently no need, so keep it simple and limited.
+    void processEvent(Event *evt); // called from thread-local EventDispatcher
 
     enum {
         Unconnected,
@@ -65,16 +113,13 @@ public:
 
     IMessageReceiver *m_client;
     Message *m_receivingMessage;
-    int m_sendSerial; // TODO handle recycling of serials
-    int m_defaultTimeout;
+
     std::deque<Message> m_sendQueue; // waiting to be sent
-    std::unordered_map<uint32, PendingReplyPrivate *> m_pendingReplies; // replies we're waiting for
 
     // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver
     // equals this, so that the main thread knows it's the main thread and not just a thread-local
     // transceiver.
     IConnection *m_connection;
-    Transceiver *m_mainThreadTransceiver;
 
     HelloReceiver *m_helloReceiver;
     ClientConnectedHandler *m_clientConnectedHandler;
@@ -83,6 +128,42 @@ public:
     ConnectionInfo m_connectionInfo;
     std::string m_uniqueName;
     AuthNegotiator *m_authNegotiator;
+
+    int m_defaultTimeout;
+
+    class PendingReplyRecord
+    {
+    public:
+        PendingReplyRecord(PendingReplyPrivate *pr) : isForSecondaryThread(false), ptr(pr) {}
+        PendingReplyRecord(TransceiverPrivate *tp) : isForSecondaryThread(true), ptr(tp) {}
+
+        PendingReplyPrivate *asPendingReply() const
+            { return isForSecondaryThread ? nullptr : static_cast<PendingReplyPrivate *>(ptr); }
+        TransceiverPrivate *asTransceiver() const
+            { return isForSecondaryThread ? static_cast<TransceiverPrivate *>(ptr) : nullptr; }
+
+    private:
+        bool isForSecondaryThread;
+        void *ptr;
+    };
+    std::unordered_map<uint32, PendingReplyRecord> m_pendingReplies; // replies we're waiting for
+
+    Spinlock m_lock; // only one lock because things done with lock held are quick, and anyway you shouldn't
+                     // be using one connection from multiple threads if you need best performance
+
+    // here we break the grouping by topic area to group together the variables protected by m_lock
+    // BEGIN variables protected by m_lock
+    int m_sendSerial; // TODO handle recycling of serials
+    // ATTENTION! Order here decides destruction order if we don't explicitly clear the containers in
+    // the destructor. (Note: constructors run in member order, destructors in reversed member order)
+    // This order should be suitable.
+    std::string m_uniqueNameForSecondaries; // avoids a (read-write) lock around m_uniqueName
+    std::unordered_map<TransceiverPrivate *, CommutexPeer> m_secondaryThreadLinks;
+    std::vector<CommutexPeer> m_unredeemedCommRefs; // for createCommRef() and the constructor from CommRef
+    // END variables protected by m_lock
+
+    TransceiverPrivate *m_mainThreadTransceiver;
+    CommutexPeer m_mainThreadLink;
 };
 
 #endif // TRANSCEIVER_P_H

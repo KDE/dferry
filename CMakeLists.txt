@@ -38,6 +38,7 @@ set(DFER_SOURCES
     connection/localsocket.cpp
     connection/stringtools.cpp
     events/epolleventpoller.cpp
+    events/event.cpp
     events/eventdispatcher.cpp
     events/ieventpoller.cpp
     events/iioeventclient.cpp
@@ -73,6 +74,7 @@ set(DFER_PRIVATE_HEADERS
     connection/localsocket.h
     connection/platform.h
     connection/stringtools.h
+    events/event.h
     events/epolleventpoller.h
     events/ieventpoller.h
     events/iioeventclient.h

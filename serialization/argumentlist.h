@@ -88,6 +88,8 @@ public:
         NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
         InvalidData, // non-recoverable
         // Writer states when the next type is still open (not iterating in an array or dict)
+        // ### it is inconsistent to have DictKey, but nothing for other constraints. The name AnyData is
+        //     also weird. Remove DictKey and call AnyData InputData?
         AnyData, // occurs in Writer when you are free to add any type
         DictKey, // occurs in Writer when the next type must be suitable for a dict key -
                  // a simple string or numeric type.
@@ -100,7 +102,7 @@ public:
         NextArrayEntry,
         EndArray,
         BeginDict,
-        NextDictEntry,
+        NextDictEntry, // 10
         EndDict,
         BeginStruct,
         EndStruct,
@@ -111,7 +113,7 @@ public:
         Boolean,
         Int16,
         Uint16,
-        Int32,
+        Int32, // 20
         Uint32,
         Int64,
         Uint64,
@@ -174,7 +176,7 @@ public:
         void replaceData(chunk data); // TODO move this to ArgumentList
 
         bool isFinished() const { return m_state == Finished; }
-        bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; }
+        bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; } // TODO remove
 
         // when @p isEmpty is not null and the array contains no elements, the array is
         // iterated over once so you can get the type information. due to lack of data,

@@ -26,6 +26,8 @@
 
 #include "argumentlist.h"
 #include "authnegotiator.h"
+#include "event.h"
+#include "eventdispatcher_p.h"
 #include "icompletionclient.h"
 #include "imessagereceiver.h"
 #include "iserver.h"
@@ -35,6 +37,7 @@
 #include "pendingreply.h"
 #include "pendingreply_p.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 
@@ -72,7 +75,7 @@ public:
     TransceiverPrivate *m_parent;
 };
 
-TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const ConnectionInfo &ci)
+TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
    : m_state(Unconnected),
      m_client(nullptr),
      m_receivingMessage(nullptr),
@@ -83,16 +86,16 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher, const Connec
      m_helloReceiver(nullptr),
      m_clientConnectedHandler(nullptr),
      m_eventDispatcher(dispatcher),
-     m_connectionInfo(ci),
      m_authNegotiator(nullptr)
 {
 }
 
 Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
-   : d(new TransceiverPrivate(dispatcher, ci))
+   : d(new TransceiverPrivate(dispatcher))
 {
-    cout << "session bus socket type: " << ci.socketType() << '\n';
-    cout << "session bus path: " << ci.path() << '\n';
+    d->m_connectionInfo = ci;
+    assert(d->m_eventDispatcher);
+    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_transceiverToNotify = d;
 
     if (ci.bus() == ConnectionInfo::Bus::None || ci.socketType() == ConnectionInfo::SocketType::None ||
         ci.role() == ConnectionInfo::Role::None) {
@@ -102,7 +105,6 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
     if (ci.role() == ConnectionInfo::Role::Server) {
         if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
             // this sets up a server that will be destroyed after accepting exactly one connection
-            cout << "Transceiver constructor: setting up server.\n";
             d->m_clientConnectedHandler = new ClientConnectedHandler;
             d->m_clientConnectedHandler->m_server = IServer::create(ci);
             d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
@@ -117,23 +119,50 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
     } else {
         d->m_connection = IConnection::create(ci);
         d->m_connection->setEventDispatcher(dispatcher);
-        cout << "connection is " << (d->m_connection->isOpen() ? "open" : "closed") << ".\n";
         if (ci.bus() == ConnectionInfo::Bus::Session || ci.bus() == ConnectionInfo::Bus::System) {
-            cerr << "Transceiver constructor: authAndHello." << endl;
             d->authAndHello(this);
-
             d->m_state = TransceiverPrivate::Authenticating;
         } else if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
-            cerr << "Transceiver constructor: direct to message exchange" << endl;
             d->receiveNextMessage();
-
             d->m_state = TransceiverPrivate::Connected;
         }
     }
 }
 
+Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef)
+   : d(new TransceiverPrivate(dispatcher))
+{
+    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_transceiverToNotify = d;
+
+    d->m_mainThreadLink = std::move(mainTransceiverRef.commutex);
+    CommutexLocker locker(&d->m_mainThreadLink);
+    Commutex *const id = d->m_mainThreadLink.id();
+    if (!id) {
+        return; // stay in Unconnected state
+    }
+
+    // TODO how do we handle m_state?
+
+    d->m_mainThreadTransceiver = mainTransceiverRef.transceiver;
+    TransceiverPrivate *mainD = d->m_mainThreadTransceiver;
+    // m_connectionInfo *currently* can't change after initialization, so we don't need to lock
+    d->m_connectionInfo = mainD->m_connectionInfo;
+
+    // redeem the reference in the main Transceiver
+    SpinLocker mainLocker(&mainD->m_lock);
+    auto it = find_if(mainD->m_unredeemedCommRefs.begin(), mainD->m_unredeemedCommRefs.end(),
+                      [id](const CommutexPeer &item) { return item.id() == id; } );
+    assert(it != mainD->m_unredeemedCommRefs.end());
+    mainD->m_secondaryThreadLinks.emplace(d, std::move(*it));
+    mainD->m_unredeemedCommRefs.erase(it);
+
+    d->m_uniqueName = mainD->m_uniqueNameForSecondaries;
+}
+
 Transceiver::~Transceiver()
 {
+    d->close();
+
     delete d->m_connection;
     delete d->m_authNegotiator;
     delete d->m_helloReceiver;
@@ -141,6 +170,46 @@ Transceiver::~Transceiver()
 
     delete d;
     d = nullptr;
+}
+
+void TransceiverPrivate::close()
+{
+    // Can't be main and secondary at the main time - it could be made to work, but what for?
+    assert(m_secondaryThreadLinks.empty() || !m_mainThreadTransceiver);
+
+    if (m_mainThreadTransceiver) {
+        CommutexUnlinker unlinker(&m_mainThreadLink);
+        if (unlinker.hasLock()) {
+            SecondaryTransceiverDisconnectEvent *evt = new SecondaryTransceiverDisconnectEvent();
+            evt->transceiver = this;
+            EventDispatcherPrivate::get(m_mainThreadTransceiver->m_eventDispatcher)
+                ->queueEvent(std::unique_ptr<Event>(evt));
+        }
+    }
+
+    // Destroy whatever is suitable and available at a given time, in order to avoid things like
+    // one secondary thread blocking another indefinitely and smaller dependency-related slowdowns.
+    while (!m_secondaryThreadLinks.empty()) {
+        for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
+
+            CommutexUnlinker unlinker(&it->second, false);
+            if (unlinker.willSucceed()) {
+                if (unlinker.hasLock()) {
+                    MainTransceiverDisconnectEvent *evt = new MainTransceiverDisconnectEvent();
+                    EventDispatcherPrivate::get(it->first->m_eventDispatcher)
+                        ->queueEvent(std::unique_ptr<Event>(evt));
+                }
+                unlinker.unlinkNow(); // don't access the element after erasing it, finish it now
+                it = m_secondaryThreadLinks.erase(it);
+            } else {
+                ++it; // don't block, try again next iteration
+            }
+        }
+    }
+
+    cancelAllPendingReplies();
+
+    EventDispatcherPrivate::get(m_eventDispatcher)->m_transceiverToNotify = nullptr;
 }
 
 void TransceiverPrivate::authAndHello(Transceiver *parent)
@@ -170,10 +239,25 @@ void TransceiverPrivate::handleHelloReply()
     ArgumentList argList = m_helloReceiver->m_helloReply.reply()->argumentList();
 
     ArgumentList::Reader reader(argList);
+    assert(reader.state() == ArgumentList::String);
     cstring busName = reader.readString();
     assert(reader.state() == ArgumentList::Finished);
     m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
-    cout << "teh bus name is:" << busName.begin << endl;
+
+    // update unique name for future secondaries...
+    SpinLocker locker(&m_lock);
+    m_uniqueNameForSecondaries = m_uniqueName;
+
+    // and current secondaries
+    UniqueNameReceivedEvent evt;
+    evt.uniqueName = m_uniqueName;
+    for (auto &it : m_secondaryThreadLinks) {
+        CommutexLocker otherLocker(&it.second);
+        if (otherLocker.hasLock()) {
+            EventDispatcherPrivate::get(it.first->m_eventDispatcher)
+                ->queueEvent(std::unique_ptr<Event>(new UniqueNameReceivedEvent(evt)));
+        }
+    }
 
     m_state = Connected;
 }
@@ -201,25 +285,85 @@ int Transceiver::defaultReplyTimeout() const
     return d->m_defaultTimeout;
 }
 
+int TransceiverPrivate::takeNextSerial()
+{
+    SpinLocker locker(&m_lock);
+    return m_sendSerial++;
+}
+
+Error TransceiverPrivate::prepareSend(Message *msg)
+{
+    if (!m_mainThreadTransceiver) {
+        msg->setSerial(takeNextSerial());
+    } else {
+        // we take a serial from the other Transceiver and then serialize locally in order to keep the CPU
+        // expense of serialization local, even though it's more complicated than doing everything in the
+        // other thread / Transceiver.
+        CommutexLocker locker(&m_mainThreadLink);
+        if (locker.hasLock()) {
+            msg->setSerial(m_mainThreadTransceiver->takeNextSerial());
+        } else {
+            return Error::LocalDisconnect;
+        }
+    }
+
+    MessagePrivate *const mpriv = MessagePrivate::get(msg); // this is unchanged by move()ing the owning Message.
+    if (!mpriv->serialize()) {
+        return mpriv->m_error;
+    }
+    return Error::NoError;
+}
+
+void TransceiverPrivate::sendPreparedMessage(Message msg)
+{
+    MessagePrivate *const mpriv = MessagePrivate::get(&msg);
+    mpriv->setCompletionClient(this);
+    m_sendQueue.push_back(std::move(msg));
+    if (m_state == TransceiverPrivate::Connected && m_sendQueue.size() == 1) {
+        // first in queue, don't wait for some other event to trigger sending
+        mpriv->send(m_connection);
+    }
+}
+
 PendingReply Transceiver::send(Message m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
         timeoutMsecs = d->m_defaultTimeout;
     }
 
+    Error error = d->prepareSend(&m);
+
     PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(d->m_eventDispatcher, timeoutMsecs);
     pendingPriv->m_transceiverOrReply.transceiver = d;
     pendingPriv->m_receiver = nullptr;
-    pendingPriv->m_serial = d->m_sendSerial;
-    d->m_pendingReplies.emplace(d->m_sendSerial, pendingPriv);
+    pendingPriv->m_serial = m.serial();
 
-    Error sendError = sendNoReply(std::move(m));
-    if (sendError.isError()) {
+    // even if we're handing off I/O to a main Transceiver, keep a record because that simplifies
+    // aborting all pending replies when we disconnect from the main Transceiver, no matter which
+    // side initiated the disconnection.
+    d->m_pendingReplies.emplace(m.serial(), pendingPriv);
+
+    if (error.isError()) {
         // Signal the error asynchronously, in order to get the same delayed completion callback as in
         // the non-error case. This should make the behavior more predictable and client code harder to
         // accidentally get wrong. To detect errors immediately, PendingReply::error() can be used.
-        pendingPriv->m_error = sendError;
-        pendingPriv->m_replyTimeout.setInterval(0);
+        pendingPriv->m_error = error;
+        pendingPriv->m_replyTimeout.start(0);
+    } else {
+        if (!d->m_mainThreadTransceiver) {
+            d->sendPreparedMessage(std::move(m));
+        } else {
+            CommutexLocker locker(&d->m_mainThreadLink);
+            if (locker.hasLock()) {
+                std::unique_ptr<SendMessageWithPendingReplyEvent> evt(new SendMessageWithPendingReplyEvent);
+                evt->message = std::move(m);
+                evt->transceiver = d;
+                EventDispatcherPrivate::get(d->m_mainThreadTransceiver->m_eventDispatcher)
+                    ->queueEvent(std::move(evt));
+            } else {
+                pendingPriv->m_error = Error::LocalDisconnect;
+            }
+        }
     }
 
     return PendingReply(pendingPriv);
@@ -229,20 +373,27 @@ Error Transceiver::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
-    m.setSerial(d->m_sendSerial++);
-    MessagePrivate *const mpriv = MessagePrivate::get(&m); // this is unchanged by move()ing the owning Message.
-    mpriv->setCompletionClient(d);
-    if (!mpriv->serialize()) {
-        return mpriv->m_error;
+    Error error = d->prepareSend(&m);
+    if (error.isError()) {
+        return error;
     }
 
     // pass ownership to the send queue now because if the IO system decided to send the message without
     // going through an event loop iteration, notifyCompletion would be called and expects the message to
     // be in the queue
-    d->m_sendQueue.push_back(std::move(m));
-    if (d->m_state == TransceiverPrivate::Connected && d->m_sendQueue.size() == 1) {
-        // first in queue, don't wait for an event (which might take a long time) with sending
-        mpriv->send(d->m_connection);
+
+    if (!d->m_mainThreadTransceiver) {
+        d->sendPreparedMessage(std::move(m));
+    } else {
+        CommutexLocker locker(&d->m_mainThreadLink);
+        if (locker.hasLock()) {
+            std::unique_ptr<SendMessageEvent> evt(new SendMessageEvent);
+            evt->message = std::move(m);
+            EventDispatcherPrivate::get(d->m_mainThreadTransceiver->m_eventDispatcher)
+                ->queueEvent(std::move(evt));
+        } else {
+            return Error::LocalDisconnect;
+        }
     }
     return Error::NoError;
 }
@@ -307,24 +458,27 @@ void TransceiverPrivate::notifyCompletion(void *task)
 
             receiveNextMessage();
 
-            bool replyDispatched = false;
-
-            if (receivedMessage->type() == Message::MethodReturnMessage ||
-                receivedMessage->type() == Message::ErrorMessage) {
-
-                auto it = m_pendingReplies.find(receivedMessage->replySerial());
-                if (it != m_pendingReplies.end()) {
-                    replyDispatched = true;
-                    PendingReplyPrivate *pr = it->second;
-                    m_pendingReplies.erase(it);
-
-                    pr->notifyDone(receivedMessage);
-                }
-            }
-
-            if (!replyDispatched) {
+            if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {
                     m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
+                }
+                // dispatch to other threads listening to spontaneous messages, if any
+                SpinLocker locker(&m_lock);
+                for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
+                    SpontaneousMessageReceivedEvent *evt = new SpontaneousMessageReceivedEvent();
+                    evt->message = *receivedMessage;
+
+                    CommutexLocker otherLocker(&it->second);
+                    if (otherLocker.hasLock()) {
+                        EventDispatcherPrivate::get(it->first->m_eventDispatcher)
+                            ->queueEvent(std::unique_ptr<Event>(evt));
+                        ++it;
+                    } else {
+                        TransceiverPrivate *transceiver = it->first;
+                        it = m_secondaryThreadLinks.erase(it);
+                        discardPendingRepliesForSecondaryThread(transceiver);
+                        delete evt;
+                    }
                 }
                 delete receivedMessage;
             }
@@ -337,6 +491,35 @@ void TransceiverPrivate::notifyCompletion(void *task)
     };
 }
 
+bool TransceiverPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
+{
+    if (receivedMessage->type() != Message::MethodReturnMessage &&
+        receivedMessage->type() != Message::ErrorMessage) {
+        return false;
+    }
+
+    auto it = m_pendingReplies.find(receivedMessage->replySerial());
+    if (it == m_pendingReplies.end()) {
+        return false;
+    }
+
+    if (PendingReplyPrivate *pr = it->second.asPendingReply()) {
+        m_pendingReplies.erase(it);
+        assert(!pr->m_isFinished);
+        pr->notifyDone(receivedMessage);
+    } else {
+        // forward to other thread's Transceiver
+        TransceiverPrivate *transceiver = it->second.asTransceiver();
+        m_pendingReplies.erase(it);
+        assert(transceiver);
+        PendingReplySuccessEvent *evt = new PendingReplySuccessEvent;
+        evt->reply = std::move(*receivedMessage);
+        delete receivedMessage;
+        EventDispatcherPrivate::get(transceiver->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
+    }
+    return true;
+}
+
 void TransceiverPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
@@ -347,10 +530,133 @@ void TransceiverPrivate::receiveNextMessage()
 
 void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)
 {
+    if (m_mainThreadTransceiver) {
+        CommutexLocker otherLocker(&m_mainThreadLink);
+        if (otherLocker.hasLock()) {
+            PendingReplyCancelEvent *evt = new PendingReplyCancelEvent;
+            evt->serial = p->m_serial;
+            EventDispatcherPrivate::get(m_mainThreadTransceiver->m_eventDispatcher)
+                ->queueEvent(std::unique_ptr<Event>(evt));
+        }
+    }
 #ifndef NDEBUG
     auto it = m_pendingReplies.find(p->m_serial);
     assert(it != m_pendingReplies.end());
-    assert(it->second == p);
+    if (!m_mainThreadTransceiver) {
+        assert(it->second.asPendingReply());
+        assert(it->second.asPendingReply() == p);
+    }
 #endif
     m_pendingReplies.erase(p->m_serial);
+}
+
+void TransceiverPrivate::cancelAllPendingReplies()
+{
+    // No locking because we should have no connections to other threads anymore at this point.
+    // No const iteration followed by container clear because that has different semantics - many
+    // things can happen in a callback...
+    // In case we have pending replies for secondary threads, and we cancel all pending replies,
+    // that is because we're shutting down, which we told the secondary thread, and it will deal
+    // with bulk cancellation of replies. We just throw away our records about them.
+    for (auto it = m_pendingReplies.begin() ; it != m_pendingReplies.end(); ) {
+        PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
+        it = m_pendingReplies.erase(it);
+        if (pendingPriv) {
+            pendingPriv->doErrorCompletion(Error::LocalDisconnect);
+        }
+    }
+}
+
+void TransceiverPrivate::discardPendingRepliesForSecondaryThread(TransceiverPrivate *transceiver)
+{
+    for (auto it = m_pendingReplies.begin() ; it != m_pendingReplies.end(); ) {
+        if (it->second.asTransceiver() == transceiver) {
+            it = m_pendingReplies.erase(it);
+            // notification and deletion are handled on the event's source thread
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TransceiverPrivate::processEvent(Event *evt)
+{
+    // cerr << "TransceiverPrivate::processEvent() with event type " << evt->type << std::endl;
+
+    switch (evt->type) {
+    case Event::SendMessage:
+        sendPreparedMessage(std::move(static_cast<SendMessageEvent *>(evt)->message));
+        break;
+
+    case Event::SendMessageWithPendingReply: {
+        SendMessageWithPendingReplyEvent *pre = static_cast<SendMessageWithPendingReplyEvent *>(evt);
+        m_pendingReplies.emplace(pre->message.serial(), pre->transceiver);
+        sendPreparedMessage(std::move(pre->message));
+        break;
+    }
+    case Event::SpontaneousMessageReceived:
+        if (m_client) {
+            SpontaneousMessageReceivedEvent *smre = static_cast<SpontaneousMessageReceivedEvent *>(evt);
+            m_client->spontaneousMessageReceived(Message(move(smre->message)));
+        }
+        break;
+
+    case Event::PendingReplySuccess:
+        maybeDispatchToPendingReply(&static_cast<PendingReplySuccessEvent *>(evt)->reply);
+        break;
+
+    case Event::PendingReplyFailure: {
+        PendingReplyFailureEvent *prfe = static_cast<PendingReplyFailureEvent *>(evt);
+        auto it = m_pendingReplies.find(prfe->m_serial);
+        if (it == m_pendingReplies.end()) {
+            // this can fail spuriously due to the asynchrony of event-based communication
+            assert(false);
+            break;
+        }
+        PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
+        m_pendingReplies.erase(it);
+        pendingPriv->doErrorCompletion(prfe->m_error);
+        break;
+    }
+
+    case Event::PendingReplyCancel:
+        // This comes from a secondary thread, which handles PendingReply notification itself.
+        m_pendingReplies.erase(static_cast<PendingReplyCancelEvent *>(evt)->serial);
+        break;
+
+    case Event::SecondaryTransceiverDisconnect: {
+        SecondaryTransceiverDisconnectEvent *sde = static_cast<SecondaryTransceiverDisconnectEvent *>(evt);
+        // delete our records to make sure we don't call into it in the future!
+        auto found = m_secondaryThreadLinks.find(sde->transceiver);
+        if (found == m_secondaryThreadLinks.end()) {
+            // looks like we've noticed the disappearance of the other thread earlier
+            return;
+        }
+        m_secondaryThreadLinks.erase(found);
+        discardPendingRepliesForSecondaryThread(sde->transceiver);
+        break;
+    }
+    case Event::MainTransceiverDisconnect:
+        // since the main thread *sent* us the event, it knows that it needs to clean up and it will
+        m_mainThreadTransceiver = nullptr;
+        cancelAllPendingReplies();
+        break;
+
+    case Event::UniqueNameReceived:
+        // We get this when the unique name became available after we were linked up with the main thread
+        m_uniqueName = static_cast<UniqueNameReceivedEvent *>(evt)->uniqueName;
+        break;
+
+    }
+}
+
+Transceiver::CommRef Transceiver::createCommRef()
+{
+    // TODO this is a good time to clean up "dead" CommRefs, where the counterpart was destroyed.
+    CommRef ret;
+    ret.transceiver = d;
+    pair<CommutexPeer, CommutexPeer> link = CommutexPeer::createLink();
+    d->m_unredeemedCommRefs.emplace_back(move(link.first));
+    ret.commutex = move(link.second);
+    return ret;
 }

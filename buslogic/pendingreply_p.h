@@ -48,6 +48,7 @@ public:
 
     // for Transceiver
     void notifyDone(Message *reply);
+    void doErrorCompletion(Error error);
     // for m_replyTimeout
     void notifyCompletion(void *task) override;
 

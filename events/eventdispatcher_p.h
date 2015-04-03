@@ -26,16 +26,26 @@
 
 #include "eventdispatcher.h"
 
+#include "message.h"
 #include "platform.h"
+#include "spinlock.h"
 #include "types.h"
 
 #include <map>
+#include <memory>
 #include <unordered_map>
+#include <vector>
 
+class Event;
 class IioEventClient;
 class IEventPoller;
+class Message;
+class PendingReplyPrivate;
 class Timer;
+class TransceiverPrivate;
 
+// note that the main purpose of EventDispatcher so far is dispatching I/O events; dispatching Event
+// instances is secondary
 class EventDispatcherPrivate
 {
 public:
@@ -60,6 +70,12 @@ public:
     friend class Timer;
     void addTimer(Timer *timer);
     void removeTimer(Timer *timer);
+    // for Transceiver
+    // this is similar to interrupt(), but doesn't make poll() return false and will call
+    // m_transceiverToNotify() -> processQueuedEvents()
+    void wakeForEvents();
+    void queueEvent(std::unique_ptr<Event> evt); // safe to call from any thread
+    void processAuxEvents();
 
     IEventPoller *m_poller;
     std::unordered_map<FileDescriptor, IioEventClient*> m_ioClients;
@@ -76,6 +92,11 @@ public:
     // a client called from trigger()
     Timer *m_triggeredTimer = nullptr;
     bool m_isTriggeredTimerPendingRemoval = false;
+    // for inter thread event delivery to Transceiver
+    TransceiverPrivate *m_transceiverToNotify = nullptr;
+
+    Spinlock m_queuedEventsLock;
+    std::vector<std::unique_ptr<Event>> m_queuedEvents;
 };
 
 #endif

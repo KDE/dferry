@@ -178,12 +178,16 @@ void PendingReplyPrivate::notifyCompletion(void *task)
     if (m_transceiverOrReply.transceiver) {
         m_transceiverOrReply.transceiver->unregisterPendingReply(this);
     }
+    doErrorCompletion(Error::Timeout);
+}
 
+void PendingReplyPrivate::doErrorCompletion(Error error)
+{
     // When there is an error before or during sending, we already have an error, and the timeout it set to
     // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
     // to API clients. In that case, the timeout itself is not the error.
     if (!m_error.isError()) {
-        m_error.setCode(Error::Timeout);
+        m_error = error;
     }
     m_isFinished = true;
     m_transceiverOrReply.reply = nullptr;

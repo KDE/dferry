@@ -8,4 +8,6 @@ MACRO(BUSLOGICTESTS)
     ENDFOREACH(_testname)
 ENDMACRO(BUSLOGICTESTS)
 
-BUSLOGICTESTS(pendingreply)
+BUSLOGICTESTS(pendingreply threads)
+
+target_link_libraries(tst_threads pthread)

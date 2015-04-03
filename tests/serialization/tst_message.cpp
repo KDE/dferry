@@ -23,6 +23,7 @@
 
 #include "argumentlist.h"
 #include "connectioninfo.h"
+#include "error.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"

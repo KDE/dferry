@@ -72,7 +72,7 @@ LocalServer::~LocalServer()
 void LocalServer::notifyRead()
 {
     setEventDispatcher(nullptr);
-    int connFd = accept(m_listenFd, 0, 0);
+    int connFd = accept(m_listenFd, nullptr, nullptr);
     if (connFd < 0) {
         return;
     }

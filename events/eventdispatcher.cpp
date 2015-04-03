@@ -25,13 +25,17 @@
 #include "eventdispatcher_p.h"
 
 #include "epolleventpoller.h"
+#include "event.h"
 #include "ieventpoller.h"
 #include "iioeventclient.h"
 #include "platformtime.h"
+#include "transceiver_p.h"
 #include "timer.h"
 
 #include <algorithm>
 #include <cassert>
+
+#include <iostream>
 
 //#define EVENTDISPATCHER_DEBUG
 
@@ -76,8 +80,12 @@ bool EventDispatcher::poll(int timeout)
 #ifdef EVENTDISPATCHER_DEBUG
     printf("EventDispatcher::poll(): timeout=%d, nextDue=%d.\n", timeout, nextDue);
 #endif
-    if (!d->m_poller->poll(timeout)) {
+    IEventPoller::InterruptAction interrupAction = d->m_poller->poll(timeout);
+
+    if (interrupAction == IEventPoller::Stop) {
         return false;
+    } else if (interrupAction == IEventPoller::ProcessAuxEvents && d->m_transceiverToNotify) {
+        d->processAuxEvents();
     }
     d->triggerDueTimers();
     return true;
@@ -85,7 +93,12 @@ bool EventDispatcher::poll(int timeout)
 
 void EventDispatcher::interrupt()
 {
-    d->m_poller->interrupt();
+    d->m_poller->interrupt(IEventPoller::Stop);
+}
+
+void EventDispatcherPrivate::wakeForEvents()
+{
+    m_poller->interrupt(IEventPoller::ProcessAuxEvents);
 }
 
 bool EventDispatcherPrivate::addIoEventClient(IioEventClient *ioc)
@@ -266,4 +279,30 @@ void EventDispatcherPrivate::triggerDueTimers()
         }
     }
     m_triggerTime = 0;
+}
+
+void EventDispatcherPrivate::queueEvent(std::unique_ptr<Event> evt)
+{
+    // std::cerr << "EventDispatcherPrivate::queueEvent() " << evt->type << " " << this << std::endl;
+    {
+        SpinLocker locker(&m_queuedEventsLock);
+        m_queuedEvents.emplace_back(std::move(evt));
+    }
+    wakeForEvents();
+}
+
+void EventDispatcherPrivate::processAuxEvents()
+{
+    // std::cerr << "EventDispatcherPrivate::processAuxEvents() " << this << std::endl;
+    // don't hog the lock while processing the events
+    std::vector<std::unique_ptr<Event>> events;
+    {
+        SpinLocker locker(&m_queuedEventsLock);
+        std::swap(events, m_queuedEvents);
+    }
+    if (m_transceiverToNotify) {
+        for (const std::unique_ptr<Event> &evt : events) {
+            m_transceiverToNotify->processEvent(evt.get());
+        }
+    }
 }
