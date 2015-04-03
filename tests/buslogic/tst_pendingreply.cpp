@@ -22,6 +22,7 @@
 */
 
 #include "argumentlist.h"
+#include "connectioninfo.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"
@@ -66,16 +67,16 @@ static void testBusAddress(bool waitForConnected)
     EventDispatcher eventDispatcher;
     Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
 
-    Message busNameRequest;
-    addressMessageToBus(&busNameRequest);
-    busNameRequest.setMethod(string("RequestName"));
+    Message msg;
+    addressMessageToBus(&msg);
+    msg.setMethod(string("RequestName"));
 
     ArgumentList argList;
     ArgumentList::Writer writer(&argList);
     writer.writeString("Bana.nana"); // requested name
     writer.writeUint32(4); // TODO proper enum or so: 4 == DBUS_NAME_FLAG_DO_NOT_QUEUE
     writer.finish();
-    busNameRequest.setArgumentList(argList);
+    msg.setArgumentList(argList);
 
     if (waitForConnected) {
         // finish creating the connection
@@ -84,19 +85,57 @@ static void testBusAddress(bool waitForConnected)
         }
     }
 
-    PendingReply busNameReply = trans.send(move(busNameRequest));
+    PendingReply busNameReply = trans.send(move(msg));
     ReplyCheck replyCheck;
     replyCheck.m_eventDispatcher = &eventDispatcher;
     busNameReply.setReceiver(&replyCheck);
 
     while (eventDispatcher.poll()) {
     }
+}
 
+class TimeoutCheck : public IMessageReceiver
+{
+public:
+    EventDispatcher *m_eventDispatcher;
+    void pendingReplyFinished(PendingReply *reply) override
+    {
+        TEST(reply->isFinished());
+        TEST(!reply->hasNonErrorReply());
+        TEST(reply->error().code() == Error::Timeout);
+        std::cout << "We HAVE timed out.\n";
+        m_eventDispatcher->interrupt();
+    }
+};
+
+static void testTimeout()
+{
+    EventDispatcher eventDispatcher;
+    Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
+
+    // finish creating the connection; we need to know our own name so we can send the message to
+    // ourself so we can make sure that there will be no reply :)
+    while (trans.uniqueName().empty()) {
+        eventDispatcher.poll();
+    }
+
+    Message msg = Message::createCall("/some/dummy/path/lol", "dummy_interface", "non_existent_method");
+    msg.setDestination(trans.uniqueName());
+
+    PendingReply neverGonnaGetReply = trans.send(move(msg), 200);
+    TimeoutCheck timeoutCheck;
+    timeoutCheck.m_eventDispatcher = &eventDispatcher;
+    neverGonnaGetReply.setReceiver(&timeoutCheck);
+
+    while (eventDispatcher.poll()) {
+    }
 }
 
 int main(int argc, char *argv[])
 {
     testBusAddress(false);
     testBusAddress(true);
+    testTimeout();
+    // TODO testBadCall
     std::cout << "Passed!\n";
 }

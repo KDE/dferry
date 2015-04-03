@@ -41,6 +41,7 @@ public:
     {
         if (timeout >= 0) {
             m_replyTimeout.setRepeating(false);
+            m_replyTimeout.setCompletionClient(this);
             m_replyTimeout.start(timeout);
         }
     }
