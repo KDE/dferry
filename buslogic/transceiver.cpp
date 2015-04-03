@@ -43,7 +43,7 @@ using namespace std;
 class HelloReceiver : public IMessageReceiver
 {
 public:
-    void pendingReplyReceived(PendingReply *pr) override
+    void pendingReplyFinished(PendingReply *pr) override
     {
         assert(pr == &m_helloReply);
         m_parent->handleHelloReply();

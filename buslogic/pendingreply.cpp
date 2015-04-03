@@ -92,7 +92,7 @@ void PendingReplyPrivate::notifyDone(Message *reply)
     m_transceiverOrReply.reply = reply;
     m_replyTimeout.stop();
     if (m_receiver) {
-        m_receiver->pendingReplyReceived(m_owner);
+        m_receiver->pendingReplyFinished(m_owner);
     }
 }
 
@@ -187,6 +187,6 @@ void PendingReplyPrivate::notifyCompletion(void *task)
     m_isFinished = true;
     m_transceiverOrReply.reply = nullptr;
     if (m_receiver) {
-        m_receiver->pendingReplyReceived(m_owner);
+        m_receiver->pendingReplyFinished(m_owner);
     }
 }

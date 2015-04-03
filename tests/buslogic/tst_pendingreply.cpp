@@ -47,7 +47,7 @@ class ReplyCheck : public IMessageReceiver
 {
 public:
     EventDispatcher *m_eventDispatcher;
-    void pendingReplyReceived(PendingReply *pr) override
+    void pendingReplyFinished(PendingReply *pr) override
     {
         pr->dumpState();
         std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();

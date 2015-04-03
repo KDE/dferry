@@ -40,7 +40,7 @@ public:
     // reply would be considered a spontaneous message. The received message is owned by the PendingReply.
     // The default implementation does nothing since somebody must still have the PendingReply, so the
     // Message is still reachable. That's a somewhat strange but valid situation.
-    virtual void pendingReplyReceived(PendingReply *pendingReply);
+    virtual void pendingReplyFinished(PendingReply *pendingReply);
 };
 
 #endif // IMESSAGERECEIVER_H
