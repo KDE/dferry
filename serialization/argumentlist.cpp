@@ -1407,10 +1407,9 @@ public:
         ElementInfo(byte alignment, byte size_)
             : size(size_)
         {
-            assert(alignment <= 8);
             static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
+            assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
             alignmentExponent = alignLog[alignment];
-            assert(alignment < 2 || alignLog != 0);
         }
         byte alignment() const { return 1 << alignmentExponent; }
 
