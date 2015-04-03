@@ -54,6 +54,16 @@ static const byte s_storageForHeader[Message::UnixFdsHeader + 1] = {
        0 | 1  // UnixFdsHeader
 };
 
+static bool isStringHeader(int field)
+{
+    return s_storageForHeader[field] & 0xf0;
+}
+
+static int indexOfHeader(int field)
+{
+    return s_storageForHeader[field] & ~0xf0;
+}
+
 static const Message::VariableHeader s_stringHeaderAtIndex[VarHeaderStorage::s_stringHeaderCount] = {
     Message::PathHeader,
     Message::InterfaceHeader,
@@ -69,6 +79,24 @@ static const Message::VariableHeader s_intHeaderAtIndex[VarHeaderStorage::s_intH
     Message::UnixFdsHeader
 };
 
+VarHeaderStorage::VarHeaderStorage()
+{} // initialization values are in class declaration
+
+VarHeaderStorage::VarHeaderStorage(const VarHeaderStorage &other)
+{
+    // ### very suboptimal
+    for (int i = 0; i < Message::UnixFdsHeader + 1; i++) {
+        Message::VariableHeader vh = static_cast<Message::VariableHeader>(i);
+        if (other.hasHeader(vh)) {
+            if (isStringHeader(vh)) {
+                setStringHeader(vh, other.stringHeader(vh));
+            } else {
+                setIntHeader(vh, other.intHeader(vh));
+            }
+        }
+    }
+}
+
 VarHeaderStorage::~VarHeaderStorage()
 {
     for (int i = 0; i < s_stringHeaderCount; i++) {
@@ -77,16 +105,6 @@ VarHeaderStorage::~VarHeaderStorage()
             stringHeaders()[i].~string();
         }
     }
-}
-
-static bool isStringHeader(int field)
-{
-    return s_storageForHeader[field] & 0xf0;
-}
-
-static int indexOfHeader(int field)
-{
-    return s_storageForHeader[field] & ~0xf0;
 }
 
 bool VarHeaderStorage::hasHeader(Message::VariableHeader header) const
@@ -185,10 +203,45 @@ MessagePrivate::MessagePrivate(Message *parent)
      m_flags(0),
      m_protocolVersion(1),
      m_dirty(true),
+     m_headerLength(0),
+     m_headerPadding(0),
      m_bodyLength(0),
      m_serial(0),
      m_completionClient(nullptr)
 {}
+
+MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
+   : m_message(parent),
+     m_bufferPos(other.m_bufferPos),
+     m_isByteSwapped(other.m_isByteSwapped),
+     m_state(other.m_state),
+     m_messageType(other.m_messageType),
+     m_flags(other.m_flags),
+     m_protocolVersion(other.m_protocolVersion),
+     m_dirty(other.m_dirty),
+     m_headerLength(other.m_headerLength),
+     m_headerPadding(other.m_headerPadding),
+     m_bodyLength(other.m_bodyLength),
+     m_serial(other.m_serial),
+     m_error(other.m_error),
+     m_mainArguments(other.m_mainArguments),
+     m_varHeaders(other.m_varHeaders),
+     m_completionClient(nullptr)
+{
+    if (other.m_buffer.begin) {
+        // we don't keep pointers into the buffer (only indexes), right? right?
+        m_buffer.begin = static_cast<byte *>(malloc(other.m_buffer.length));
+        m_buffer.length = other.m_buffer.length;
+        // Simplification: don't try to figure out which part of other.m_buffer contains "valid" data,
+        // just copy everything.
+        memcpy(m_buffer.begin, other.m_buffer.begin, other.m_buffer.length);
+    } else {
+        assert(!m_buffer.length);
+    }
+    // ### Maybe warn when copying a Message which is currently (de)serializing. It might even be impossible
+    //     to do that from client code. If that is the case, the "warning" could even be an assertion because
+    //     we should never do such a thing.
+}
 
 Message::Message()
    : d(new MessagePrivate(this))
@@ -212,6 +265,37 @@ Message &Message::operator=(Message &&other)
     }
     return *this;
 }
+
+Message::Message(const Message &other)
+   : d(nullptr)
+{
+    if (!other.d) {
+        return;
+    }
+    d = new MessagePrivate(*other.d, this);
+}
+
+Message &Message::operator=(const Message &other)
+{
+    if (this == &other) {
+        return *this;
+    }
+    if (d) {
+        delete d;
+        if (other.d) {
+            // ### can be optimized by implementing and using assignment of MessagePrivate
+            d = new MessagePrivate(*other.d, this);
+        } else {
+            d = nullptr;
+        }
+    } else {
+        if (other.d) {
+            d = new MessagePrivate(*other.d, this);
+        }
+    }
+    return *this;
+}
+
 
 Message::~Message()
 {

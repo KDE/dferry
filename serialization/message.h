@@ -32,10 +32,7 @@
 class ArgumentList;
 class Error;
 class IConnection;
-class ICompletionClient;
 class MessagePrivate;
-
-// TODO: some separation between convenience and low-level API, move all convenience API to top
 
 class DFERRY_EXPORT Message
 {
@@ -46,12 +43,12 @@ public:
     Message(); // constructs an invalid message (to be filled in later, usually)
     ~Message();
 
+    // prefer these over copy construction / assignment whenever possible, for performance reasons
     Message(Message &&other);
     Message &operator=(Message &&other);
 
-    // might need to implement them later
-    Message(const Message &other) = delete;
-    Message &operator=(const Message &other) = delete;
+    Message(const Message &other);
+    Message &operator=(const Message &other);
 
     // error (if any) propagates to PendingReply, so it is still available later
     Error error() const;
@@ -81,7 +78,6 @@ public:
         SignalMessage
     };
 
-    // TODO try to enforce sanity via checks and a restrictive API
     Type type() const;
     void setType(Type type);
     uint32 protocolVersion() const;

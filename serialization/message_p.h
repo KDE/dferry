@@ -30,8 +30,12 @@
 #include "error.h"
 #include "iconnectionclient.h"
 
+class ICompletionClient;
+
 class VarHeaderStorage {
 public:
+    VarHeaderStorage();
+    VarHeaderStorage(const VarHeaderStorage &other);
     ~VarHeaderStorage();
 
     bool hasHeader(Message::VariableHeader header) const;
@@ -80,6 +84,7 @@ public:
     static MessagePrivate *get(Message *m) { return m->d; }
 
     MessagePrivate(Message *parent);
+    MessagePrivate(const MessagePrivate &other, Message *parent);
 
     void notifyConnectionReadyRead() override;
     void notifyConnectionReadyWrite() override;
