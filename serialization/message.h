@@ -24,6 +24,7 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
+#include "argumentlist.h"
 #include "types.h"
 
 #include <string>

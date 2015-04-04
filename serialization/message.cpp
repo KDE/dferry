@@ -996,8 +996,7 @@ bool MessagePrivate::serialize()
         m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
     }
 
-    ArgumentList headerArgs;
-    serializeVariableHeaders(&headerArgs);
+    ArgumentList headerArgs = serializeVariableHeaders();
 
     // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
     // the original dbus code aligns based on address in the final data stream
@@ -1072,9 +1071,9 @@ static void doVarHeaderEpilogue(ArgumentList::Writer *writer)
     writer->endStruct();
 }
 
-void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
+ArgumentList MessagePrivate::serializeVariableHeaders()
 {
-    ArgumentList::Writer writer(headerArgs);
+    ArgumentList::Writer writer;
 
     // note that we don't have to deal with zero-length arrays because all valid message types require
     // at least one of the variable headers
@@ -1107,7 +1106,7 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
                     Error::MessageSignature
                 };
                 m_error.setCode(stringHeaderErrors[i]);
-                return;
+                return ArgumentList();
             }
         }
     }
@@ -1122,7 +1121,7 @@ void MessagePrivate::serializeVariableHeaders(ArgumentList *headerArgs)
     }
 
     writer.endArray();
-    writer.finish();
+    return writer.finish();
 }
 
 void MessagePrivate::clearBuffer()

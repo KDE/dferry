@@ -68,9 +68,7 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
                                int dataIncrement, bool debugPrint)
 {
     ArgumentList::Reader reader(original);
-
-    ArgumentList copy;
-    ArgumentList::Writer writer(&copy);
+    ArgumentList::Writer writer;
 
     chunk data = original.data();
     chunk shortData;
@@ -86,7 +84,6 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
 
         switch(reader.state()) {
         case ArgumentList::Finished:
-            writer.finish();
             isDone = true;
             break;
         case ArgumentList::NeedMoreData: {
@@ -228,6 +225,8 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
             break;
         }
     }
+
+    ArgumentList copy = writer.finish();
     TEST(reader.state() == ArgumentList::Finished);
     TEST(writer.state() == ArgumentList::Finished);
     cstring originalSignature = original.signature();
@@ -434,47 +433,10 @@ static void test_stringValidation()
     }
 }
 
-static void test_readerWriterExclusion()
-{
-    ArgumentList arg;
-    {
-        ArgumentList::Reader reader1(arg);
-        {
-            ArgumentList::Reader reader2(arg);
-            TEST(reader2.isValid());
-        }
-        {
-            ArgumentList::Writer writer1(&arg);
-            TEST(!writer1.isValid());
-        }
-    }
-    {
-        ArgumentList::Reader reader3(arg);
-        TEST(reader3.isValid());
-    }
-    {
-        ArgumentList::Writer writer2(&arg);
-        TEST(writer2.isValid());
-        {
-            ArgumentList::Reader reader4(arg);
-            TEST(!reader4.isValid());
-        }
-        {
-            ArgumentList::Reader writer3(arg);
-            TEST(!writer3.isValid());
-        }
-    }
-    {
-        ArgumentList::Writer writer4(&arg);
-        TEST(writer4.isValid());
-    }
-}
-
 static void test_nesting()
 {
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginArray(false);
             writer.nextArrayEntry();
@@ -484,8 +446,7 @@ static void test_nesting()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
@@ -496,8 +457,7 @@ static void test_nesting()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
@@ -508,8 +468,7 @@ static void test_nesting()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         for (int i = 0; i < 64; i++) {
             writer.beginVariant();
         }
@@ -610,30 +569,26 @@ static void test_writerMisuse()
 {
     // Array
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(false);
         writer.endArray(); // wrong,  must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(true);
         writer.endArray(); // even with no elements it, must contain exactly one type
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(false);
         writer.writeByte(1); // in Writer, calling nextArrayEntry() after beginArray() is optional
         writer.endArray();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(false);
         writer.nextArrayEntry();    // optional and may not trigger an error
         TEST(writer.state() != ArgumentList::InvalidData);
@@ -641,8 +596,7 @@ static void test_writerMisuse()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(false);
         writer.nextArrayEntry();
         writer.writeByte(1);
@@ -650,8 +604,7 @@ static void test_writerMisuse()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginArray(true);
         writer.nextArrayEntry();
         writer.beginVariant();
@@ -661,15 +614,13 @@ static void test_writerMisuse()
     }
     // Dict
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginDict(false);
         writer.endDict(); // wrong, must contain exactly two types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
@@ -677,8 +628,7 @@ static void test_writerMisuse()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginDict(false);
         writer.writeByte(1); // in Writer, calling nextDictEntry() after beginDict() is optional
         writer.writeByte(2);
@@ -686,8 +636,7 @@ static void test_writerMisuse()
         TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
@@ -697,8 +646,7 @@ static void test_writerMisuse()
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.beginVariant(); // wrong, key type must be basic
@@ -707,35 +655,31 @@ static void test_writerMisuse()
     // Variant
     {
         // this and the next are a baseline to make sure that the following test fails for a good reason
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginVariant();
         writer.writeByte(1);
         writer.endVariant();
         TEST(writer.state() != ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginVariant();
         writer.endVariant();
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginVariant();
         writer.writeByte(1);
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
         TEST(writer.state() == ArgumentList::InvalidData);
     }
     {
-        ArgumentList arg;
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.beginStruct();
         writer.writeByte(1);
         TEST(writer.state() != ArgumentList::InvalidData);
-        writer.finish();
+        ArgumentList arg = writer.finish();
         TEST(writer.state() == ArgumentList::InvalidData); // can't finish while inside an aggregate
         TEST(arg.signature().length == 0); // should not be written on error
     }
@@ -780,7 +724,7 @@ static void test_complicated()
 {
     ArgumentList arg;
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         // NeedMoreData-related bugs are less dangerous inside arrays, so we try to provoke one here;
         // the reason for arrays preventing failures is that they have a length prefix which enables
         // and encourages pre-fetching all the array's data before processing *anything* inside the
@@ -841,7 +785,7 @@ static void test_alignment()
 {
     ArgumentList arg;
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.writeByte(123);
         writer.beginArray(false);
         writer.writeByte(64);
@@ -857,7 +801,7 @@ static void test_alignment()
         doRoundtrip(arg);
     }
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.writeByte(123);
         writer.beginStruct();
         writer.writeByte(110);
@@ -873,7 +817,7 @@ static void test_arrayOfVariant()
     ArgumentList arg;
     // non-empty array
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.writeByte(123);
         writer.beginArray(false);
         writer.beginVariant();
@@ -889,7 +833,7 @@ static void test_arrayOfVariant()
     }
     // empty array
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
         writer.writeByte(123);
         writer.beginArray(true);
         writer.beginVariant();
@@ -909,7 +853,7 @@ static void test_realMessage()
     ArgumentList arg;
     // non-empty array
     {
-        ArgumentList::Writer writer(&arg);
+        ArgumentList::Writer writer;
 
         writer.writeString(cstring("message"));
         writer.writeString(cstring("konversation"));
@@ -949,7 +893,6 @@ static void test_realMessage()
 int main(int argc, char *argv[])
 {
     test_stringValidation();
-    test_readerWriterExclusion();
     test_nesting();
     test_roundtrip();
     test_writerMisuse();

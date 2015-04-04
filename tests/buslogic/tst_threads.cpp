@@ -67,11 +67,9 @@ public:
 
         {
             Message pong = Message::createReplyTo(ping);
-            ArgumentList args;
-            ArgumentList::Writer writer(&args);
+            ArgumentList::Writer writer;
             writer.writeString(pongPayload);
-            writer.finish();
-            pong.setArgumentList(args);
+            pong.setArgumentList(writer.finish());
 
             Error replyError = m_transceiver->sendNoReply(std::move(pong));
             TEST(!replyError.isError());
@@ -126,11 +124,9 @@ static void testPingPong()
 
     // send ping message to other thread
     Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
-    ArgumentList args;
-    ArgumentList::Writer writer(&args);
+    ArgumentList::Writer writer;
     writer.writeString(pingPayload);
-    writer.finish();
-    ping.setArgumentList(args);
+    ping.setArgumentList(writer.finish());
 
     // finish creating the connection
     while (trans.uniqueName().empty()) {

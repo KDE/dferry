@@ -32,6 +32,7 @@
 #include <vector>
 
 class Error;
+class Message;
 
 class DFERRY_EXPORT ArgumentList
 {
@@ -60,11 +61,6 @@ public:
     Error error() const;
 
     std::string prettyPrint() const;
-
-     // returns true when at least one reader, false otherwise
-    bool isReading() const;
-    // returns true when a writer is open, false otherwise
-    bool isWriting() const;
 
     cstring signature() const;
     chunk data() const;
@@ -125,9 +121,6 @@ public:
     };
 
 private:
-    // ### sort-of-const - the only thing this changes is that it prevents opening a Writer
-    bool beginRead() const;
-    bool beginWrite();
 
     struct podCstring // Same as cstring but without ctor.
                       // Can't put the cstring type into a union because it has a constructor :/
@@ -158,6 +151,7 @@ public:
     {
     public:
         explicit Reader(const ArgumentList &al);
+        explicit Reader(const Message &msg);
         Reader(Reader &&other);
         void operator=(Reader &&other);
         Reader(const Reader &other) = delete;
@@ -222,6 +216,7 @@ public:
     private:
         class Private;
         friend class Private;
+        void beginRead();
         void doReadPrimitiveType();
         void doReadString(int lengthPrefixSize);
         void advanceState();
@@ -242,7 +237,7 @@ public:
     class Writer
     {
     public:
-        explicit Writer(ArgumentList *al);
+        explicit Writer();
         Writer(Writer &&other);
         void operator=(Writer &&other);
         Writer(const Writer &other) = delete;
@@ -274,7 +269,7 @@ public:
         void beginVariant();
         void endVariant();
 
-        void finish();
+        ArgumentList finish();
 
         std::vector<IoState> aggregateStack() const; // the aggregates the writer is currently in
 

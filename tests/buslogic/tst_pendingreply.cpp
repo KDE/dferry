@@ -71,12 +71,10 @@ static void testBusAddress(bool waitForConnected)
     addressMessageToBus(&msg);
     msg.setMethod(string("RequestName"));
 
-    ArgumentList argList;
-    ArgumentList::Writer writer(&argList);
+    ArgumentList::Writer writer;
     writer.writeString("Bana.nana"); // requested name
     writer.writeUint32(4); // TODO proper enum or so: 4 == DBUS_NAME_FLAG_DO_NOT_QUEUE
-    writer.finish();
-    msg.setArgumentList(argList);
+    msg.setArgumentList(writer.finish());
 
     if (waitForConnected) {
         // finish creating the connection

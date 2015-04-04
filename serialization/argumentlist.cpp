@@ -25,6 +25,7 @@
 
 #include "basictypeio.h"
 #include "error.h"
+#include "message.h"
 #include "stringtools.h"
 
 #include <algorithm>
@@ -45,8 +46,6 @@ class ArgumentList::Private
 public:
     Private()
        : m_isByteSwapped(false),
-         m_readerCount(0),
-         m_hasWriter(false),
          m_memOwnership(nullptr)
     {}
 
@@ -56,8 +55,6 @@ public:
     ~Private();
 
     bool m_isByteSwapped;
-    int m_readerCount;
-    bool m_hasWriter;
     Error m_error;
     byte *m_memOwnership;
     cstring m_signature;
@@ -80,9 +77,6 @@ ArgumentList::Private &ArgumentList::Private::operator=(const Private &other)
 void ArgumentList::Private::initFrom(const Private &other)
 {
     m_isByteSwapped = other.m_isByteSwapped;
-    // we don't copy "relation to other objects" aspects, which wouldn't make much sense
-    m_readerCount = 0;
-    m_hasWriter = false;
 
     // make a deep copy
     // use only one malloced block for signature and main data - this saves one malloc and free
@@ -273,16 +267,6 @@ Error ArgumentList::error() const
     return d->m_error;
 }
 
-bool ArgumentList::isReading() const
-{
-    return d->m_readerCount;
-}
-
-bool ArgumentList::isWriting() const
-{
-    return d->m_hasWriter;
-}
-
 cstring ArgumentList::signature() const
 {
     return d->m_signature;
@@ -464,24 +448,6 @@ std::string ArgumentList::prettyPrint() const
         }
     }
     return ret.str();
-}
-
-bool ArgumentList::beginRead() const
-{
-    const bool ret = !d->m_hasWriter;
-    if (ret) {
-        d->m_readerCount++;
-    }
-    return ret;
-}
-
-bool ArgumentList::beginWrite()
-{
-    const bool ret = !d->m_readerCount && !d->m_hasWriter;
-    if (ret) {
-        d->m_hasWriter = true;
-    }
-    return ret;
 }
 
 static void chopFirst(cstring *s)
@@ -735,10 +701,20 @@ ArgumentList::Reader::Reader(const ArgumentList &al)
    : d(new Private),
      m_state(NotStarted)
 {
-    if (al.beginRead()) {
-        d->m_argList = &al;
-    }
+    d->m_argList = &al;
+    beginRead();
+}
 
+ArgumentList::Reader::Reader(const Message &msg)
+   : d(new Private),
+     m_state(NotStarted)
+{
+    d->m_argList = &msg.argumentList();
+    beginRead();
+}
+
+void ArgumentList::Reader::beginRead()
+{
     VALID_IF(d->m_argList, Error::NotAttachedToArgumentList);
     d->m_signature = d->m_argList->d->m_signature;
     d->m_data = d->m_argList->d->m_data;
@@ -772,9 +748,6 @@ void ArgumentList::Reader::operator=(Reader &&other)
 
 ArgumentList::Reader::~Reader()
 {
-    if (d->m_argList) {
-        d->m_argList->d->m_readerCount -= 1;
-    }
     delete d;
     d = 0;
 }
@@ -1330,8 +1303,7 @@ class ArgumentList::Writer::Private
 {
 public:
     Private()
-       : m_argList(nullptr),
-         m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
+       : m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
          m_signaturePosition(0),
          m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
          m_dataCapacity(InitialDataCapacity),
@@ -1343,7 +1315,7 @@ public:
     int m_variantSignaturesCountBeforeNilArray;
     int m_dataPositionBeforeNilArray;
 
-    ArgumentList *m_argList;
+    ArgumentList m_argList;
     NestingWithParenCounter m_nesting;
     cstring m_signature;
     int m_signaturePosition;
@@ -1426,13 +1398,10 @@ public:
     std::vector<ElementInfo> m_elements;
 };
 
-ArgumentList::Writer::Writer(ArgumentList *al)
+ArgumentList::Writer::Writer()
    : d(new Private),
-     m_state(InvalidData)
+     m_state(AnyData)
 {
-    VALID_IF(al->beginWrite(), Error::NotAttachedToArgumentList);
-    d->m_argList = al;
-    m_state = AnyData;
 }
 
 ArgumentList::Writer::Writer(Writer &&other)
@@ -1457,11 +1426,6 @@ void ArgumentList::Writer::operator=(Writer &&other)
 
 ArgumentList::Writer::~Writer()
 {
-    // TODO good API to finish() here if not done yet?
-    if (d->m_argList) {
-        assert(d->m_argList->d->m_hasWriter);
-        d->m_argList->d->m_hasWriter = false;
-    }
     for (int i = 0; i < d->m_variantSignatures.size(); i++) {
         free(d->m_variantSignatures[i].begin);
         if (d->m_variantSignatures[i].begin == d->m_signature.begin) {
@@ -1488,7 +1452,7 @@ ArgumentList::Writer::~Writer()
 
 bool ArgumentList::Writer::isValid() const
 {
-    return d->m_argList;
+    return !d->m_argList.error().isError();
 }
 
 Error ArgumentList::Writer::error() const
@@ -1915,22 +1879,24 @@ void ArgumentList::Writer::endVariant()
     advanceState(chunk(), EndVariant);
 }
 
+ArgumentList ArgumentList::Writer::finish()
+{
+    if (!d->m_argList.d) {
+        // TODO proper error - what must have happened is that finish() was called > 1 times
+        return ArgumentList();
+    }
+    finishInternal();
+
+    d->m_argList.d->m_error = d->m_error;
+
+    return std::move(d->m_argList);
+}
+
 struct ArrayLengthField
 {
     uint32 lengthFieldPosition;
     uint32 dataStartPosition;
 };
-
-void ArgumentList::Writer::finish()
-{
-    finishInternal();
-
-    d->m_argList->d->m_error = d->m_error;
-
-    assert(d->m_argList->d->m_hasWriter);
-    d->m_argList->d->m_hasWriter = false;
-    d->m_argList = nullptr;
-}
 
 void ArgumentList::Writer::finishInternal()
 {
@@ -1947,8 +1913,8 @@ void ArgumentList::Writer::finishInternal()
     d->m_signature.begin[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
-    if (d->m_argList->d->m_memOwnership) {
-        free(d->m_argList->d->m_memOwnership);
+    if (d->m_argList.d->m_memOwnership) {
+        free(d->m_argList.d->m_memOwnership);
     }
 
     bool success = true;
@@ -2034,9 +2000,9 @@ void ArgumentList::Writer::finishInternal()
             d->m_aggregateStack.clear();
             d->m_variantSignatures.clear();
 
-            d->m_argList->d->m_memOwnership = buffer;
-            d->m_argList->d->m_signature = cstring(buffer, d->m_signature.length);
-            d->m_argList->d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+            d->m_argList.d->m_memOwnership = buffer;
+            d->m_argList.d->m_signature = cstring(buffer, d->m_signature.length);
+            d->m_argList.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
         } else {
             d->m_aggregateStack.clear();
             for (int i = 0; i < d->m_variantSignatures.size(); i++) {
@@ -2049,9 +2015,9 @@ void ArgumentList::Writer::finishInternal()
 
     if (!count || !success) {
         d->m_variantSignatures.clear();
-        d->m_argList->d->m_memOwnership = nullptr;
-        d->m_argList->d->m_signature = cstring();
-        d->m_argList->d->m_data = chunk();
+        d->m_argList.d->m_memOwnership = nullptr;
+        d->m_argList.d->m_signature = cstring();
+        d->m_argList.d->m_data = chunk();
     }
 
     d->m_elements.clear();

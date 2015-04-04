@@ -102,7 +102,7 @@ public:
     bool deserializeVariableHeaders();
     bool serialize();
     void serializeFixedHeaders();
-    void serializeVariableHeaders(ArgumentList *headerArgs);
+    ArgumentList serializeVariableHeaders();
 
     void clearBuffer();
     void reserveBuffer(int newSize);

@@ -84,17 +84,9 @@ void testBasic()
     clientTransceiver.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
-    ArgumentList argList;
-    ArgumentList::Writer writer(&argList);
+    ArgumentList::Writer writer;
     writer.writeString("couch");
-    writer.finish();
-    msg.setArgumentList(argList);
-#if 0 // maybe future API
-    Message *msg = new Message::makeCall("/foo", "org.foo.interface", "laze");
-    ArgumentList::Writer writer = msg->writeArguments();
-    writer.writeString("couch");
-    // writer finalizes automatically, at the latest when sending the message
-#endif
+    msg.setArgumentList(writer.finish());
 
     clientTransceiver.sendNoReply(move(msg));
 
