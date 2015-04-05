@@ -229,8 +229,9 @@ ArgumentList &ArgumentList::operator=(ArgumentList &&other)
 }
 
 ArgumentList::ArgumentList(const ArgumentList &other)
-   : d(new Private(*other.d))
+   : d(nullptr)
 {
+    *this = other;
 }
 
 ArgumentList &ArgumentList::operator=(const ArgumentList &other)
