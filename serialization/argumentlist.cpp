@@ -1310,7 +1310,9 @@ public:
          m_dataCapacity(InitialDataCapacity),
          m_dataPosition(0),
          m_nilArrayNesting(0)
-    {}
+    {
+        m_elements.reserve(16);
+    }
 
     int m_dataElementsCountBeforeNilArray;
     int m_variantSignaturesCountBeforeNilArray;
