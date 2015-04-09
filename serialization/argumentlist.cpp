@@ -1388,8 +1388,8 @@ public:
         }
         byte alignment() const { return 1 << alignmentExponent; }
 
-        uint32 alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
-        uint32 size : 6; // that's up to 63
+        byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
+        byte size : 6; // that's up to 63
         enum SizeCode {
             LargestSize = 60,
             ArrayLengthField,
