@@ -637,7 +637,7 @@ void TransceiverPrivate::processEvent(Event *evt)
         break;
     }
     case Event::MainTransceiverDisconnect:
-        // since the main thread *sent* us the event, it knows that it needs to clean up and it will
+        // since the main thread *sent* us the event, it already knows to drop all our PendingReplies
         m_mainThreadTransceiver = nullptr;
         cancelAllPendingReplies();
         break;

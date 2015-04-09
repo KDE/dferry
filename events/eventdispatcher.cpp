@@ -245,7 +245,7 @@ void EventDispatcherPrivate::triggerDueTimers()
         if (timerTimeout > m_triggerTime) {
             break;
         }
-        // careful here - protect against adding and removing any timers while inside trigger()!
+        // careful here - protect against adding and removing any timer while inside its trigger()!
         // we do this by keeping the iterator at the current position (so changing any other timer
         // doesn't invalidate it) and blocking changes to the timer behind that iterator
         // (so we don't mess with its data should it have been deleted outright in the callback)
@@ -254,13 +254,14 @@ void EventDispatcherPrivate::triggerDueTimers()
         Timer *const timer = m_triggeredTimer;
         m_isTriggeredTimerPendingRemoval = false;
 
-        // invariant: m_triggeredTimer.dueTime <= m_triggerTime <= currentTime(here) <= timerAddedInTrigger().dueTime
+        // invariant:
+        // m_triggeredTimer.dueTime <= m_triggerTime <= currentTime(here) <= <timerAddedInTrigger>.dueTime
         timer->trigger();
 
         m_triggeredTimer = nullptr;
         if (!m_isTriggeredTimerPendingRemoval && timer->m_isRunning) {
-            // ### we are rescheduling timers based on triggerTime even though real time can be much later - is
-            // this the desired behavior? I think so...
+            // ### we are rescheduling timers based on triggerTime even though real time can be
+            // much later - is this the desired behavior? I think so...
             if (timer->m_interval == 0) {
                 // With the other branch we might iterate over this timer again in this invocation because
                 // if there are several timers with the same tag, this entry will be back-inserted into the
