@@ -105,8 +105,8 @@ public:
         BeginVariant,
         EndVariant,
         // the next element is plain data
-        Byte,
         Boolean,
+        Byte,
         Int16,
         Uint16,
         Int32, // 20

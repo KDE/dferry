@@ -178,8 +178,8 @@ static cstring printableState(ArgumentList::IoState state)
         "EndStruct",
         "BeginVariant",
         "EndVariant",
-        "Byte",
         "Boolean",
+        "Byte",
         "Int16",
         "Uint16",
         "Int32",
@@ -394,9 +394,6 @@ std::string ArgumentList::prettyPrint() const
             nestingPrefix.resize(nestingPrefix.size() - strlen("{V "));
             ret << nestingPrefix << "end dict\n";
             break;
-        case ArgumentList::Byte:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, int(reader.readByte()), "byte");
-            break;
         case ArgumentList::Boolean: {
             bool b = reader.readBoolean();
             ret << nestingPrefix << "bool: ";
@@ -407,6 +404,9 @@ std::string ArgumentList::prettyPrint() const
             }
             ret << '\n';
             break; }
+        case ArgumentList::Byte:
+            ret << nestingPrefix << printMaybeNil(emptyNesting, int(reader.readByte()), "byte");
+            break;
         case ArgumentList::Int16:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt16(), "int16");
             break;
@@ -855,14 +855,14 @@ static const TypeInfo &typeInfo(byte letterCode)
 void ArgumentList::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
-    case Byte:
-        m_u.Byte = d->m_data.begin[d->m_dataPosition];
-        break;
     case Boolean: {
         uint32 num = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         m_u.Boolean = num == 1;
         VALID_IF(num <= 1, Error::MalformedMessageData);
         break; }
+    case Byte:
+        m_u.Byte = d->m_data.begin[d->m_dataPosition];
+        break;
     case Int16:
         m_u.Int16 = basic::readInt16(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
@@ -1478,13 +1478,13 @@ void ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
     }
 
     switch(m_state) {
-    case Byte:
-        d->m_data[d->m_dataPosition] = m_u.Byte;
-        break;
     case Boolean: {
         uint32 num = m_u.Boolean ? 1 : 0;
         basic::writeUint32(d->m_data + d->m_dataPosition, num);
         break; }
+    case Byte:
+        d->m_data[d->m_dataPosition] = m_u.Byte;
+        break;
     case Int16:
         basic::writeInt16(d->m_data + d->m_dataPosition, m_u.Int16);
         break;
@@ -2038,16 +2038,16 @@ std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
     return ret;
 }
 
-void ArgumentList::Writer::writeByte(byte b)
-{
-    m_u.Byte = b;
-    advanceState(chunk("y", strlen("y")), Byte);
-}
-
 void ArgumentList::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;
     advanceState(chunk("b", strlen("b")), Boolean);
+}
+
+void ArgumentList::Writer::writeByte(byte b)
+{
+    m_u.Byte = b;
+    advanceState(chunk("y", strlen("y")), Byte);
 }
 
 void ArgumentList::Writer::writeInt16(int16 i)
