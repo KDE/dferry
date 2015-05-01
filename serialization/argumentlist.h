@@ -213,6 +213,12 @@ public:
         cstring readSignature() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
         uint32 readUnixFd() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
 
+        // Returns primitive type and the raw array data if in BeginArray state of an array containing only a
+        // primitive type. You must copy the data before destroying the Reader or changing its backing store
+        // with replaceData().
+        // (### it might be possible to extend this feature to all fixed-length types including structs)
+        std::pair<ArgumentList::IoState, chunk> readPrimitiveArray();
+
     private:
         class Private;
         friend class Private;
@@ -286,6 +292,8 @@ public:
         void writeObjectPath(cstring objectPath);
         void writeSignature(cstring signature);
         void writeUnixFd(uint32 fd);
+
+        void writePrimitiveArray(IoState type, chunk data);
 
     private:
         class Private;

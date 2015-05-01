@@ -884,6 +884,163 @@ static void test_realMessage()
     doRoundtrip(arg);
 }
 
+static void writeValue(ArgumentList::Writer *writer, int typeIndex, const void *value)
+{
+    switch (typeIndex) {
+    case 0:
+        break;
+    case 1:
+        writer->writeByte(*static_cast<const byte *>(value)); break;
+    case 2:
+        writer->writeUint16(*static_cast<const uint16 *>(value)); break;
+    case 3:
+        writer->writeUint32(*static_cast<const uint32 *>(value)); break;
+    case 4:
+        writer->writeUint64(*static_cast<const uint64 *>(value)); break;
+    default:
+        TEST(false);
+    }
+}
+
+static bool checkValue(ArgumentList::Reader *reader, int typeIndex, const void *expected)
+{
+    switch (typeIndex) {
+    case 0:
+        return true;
+    case 1:
+        return reader->readByte() == *static_cast<const byte *>(expected);
+    case 2:
+        return reader->readUint16() == *static_cast<const uint16 *>(expected);
+    case 3:
+        return reader->readUint32() == *static_cast<const uint32 *>(expected);
+    case 4:
+        return reader->readUint64() == *static_cast<const uint64 *>(expected);
+    default:
+        TEST(false);
+    }
+    return false;
+}
+
+void test_primitiveArray()
+{
+    // TODO also test some error cases
+
+    static const uint32 testDataSize = 16384;
+    byte testData[testDataSize];
+    for (int i = 0; i < testDataSize; i++) {
+        testData[i] = i & 0xff;
+    }
+
+    for (int i = 0; i < 4; i++) {
+
+        const bool writeAsPrimitive = i & 0x1;
+        const bool readAsPrimitive = i & 0x2;
+
+        static const uint32 arrayTypesCount = 5;
+        // those types must be compatible with writeValue() and readValue()
+        static ArgumentList::IoState arrayTypes[arrayTypesCount] = {
+            ArgumentList::InvalidData,
+            ArgumentList::Byte,
+            ArgumentList::Uint16,
+            ArgumentList::Uint32,
+            ArgumentList::Uint64
+        };
+
+        for (int otherType = 0; otherType < arrayTypesCount; otherType++) {
+
+            // we want to skip testing an array with nothing in it, hence we start with 1
+            for (int typeInArray = 1; typeInArray < arrayTypesCount; typeInArray++) {
+
+                static const uint32 arraySizesCount = 11;
+                static const uint32 arraySizes[arraySizesCount] = {
+                    // TODO would be nice to also check size 0 aka nil array
+                    1,
+                    2,
+                    3,
+                    4,
+                    7,
+                    8,
+                    9,
+                    511,
+                    512,
+                    513,
+                    2048 // dataSize / sizeof(uint64) == 2048
+                };
+
+                for (int k = 0; k < arraySizesCount; k++) {
+
+                    static const uint64_t otherValue = ~0ll;
+                    const uint32 arraySize = arraySizes[k];
+                    const uint32 dataSize = arraySize << (typeInArray - 1);
+                    TEST(dataSize <= testDataSize);
+
+                    ArgumentList arg;
+                    {
+                        ArgumentList::Writer writer;
+
+                        // write something before the array to test different starting position alignments
+                        writeValue(&writer, otherType, &otherValue);
+
+                        if (writeAsPrimitive) {
+                            writer.writePrimitiveArray(arrayTypes[typeInArray], chunk(testData, dataSize));
+                        } else {
+                            writer.beginArray(false);
+                            byte *testDataPtr = testData;
+                            for (int m = 0; m < arraySize; m++) {
+                                writer.nextArrayEntry();
+                                writeValue(&writer, typeInArray, testDataPtr);
+                                testDataPtr += 1 << (typeInArray - 1);
+                            }
+                            writer.endArray();
+                        }
+
+                        TEST(writer.state() != ArgumentList::InvalidData);
+                        // TEST(writer.state() == ArgumentList::AnyData);
+                        // TODO do we handle AnyData consistently, and do we really need it anyway?
+                        writeValue(&writer, otherType, &otherValue);
+                        TEST(writer.state() != ArgumentList::InvalidData);
+                        arg = writer.finish();
+                        TEST(writer.state() == ArgumentList::Finished);
+                    }
+
+                    {
+                        ArgumentList::Reader reader(arg);
+
+                        TEST(checkValue(&reader, otherType, &otherValue));
+
+                        if (readAsPrimitive) {
+                            TEST(reader.state() == ArgumentList::BeginArray);
+                            std::pair<ArgumentList::IoState, chunk> ret = reader.readPrimitiveArray();
+                            TEST(ret.first == arrayTypes[typeInArray]);
+                            TEST(chunksEqual(chunk(testData, dataSize), ret.second));
+                        } else {
+                            TEST(reader.state() != ArgumentList::InvalidData);
+                            reader.beginArray();
+                            TEST(reader.state() != ArgumentList::InvalidData);
+                            byte *testDataPtr = testData;
+                            for (int m = 0; m < arraySize; m++) {
+                                TEST(reader.state() != ArgumentList::InvalidData);
+                                TEST(reader.nextArrayEntry());
+                                TEST(checkValue(&reader, typeInArray, testDataPtr));
+                                TEST(reader.state() != ArgumentList::InvalidData);
+                                testDataPtr += 1 << (typeInArray - 1);
+                            }
+                            TEST(!reader.nextArrayEntry());
+                            TEST(reader.state() != ArgumentList::InvalidData);
+                            reader.endArray();
+                            TEST(reader.state() != ArgumentList::InvalidData);
+                        }
+
+                        TEST(reader.state() != ArgumentList::InvalidData);
+                        TEST(checkValue(&reader, otherType, &otherValue));
+                        TEST(reader.state() == ArgumentList::Finished);
+                    }
+                }
+            }
+        }
+    }
+}
+
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
 //       length and long/short type signature, to make sure that the signature is written but not
 //       any data if the array is zero-length.
@@ -898,10 +1055,13 @@ int main(int argc, char *argv[])
     test_writerMisuse();
     // TODO test_maxArrayLength
     // TODO test_maxFullLength
+    // TODO test arrays where array length does not align with end of an element
+    //      (corruption of serialized data)
     test_complicated();
     test_alignment();
     test_arrayOfVariant();
     test_realMessage();
+    test_primitiveArray();
     // TODO many more misuse tests for Writer and maybe some for Reader
     std::cout << "Passed!\n";
 }

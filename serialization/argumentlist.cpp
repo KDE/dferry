@@ -41,6 +41,13 @@ static const int s_specMaxArrayLength = 67108864; // 64 MiB
 // data length already in ArgumentList.
 static const int s_specMaxMessageLength = 134217728; // 128 MiB
 
+static byte alignmentLog2(uint alignment)
+{
+    static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
+    assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
+    return alignLog[alignment];
+}
+
 class ArgumentList::Private
 {
 public:
@@ -852,6 +859,25 @@ static const TypeInfo &typeInfo(byte letterCode)
     return high[letterCode - 'a'];
 }
 
+static char letterForPrimitiveIoState(ArgumentList::IoState ios)
+{
+    if (ios < ArgumentList::Boolean || ios > ArgumentList::Double) {
+        return  'c'; // a known invalid letter that won't trip up typeInfo()
+    }
+    static const char letters[] = {
+        'b', // Boolean
+        'y', // Byte
+        'n', // Int16
+        'q', // Uint16
+        'i', // Int32
+        'u', // Uint32
+        'x', // Int64
+        't', // Uint64
+        'd'  // Double
+    };
+    return letters[size_t(ios) - size_t(ArgumentList::Boolean)]; // TODO do we need the casts?
+}
+
 void ArgumentList::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
@@ -1248,6 +1274,53 @@ void ArgumentList::Reader::endArray()
     advanceStateFrom(EndArray);
 }
 
+static bool isAligned(uint32 value, uint32 alignment)
+{
+    assert(alignment <= 8); // so zeroBits <= 3
+    const uint zeroBits = alignmentLog2(alignment);
+    return (value & (0x7 >> (3 - zeroBits))) == 0;
+}
+
+std::pair<ArgumentList::IoState, chunk> ArgumentList::Reader::readPrimitiveArray()
+{
+    auto ret = std::make_pair(InvalidData, chunk());
+
+    // TODO allow to use the same code path even for empty / nil arrays containing primitive data
+    if (m_state != BeginArray || d->m_nilArrayNesting) {
+        return ret;
+    }
+
+    // the point of "primitive array" accessors is that the data can be just memcpy()ed, so we
+    // reject anything that needs validation, including booleans
+
+    const TypeInfo elementType = typeInfo(d->m_signature.begin[d->m_signaturePosition + 1]);
+    if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
+        return ret;
+    }
+    if (d->m_argList->d->m_isByteSwapped && elementType.state() != Byte) {
+        return ret;
+    }
+
+    const uint32 size = d->m_aggregateStack.back().arr.dataEnd - d->m_dataPosition;
+    // does the end of data line up with the end of the last data element?
+    if (!isAligned(size, elementType.alignment)) {
+        return ret;
+    }
+
+    ret.first = elementType.state();
+    ret.second.begin = d->m_data.begin + d->m_dataPosition;
+    ret.second.length = size;
+
+    // set things up for nextArrayOrDictEntry() and use it to move past the array
+    d->m_dataPosition = d->m_aggregateStack.back().arr.dataEnd;
+    d->m_signaturePosition += 2;
+    nextArrayOrDictEntry(false);
+    // ... leave the array, there is nothing more to do in it
+    endArray();
+
+    return ret;
+}
+
 void ArgumentList::Reader::beginDict(bool *isEmpty)
 {
     VALID_IF(m_state == BeginDict, Error::ReadWrongType);
@@ -1382,9 +1455,7 @@ public:
         ElementInfo(byte alignment, byte size_)
             : size(size_)
         {
-            static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
-            assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
-            alignmentExponent = alignLog[alignment];
+            alignmentExponent = alignmentLog2(alignment);
         }
         byte alignment() const { return 1 << alignmentExponent; }
 
@@ -1880,6 +1951,66 @@ void ArgumentList::Writer::beginVariant()
 void ArgumentList::Writer::endVariant()
 {
     advanceState(chunk(), EndVariant);
+}
+
+void ArgumentList::Writer::writePrimitiveArray(IoState type, chunk data)
+{
+    const char letterCode = letterForPrimitiveIoState(type);
+    if (letterCode == 'c' || data.length > s_specMaxArrayLength) {
+        m_state = InvalidData;
+        return;
+    }
+
+    const TypeInfo elementType = typeInfo(letterCode);
+
+    if (!isAligned(data.length, elementType.alignment)) {
+        return;
+    }
+
+    beginArray(!data.length);
+
+    // dummy write to write the signature...
+    m_u.Uint64 = 0;
+    advanceState(chunk(&letterCode, /*length*/ 1), elementType.state());
+
+    if (!data.length) {
+        // oh! a nil array.
+        endArray();
+        return;
+    }
+
+    // undo the dummy write
+    d->m_dataPosition -= elementType.alignment;
+    d->m_elements.pop_back();
+
+    // ensure that we have room for the data
+    const uint32 newDataPosition = d->m_dataPosition + data.length;
+    if (unlikely(newDataPosition > d->m_dataCapacity)) {
+        while (newDataPosition > d->m_dataCapacity) {
+            d->m_dataCapacity *= 2;
+        }
+        d->m_data = reinterpret_cast<byte *>(realloc(d->m_data, d->m_dataCapacity));
+    }
+
+    // copy the data
+    memcpy(d->m_data + d->m_dataPosition, data.begin, data.length);
+    d->m_dataPosition = newDataPosition;
+
+    // Store ElementInfos about the data
+    // Align only the first of the back-to-back data chunks - otherwise, when storing values which
+    // are 8 byte aligned, the second half of an element straddling a chunk boundary
+    // (Private::ElementInfo::LargestSize == 60) would start at an 8-byte aligned position (so 64)
+    // instead of 60 where we want it in order to just write a contiguous block of data.
+    // Also, it's somewhat faster to skip alignment logic altogether.
+    uint32 alignment = elementType.alignment;
+    for (uint32 l = data.length; l; ) {
+        uint32 chunkSize = std::min(l, uint32(Private::ElementInfo::LargestSize));
+        d->m_elements.push_back(Private::ElementInfo(alignment, chunkSize));
+        alignment = 1;
+        l -= chunkSize;
+    }
+
+    endArray();
 }
 
 ArgumentList ArgumentList::Writer::finish()
