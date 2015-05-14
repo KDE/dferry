@@ -948,12 +948,12 @@ void test_primitiveArray()
 
         for (int otherType = 0; otherType < arrayTypesCount; otherType++) {
 
-            // we want to skip testing an array with nothing in it, hence we start with 1
+            // an array with no type in it is ill-formed, so we start with 1 (Byte)
             for (int typeInArray = 1; typeInArray < arrayTypesCount; typeInArray++) {
 
-                static const uint32 arraySizesCount = 11;
+                static const uint32 arraySizesCount = 12;
                 static const uint32 arraySizes[arraySizesCount] = {
-                    // TODO would be nice to also check size 0 aka nil array
+                    0,
                     1,
                     2,
                     3,
@@ -984,12 +984,16 @@ void test_primitiveArray()
                         if (writeAsPrimitive) {
                             writer.writePrimitiveArray(arrayTypes[typeInArray], chunk(testData, dataSize));
                         } else {
-                            writer.beginArray(false);
+                            writer.beginArray(!arraySize);
                             byte *testDataPtr = testData;
-                            for (int m = 0; m < arraySize; m++) {
-                                writer.nextArrayEntry();
+                            if (arraySize) {
+                                for (int m = 0; m < arraySize; m++) {
+                                    writer.nextArrayEntry();
+                                    writeValue(&writer, typeInArray, testDataPtr);
+                                    testDataPtr += 1 << (typeInArray - 1);
+                                }
+                            } else {
                                 writeValue(&writer, typeInArray, testDataPtr);
-                                testDataPtr += 1 << (typeInArray - 1);
                             }
                             writer.endArray();
                         }
@@ -1014,17 +1018,29 @@ void test_primitiveArray()
                             TEST(ret.first == arrayTypes[typeInArray]);
                             TEST(chunksEqual(chunk(testData, dataSize), ret.second));
                         } else {
-                            TEST(reader.state() != ArgumentList::InvalidData);
-                            reader.beginArray();
+                            TEST(reader.state() == ArgumentList::BeginArray);
+                            bool isEmpty = false;
+                            reader.beginArray(&isEmpty);
+                            TEST(isEmpty == (arraySize == 0));
                             TEST(reader.state() != ArgumentList::InvalidData);
                             byte *testDataPtr = testData;
-                            for (int m = 0; m < arraySize; m++) {
-                                TEST(reader.state() != ArgumentList::InvalidData);
+
+                            if (arraySize) {
+                                for (int m = 0; m < arraySize; m++) {
+                                    TEST(reader.state() != ArgumentList::InvalidData);
+                                    TEST(reader.nextArrayEntry());
+                                    TEST(checkValue(&reader, typeInArray, testDataPtr));
+                                    TEST(reader.state() != ArgumentList::InvalidData);
+                                    testDataPtr += 1 << (typeInArray - 1);
+                                }
+                            } else {
                                 TEST(reader.nextArrayEntry());
-                                TEST(checkValue(&reader, typeInArray, testDataPtr));
+                                TEST(reader.state() == arrayTypes[typeInArray]);
+                                // next: dummy read; not really necessary, just a sanity check
+                                checkValue(&reader, typeInArray, testDataPtr);
                                 TEST(reader.state() != ArgumentList::InvalidData);
-                                testDataPtr += 1 << (typeInArray - 1);
                             }
+
                             TEST(!reader.nextArrayEntry());
                             TEST(reader.state() != ArgumentList::InvalidData);
                             reader.endArray();

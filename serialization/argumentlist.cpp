@@ -1119,17 +1119,22 @@ void ArgumentList::Reader::advanceState()
         aggregateInfo.aggregateType = m_state;
         Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
 
+        // NB: Do not make non-idempotent changes to member variables before potentially going to
+        //     out_needMoreData! We'd make the same change again after getting more data.
+
         // no alignment of d->m_dataPosition if the array is nil
-        if (likely(!d->m_nilArrayNesting)) {
-            int padStart = d->m_dataPosition;
+        if (likely(arrayLength)) {
+            const int padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
             arrayInfo.dataEnd = d->m_dataPosition + arrayLength;
             if (unlikely(arrayInfo.dataEnd > d->m_data.length)) {
-                // NB: do not clobber (the unsaved) nesting before potentially going to out_needMoreData!
                 goto out_needMoreData;
             }
+        } else {
+            arrayInfo.dataEnd = d->m_dataPosition;
         }
+
         VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
         if (firstElementTy.state() == BeginDict) {
             d->m_signaturePosition++;
@@ -1140,10 +1145,10 @@ void ArgumentList::Reader::advanceState()
         // position at the 'a' or '{' because we increment d->m_signaturePosition before reading contents -
         // this saves a special case in that more generic code
         arrayInfo.containedTypeBegin = d->m_signaturePosition;
+
         if (!arrayLength) {
             d->m_nilArrayNesting++;
         }
-
         d->m_aggregateStack.push_back(aggregateInfo);
         break; }
 
@@ -1285,8 +1290,7 @@ std::pair<ArgumentList::IoState, chunk> ArgumentList::Reader::readPrimitiveArray
 {
     auto ret = std::make_pair(InvalidData, chunk());
 
-    // TODO allow to use the same code path even for empty / nil arrays containing primitive data
-    if (m_state != BeginArray || d->m_nilArrayNesting) {
+    if (m_state != BeginArray) {
         return ret;
     }
 
@@ -1301,15 +1305,17 @@ std::pair<ArgumentList::IoState, chunk> ArgumentList::Reader::readPrimitiveArray
         return ret;
     }
 
-    const uint32 size = d->m_aggregateStack.back().arr.dataEnd - d->m_dataPosition;
-    // does the end of data line up with the end of the last data element?
-    if (!isAligned(size, elementType.alignment)) {
-        return ret;
-    }
+    if (!d->m_nilArrayNesting) {
+        const uint32 size = d->m_aggregateStack.back().arr.dataEnd - d->m_dataPosition;
+        // does the end of data line up with the end of the last data element?
+        if (!isAligned(size, elementType.alignment)) {
+            return ret;
+        }
 
+        ret.second.begin = d->m_data.begin + d->m_dataPosition;
+        ret.second.length = size;
+    }
     ret.first = elementType.state();
-    ret.second.begin = d->m_data.begin + d->m_dataPosition;
-    ret.second.length = size;
 
     // set things up for nextArrayOrDictEntry() and use it to move past the array
     d->m_dataPosition = d->m_aggregateStack.back().arr.dataEnd;
