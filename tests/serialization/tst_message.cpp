@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "connectioninfo.h"
 #include "error.h"
 #include "eventdispatcher.h"
@@ -84,9 +84,9 @@ void testBasic()
     clientTransceiver.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
-    ArgumentList::Writer writer;
+    Arguments::Writer writer;
     writer.writeString("couch");
-    msg.setArgumentList(writer.finish());
+    msg.setArguments(writer.finish());
 
     clientTransceiver.sendNoReply(move(msg));
 

@@ -23,7 +23,7 @@
 
 #include "eavesdroppermodel.h"
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "message.h"
 
 #include <QDataStream>

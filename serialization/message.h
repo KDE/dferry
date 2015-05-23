@@ -24,13 +24,13 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "types.h"
 
 #include <string>
 #include <vector>
 
-class ArgumentList;
+class Arguments;
 class Error;
 class IConnection;
 class MessagePrivate;
@@ -91,7 +91,7 @@ public:
     void setReplySerial(uint32 replySerial);
     void setDestination(const std::string &destination);
     void setSender(const std::string &sender);
-    // no setSignature() - setArgumentList() also sets the signature
+    // no setSignature() - setArguments() also sets the signature
     void setUnixFdCount(uint32 fdCount);
 
     std::string path() const;
@@ -132,9 +132,9 @@ public:
     // TODO a method that returns if the message is valid in its current state (flags have valid
     //      values, mandatory variable header fields for the message type are present, ...?
 
-    // setArgumentList also sets the signature header of the message
-    void setArgumentList(ArgumentList arguments);
-    const ArgumentList &argumentList() const;
+    // setArguments also sets the signature header of the message
+    void setArguments(Arguments arguments);
+    const Arguments &argumentList() const;
 
     std::vector<byte> save();
     void load(const std::vector<byte> &data);

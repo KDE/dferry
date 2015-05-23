@@ -23,7 +23,7 @@
 
 #include "eavesdropperthread.h"
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "connectioninfo.h"
 #include "eavesdroppermodel.h"
 #include "error.h"
@@ -55,11 +55,11 @@ static Message createEavesdropMessage(const char *messageType)
 {
     Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
     ret.setDestination("org.freedesktop.DBus");
-    ArgumentList::Writer writer;
+    Arguments::Writer writer;
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
-    ret.setArgumentList(writer.finish());
+    ret.setArguments(writer.finish());
     return ret;
 }
 

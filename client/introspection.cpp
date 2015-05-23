@@ -1,6 +1,6 @@
 #include "introspection.h"
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "stringtools.h"
 
 #include <tinyxml2.h>
@@ -100,7 +100,7 @@ bool IntrospectionTree::mergeXml(const char *xmlData, const char *_path)
 IntrospectionNode *IntrospectionTree::findOrCreateParent(const char *path, std::string *leafName)
 {
     cstring csPath(path);
-    if (!ArgumentList::isObjectPathValid(csPath)) {
+    if (!Arguments::isObjectPathValid(csPath)) {
         return 0;
     }
     std::string strPath(path, csPath.length); // prevent another strlen()

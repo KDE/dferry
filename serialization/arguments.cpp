@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentlist.h"
+#include "arguments.h"
 
 #include "basictypeio.h"
 #include "error.h"
@@ -36,9 +36,9 @@
 #include <sstream>
 
 static const int s_specMaxArrayLength = 67108864; // 64 MiB
-// Maximum message length is a good upper bound for maximum ArgumentList data length. In order to limit
+// Maximum message length is a good upper bound for maximum Arguments data length. In order to limit
 // excessive memory consumption in error cases and prevent integer overflow exploits, enforce a maximum
-// data length already in ArgumentList.
+// data length already in Arguments.
 static const int s_specMaxMessageLength = 134217728; // 128 MiB
 
 static byte alignmentLog2(uint alignment)
@@ -48,7 +48,7 @@ static byte alignmentLog2(uint alignment)
     return alignLog[alignment];
 }
 
-class ArgumentList::Private
+class Arguments::Private
 {
 public:
     Private()
@@ -68,12 +68,12 @@ public:
     chunk m_data;
 };
 
-ArgumentList::Private::Private(const Private &other)
+Arguments::Private::Private(const Private &other)
 {
     initFrom(other);
 }
 
-ArgumentList::Private &ArgumentList::Private::operator=(const Private &other)
+Arguments::Private &Arguments::Private::operator=(const Private &other)
 {
     if (this != &other) {
         initFrom(other);
@@ -81,14 +81,14 @@ ArgumentList::Private &ArgumentList::Private::operator=(const Private &other)
     return *this;
 }
 
-void ArgumentList::Private::initFrom(const Private &other)
+void Arguments::Private::initFrom(const Private &other)
 {
     m_isByteSwapped = other.m_isByteSwapped;
 
     // make a deep copy
     // use only one malloced block for signature and main data - this saves one malloc and free
     // and also saves a pointer
-    // (if it weren't for the ArgumentList(..., cstring signature, chunk data, ...) constructor
+    // (if it weren't for the Arguments(..., cstring signature, chunk data, ...) constructor
     //  we could save more size, and it would be very ugly, if we stored m_signature and m_data
     //  as offsets to m_memOwnership)
     m_memOwnership = nullptr;
@@ -120,7 +120,7 @@ void ArgumentList::Private::initFrom(const Private &other)
     }
 }
 
-ArgumentList::Private::~Private()
+Arguments::Private::~Private()
 {
     if (m_memOwnership) {
         free(m_memOwnership);
@@ -157,18 +157,18 @@ struct NestingWithParenCounter : public Nesting
 {
     NestingWithParenCounter() : parenCount(0) {}
     // no need to be virtual, the type will be known statically
-    // theoretically it's unnecessary to check the return value: when it is false, the ArgumentList is
+    // theoretically it's unnecessary to check the return value: when it is false, the Arguments is
     // already invalid so we could abandon all correctness.
     bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
     int parenCount;
 };
 
-static cstring printableState(ArgumentList::IoState state)
+static cstring printableState(Arguments::IoState state)
 {
-    if (state < ArgumentList::NotStarted || state > ArgumentList::UnixFd) {
+    if (state < Arguments::NotStarted || state > Arguments::UnixFd) {
         return cstring();
     }
-    static const char *strings[ArgumentList::UnixFd + 1] = {
+    static const char *strings[Arguments::UnixFd + 1] = {
         "NotStarted",
         "Finished",
         "NeedMoreData",
@@ -202,15 +202,15 @@ static cstring printableState(ArgumentList::IoState state)
     return cstring(strings[state]);
 }
 
-const int ArgumentList::maxSignatureLength; // for the linker; technically this is required
+const int Arguments::maxSignatureLength; // for the linker; technically this is required
 static const int structAlignment = 8;
 
-ArgumentList::ArgumentList()
+Arguments::Arguments()
    : d(new Private)
 {
 }
 
-ArgumentList::ArgumentList(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped)
+Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped)
    : d(new Private)
 {
     d->m_isByteSwapped = isByteSwapped;
@@ -219,13 +219,13 @@ ArgumentList::ArgumentList(byte *memOwnership, cstring signature, chunk data, bo
     d->m_data = data;
 }
 
-ArgumentList::ArgumentList(ArgumentList &&other)
+Arguments::Arguments(Arguments &&other)
    : d(other.d)
 {
     other.d = nullptr;
 }
 
-ArgumentList &ArgumentList::operator=(ArgumentList &&other)
+Arguments &Arguments::operator=(Arguments &&other)
 {
     if (this != &other) {
         delete d;
@@ -235,13 +235,13 @@ ArgumentList &ArgumentList::operator=(ArgumentList &&other)
     return *this;
 }
 
-ArgumentList::ArgumentList(const ArgumentList &other)
+Arguments::Arguments(const Arguments &other)
    : d(nullptr)
 {
     *this = other;
 }
 
-ArgumentList &ArgumentList::operator=(const ArgumentList &other)
+Arguments &Arguments::operator=(const Arguments &other)
 {
     if (this == &other) {
         return *this;
@@ -264,23 +264,23 @@ ArgumentList &ArgumentList::operator=(const ArgumentList &other)
     return *this;
 }
 
-ArgumentList::~ArgumentList()
+Arguments::~Arguments()
 {
     delete d;
     d = nullptr;
 }
 
-Error ArgumentList::error() const
+Error Arguments::error() const
 {
     return d->m_error;
 }
 
-cstring ArgumentList::signature() const
+cstring Arguments::signature() const
 {
     return d->m_signature;
 }
 
-chunk ArgumentList::data() const
+chunk Arguments::data() const
 {
     return d->m_data;
 }
@@ -320,7 +320,7 @@ static bool strEndsWith(const std::string &str, const std::string &ending)
     }
 }
 
-std::string ArgumentList::prettyPrint() const
+std::string Arguments::prettyPrint() const
 {
     Reader reader(*this);
     if (!reader.isValid()) {
@@ -341,67 +341,67 @@ std::string ArgumentList::prettyPrint() const
             nestingPrefix.replace(nestingPrefix.size() - strlen("K "), strlen("V "), "V ");
         }
         switch(reader.state()) {
-        case ArgumentList::Finished:
+        case Arguments::Finished:
             assert(nestingPrefix.empty());
             isDone = true;
             break;
-        case ArgumentList::BeginStruct:
+        case Arguments::BeginStruct:
             reader.beginStruct();
             ret << nestingPrefix << "begin struct\n";
             nestingPrefix += "( ";
             break;
-        case ArgumentList::EndStruct:
+        case Arguments::EndStruct:
             reader.endStruct();
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end struct\n";
             break;
-        case ArgumentList::BeginVariant:
+        case Arguments::BeginVariant:
             reader.beginVariant();
             ret << nestingPrefix << "begin variant\n";
             nestingPrefix += "v ";
             break;
-        case ArgumentList::EndVariant:
+        case Arguments::EndVariant:
             reader.endVariant();
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end variant\n";
             break;
-        case ArgumentList::BeginArray: {
+        case Arguments::BeginArray: {
             bool isEmpty;
             reader.beginArray(&isEmpty);
             emptyNesting += isEmpty ? 1 : 0;
             ret << nestingPrefix << "begin array\n";
             nestingPrefix += "[ ";
             break; }
-        case ArgumentList::NextArrayEntry:
+        case Arguments::NextArrayEntry:
             reader.nextArrayEntry();
             break;
-        case ArgumentList::EndArray:
+        case Arguments::EndArray:
             reader.endArray();
             emptyNesting = std::max(emptyNesting - 1, 0);
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end array\n";
             break;
-        case ArgumentList::BeginDict: {
+        case Arguments::BeginDict: {
             bool isEmpty = false;
             reader.beginDict(&isEmpty);
             emptyNesting += isEmpty ? 1 : 0;
             ret << nestingPrefix << "begin dict\n";
             nestingPrefix += "{K ";
             break; }
-        case ArgumentList::NextDictEntry:
+        case Arguments::NextDictEntry:
             reader.nextDictEntry();
             if (strEndsWith(nestingPrefix, "V ")) {
                 nestingPrefix.resize(nestingPrefix.size() - strlen("V "));
                 assert(strEndsWith(nestingPrefix, "{"));
             }
             break;
-        case ArgumentList::EndDict:
+        case Arguments::EndDict:
             reader.endDict();
             emptyNesting = std::max(emptyNesting - 1, 0);
             nestingPrefix.resize(nestingPrefix.size() - strlen("{V "));
             ret << nestingPrefix << "end dict\n";
             break;
-        case ArgumentList::Boolean: {
+        case Arguments::Boolean: {
             bool b = reader.readBoolean();
             ret << nestingPrefix << "bool: ";
             if (emptyNesting) {
@@ -411,44 +411,44 @@ std::string ArgumentList::prettyPrint() const
             }
             ret << '\n';
             break; }
-        case ArgumentList::Byte:
+        case Arguments::Byte:
             ret << nestingPrefix << printMaybeNil(emptyNesting, int(reader.readByte()), "byte");
             break;
-        case ArgumentList::Int16:
+        case Arguments::Int16:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt16(), "int16");
             break;
-        case ArgumentList::Uint16:
+        case Arguments::Uint16:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint16(), "uint16");
             break;
-        case ArgumentList::Int32:
+        case Arguments::Int32:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt32(), "int32");
             break;
-        case ArgumentList::Uint32:
+        case Arguments::Uint32:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint32(), "uint32");
             break;
-        case ArgumentList::Int64:
+        case Arguments::Int64:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt64(), "int64");
             break;
-        case ArgumentList::Uint64:
+        case Arguments::Uint64:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint64(), "uint64");
             break;
-        case ArgumentList::Double:
+        case Arguments::Double:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readDouble(), "double");
             break;
-        case ArgumentList::String:
+        case Arguments::String:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readString(), "string");
             break;
-        case ArgumentList::ObjectPath:
+        case Arguments::ObjectPath:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readObjectPath(), "object path");
             break;
-        case ArgumentList::Signature:
+        case Arguments::Signature:
             ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readSignature(), "type signature");
             break;
-        case ArgumentList::UnixFd:
+        case Arguments::UnixFd:
             // TODO
             break;
-        case ArgumentList::InvalidData:
-        case ArgumentList::NeedMoreData:
+        case Arguments::InvalidData:
+        case Arguments::NeedMoreData:
         default: {
             return std::string("<error: ") +
                    toStdString(reader.stateString()) + ">\n";
@@ -465,7 +465,7 @@ static void chopFirst(cstring *s)
 }
 
 // static
-bool ArgumentList::isStringValid(cstring string)
+bool Arguments::isStringValid(cstring string)
 {
     if (!string.begin || string.length + 1 >= s_specMaxArrayLength || string.begin[string.length] != 0) {
         return false;
@@ -480,7 +480,7 @@ static inline bool isObjectNameLetter(byte b)
 }
 
 // static
-bool ArgumentList::isObjectPathValid(cstring path)
+bool Arguments::isObjectPathValid(cstring path)
 {
     if (!path.begin || path.length + 1 >= s_specMaxArrayLength || path.begin[path.length] != 0) {
         return false;
@@ -509,7 +509,7 @@ bool ArgumentList::isObjectPathValid(cstring path)
 }
 
 // static
-bool ArgumentList::isObjectPathElementValid(cstring pathElement)
+bool Arguments::isObjectPathElementValid(cstring pathElement)
 {
     if (!pathElement.length) {
         return false;
@@ -629,7 +629,7 @@ static bool parseSingleCompleteType(cstring *s, Nesting *nest)
 }
 
 //static
-bool ArgumentList::isSignatureValid(cstring signature, SignatureType type)
+bool Arguments::isSignatureValid(cstring signature, SignatureType type)
 {
     Nesting nest;
     if (!signature.begin || signature.begin[signature.length] != 0) {
@@ -659,7 +659,7 @@ bool ArgumentList::isSignatureValid(cstring signature, SignatureType type)
     return true;
 }
 
-class ArgumentList::Reader::Private
+class Arguments::Reader::Private
 {
 public:
     Private()
@@ -669,7 +669,7 @@ public:
          m_nilArrayNesting(0)
     {}
 
-    const ArgumentList *m_argList;
+    const Arguments *m_argList;
     Nesting m_nesting;
     cstring m_signature;
     chunk m_data;
@@ -705,7 +705,7 @@ public:
     std::vector<AggregateInfo> m_aggregateStack;
 };
 
-ArgumentList::Reader::Reader(const ArgumentList &al)
+Arguments::Reader::Reader(const Arguments &al)
    : d(new Private),
      m_state(NotStarted)
 {
@@ -713,7 +713,7 @@ ArgumentList::Reader::Reader(const ArgumentList &al)
     beginRead();
 }
 
-ArgumentList::Reader::Reader(const Message &msg)
+Arguments::Reader::Reader(const Message &msg)
    : d(new Private),
      m_state(NotStarted)
 {
@@ -721,19 +721,19 @@ ArgumentList::Reader::Reader(const Message &msg)
     beginRead();
 }
 
-void ArgumentList::Reader::beginRead()
+void Arguments::Reader::beginRead()
 {
-    VALID_IF(d->m_argList, Error::NotAttachedToArgumentList);
+    VALID_IF(d->m_argList, Error::NotAttachedToArguments);
     d->m_signature = d->m_argList->d->m_signature;
     d->m_data = d->m_argList->d->m_data;
-    // as a slightly hacky optimizaton, we allow empty ArgumentLists to allocate no space for d->m_buffer.
+    // as a slightly hacky optimizaton, we allow empty Argumentss to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
-        VALID_IF(ArgumentList::isSignatureValid(d->m_signature), Error::InvalidSignature);
+        VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
     }
     advanceState();
 }
 
-ArgumentList::Reader::Reader(Reader &&other)
+Arguments::Reader::Reader(Reader &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -741,7 +741,7 @@ ArgumentList::Reader::Reader(Reader &&other)
     other.d = 0;
 }
 
-void ArgumentList::Reader::operator=(Reader &&other)
+void Arguments::Reader::operator=(Reader &&other)
 {
     if (&other == this) {
         return;
@@ -754,28 +754,28 @@ void ArgumentList::Reader::operator=(Reader &&other)
     other.d = 0;
 }
 
-ArgumentList::Reader::~Reader()
+Arguments::Reader::~Reader()
 {
     delete d;
     d = 0;
 }
 
-bool ArgumentList::Reader::isValid() const
+bool Arguments::Reader::isValid() const
 {
     return d->m_argList;
 }
 
-Error ArgumentList::Reader::error() const
+Error Arguments::Reader::error() const
 {
     return d->m_error;
 }
 
-cstring ArgumentList::Reader::stateString() const
+cstring Arguments::Reader::stateString() const
 {
     return printableState(m_state);
 }
 
-void ArgumentList::Reader::replaceData(chunk data)
+void Arguments::Reader::replaceData(chunk data)
 {
     VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
 
@@ -805,7 +805,7 @@ void ArgumentList::Reader::replaceData(chunk data)
 
 struct TypeInfo
 {
-    ArgumentList::IoState state() const { return static_cast<ArgumentList::IoState>(_state); }
+    Arguments::IoState state() const { return static_cast<Arguments::IoState>(_state); }
     byte _state;
     byte alignment : 6;
     bool isPrimitive : 1;
@@ -816,8 +816,8 @@ static const TypeInfo &typeInfo(byte letterCode)
 {
     assert(letterCode >= '(');
     static const TypeInfo low[2] = {
-        { ArgumentList::BeginStruct,  8, false, false }, // (
-        { ArgumentList::EndStruct,    1, false, false }  // )
+        { Arguments::BeginStruct,  8, false, false }, // (
+        { Arguments::EndStruct,    1, false, false }  // )
     };
     if (letterCode <= ')') {
         return low[letterCode - '('];
@@ -826,42 +826,42 @@ static const TypeInfo &typeInfo(byte letterCode)
     // entries for invalid letters are designed to be as inert as possible in the code using the data,
     // which may make it possible to catch errors at a common point with less special case code.
     static const TypeInfo high['}' - 'a' + 1] = {
-        { ArgumentList::BeginArray,   4, false, false }, // a
-        { ArgumentList::Boolean,      4, true,  false }, // b
-        { ArgumentList::InvalidData,  1, true,  false }, // c
-        { ArgumentList::Double,       8, true,  false }, // d
-        { ArgumentList::InvalidData,  1, true,  false }, // e
-        { ArgumentList::InvalidData,  1, true,  false }, // f
-        { ArgumentList::Signature,    1, false, true  }, // g
-        { ArgumentList::UnixFd,       4, true,  false }, // h
-        { ArgumentList::Int32,        4, true,  false }, // i
-        { ArgumentList::InvalidData,  1, true,  false }, // j
-        { ArgumentList::InvalidData,  1, true,  false }, // k
-        { ArgumentList::InvalidData,  1, true,  false }, // l
-        { ArgumentList::InvalidData,  1, true,  false }, // m
-        { ArgumentList::Int16,        2, true,  false }, // n
-        { ArgumentList::ObjectPath,   4, false, true  }, // o
-        { ArgumentList::InvalidData,  1, true,  false }, // p
-        { ArgumentList::Uint16,       2, true,  false }, // q
-        { ArgumentList::InvalidData,  1, true,  false }, // r
-        { ArgumentList::String,       4, false, true  }, // s
-        { ArgumentList::Uint64,       8, true,  false }, // t
-        { ArgumentList::Uint32,       4, true,  false }, // u
-        { ArgumentList::BeginVariant, 1, false, false }, // v
-        { ArgumentList::InvalidData,  1, true,  false }, // w
-        { ArgumentList::Int64,        8, true,  false }, // x
-        { ArgumentList::Byte,         1, true,  false }, // y
-        { ArgumentList::InvalidData,  1, true,  false }, // z
-        { ArgumentList::BeginDict,    8, false, false }, // {
-        { ArgumentList::InvalidData,  1, true,  false }, // |
-        { ArgumentList::EndDict,      1, false, false }  // }
+        { Arguments::BeginArray,   4, false, false }, // a
+        { Arguments::Boolean,      4, true,  false }, // b
+        { Arguments::InvalidData,  1, true,  false }, // c
+        { Arguments::Double,       8, true,  false }, // d
+        { Arguments::InvalidData,  1, true,  false }, // e
+        { Arguments::InvalidData,  1, true,  false }, // f
+        { Arguments::Signature,    1, false, true  }, // g
+        { Arguments::UnixFd,       4, true,  false }, // h
+        { Arguments::Int32,        4, true,  false }, // i
+        { Arguments::InvalidData,  1, true,  false }, // j
+        { Arguments::InvalidData,  1, true,  false }, // k
+        { Arguments::InvalidData,  1, true,  false }, // l
+        { Arguments::InvalidData,  1, true,  false }, // m
+        { Arguments::Int16,        2, true,  false }, // n
+        { Arguments::ObjectPath,   4, false, true  }, // o
+        { Arguments::InvalidData,  1, true,  false }, // p
+        { Arguments::Uint16,       2, true,  false }, // q
+        { Arguments::InvalidData,  1, true,  false }, // r
+        { Arguments::String,       4, false, true  }, // s
+        { Arguments::Uint64,       8, true,  false }, // t
+        { Arguments::Uint32,       4, true,  false }, // u
+        { Arguments::BeginVariant, 1, false, false }, // v
+        { Arguments::InvalidData,  1, true,  false }, // w
+        { Arguments::Int64,        8, true,  false }, // x
+        { Arguments::Byte,         1, true,  false }, // y
+        { Arguments::InvalidData,  1, true,  false }, // z
+        { Arguments::BeginDict,    8, false, false }, // {
+        { Arguments::InvalidData,  1, true,  false }, // |
+        { Arguments::EndDict,      1, false, false }  // }
     };
     return high[letterCode - 'a'];
 }
 
-static char letterForPrimitiveIoState(ArgumentList::IoState ios)
+static char letterForPrimitiveIoState(Arguments::IoState ios)
 {
-    if (ios < ArgumentList::Boolean || ios > ArgumentList::Double) {
+    if (ios < Arguments::Boolean || ios > Arguments::Double) {
         return  'c'; // a known invalid letter that won't trip up typeInfo()
     }
     static const char letters[] = {
@@ -875,10 +875,10 @@ static char letterForPrimitiveIoState(ArgumentList::IoState ios)
         't', // Uint64
         'd'  // Double
     };
-    return letters[size_t(ios) - size_t(ArgumentList::Boolean)]; // TODO do we need the casts?
+    return letters[size_t(ios) - size_t(Arguments::Boolean)]; // TODO do we need the casts?
 }
 
-void ArgumentList::Reader::doReadPrimitiveType()
+void Arguments::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
     case Boolean: {
@@ -921,7 +921,7 @@ void ArgumentList::Reader::doReadPrimitiveType()
     }
 }
 
-void ArgumentList::Reader::doReadString(int lengthPrefixSize)
+void Arguments::Reader::doReadString(int lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
@@ -941,16 +941,16 @@ void ArgumentList::Reader::doReadString(int lengthPrefixSize)
     d->m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = ArgumentList::isStringValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isStringValid(cstring(m_u.String.begin, m_u.String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = ArgumentList::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length));
     } else if (m_state == Signature) {
-        isValidString = ArgumentList::isSignatureValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isSignatureValid(cstring(m_u.String.begin, m_u.String.length));
     }
     VALID_IF(isValidString, Error::MalformedMessageData);
 }
 
-void ArgumentList::Reader::advanceState()
+void Arguments::Reader::advanceState()
 {
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
@@ -1086,7 +1086,7 @@ void ArgumentList::Reader::advanceState()
             if (unlikely(d->m_dataPosition > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            VALID_IF(ArgumentList::isSignatureValid(signature, ArgumentList::VariantSignature),
+            VALID_IF(Arguments::isSignatureValid(signature, Arguments::VariantSignature),
                      Error::MalformedMessageData);
         }
         // do not clobber nesting before potentially going to out_needMoreData!
@@ -1168,7 +1168,7 @@ out_needMoreData:
     d->m_dataPosition = savedDataPosition;
 }
 
-void ArgumentList::Reader::advanceStateFrom(IoState expectedState)
+void Arguments::Reader::advanceStateFrom(IoState expectedState)
 {
     // Calling this method could be replaced with using VALID_IF in the callers, but it currently
     // seems more conventient like this.
@@ -1176,7 +1176,7 @@ void ArgumentList::Reader::advanceStateFrom(IoState expectedState)
     advanceState();
 }
 
-void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
+void Arguments::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
 {
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -1217,13 +1217,13 @@ void ArgumentList::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
     m_state = isDict ? NextDictEntry : NextArrayEntry;
 }
 
-void ArgumentList::Reader::beginArray(bool *isEmpty)
+void Arguments::Reader::beginArray(bool *isEmpty)
 {
     VALID_IF(m_state == BeginArray, Error::ReadWrongType);
     beginArrayOrDict(false, isEmpty);
 }
 
-bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
+bool Arguments::Reader::nextArrayOrDictEntry(bool isDict)
 {
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -1264,7 +1264,7 @@ bool ArgumentList::Reader::nextArrayOrDictEntry(bool isDict)
     return false;
 }
 
-bool ArgumentList::Reader::nextArrayEntry()
+bool Arguments::Reader::nextArrayEntry()
 {
     if (m_state == NextArrayEntry) {
         return nextArrayOrDictEntry(false);
@@ -1274,7 +1274,7 @@ bool ArgumentList::Reader::nextArrayEntry()
     }
 }
 
-void ArgumentList::Reader::endArray()
+void Arguments::Reader::endArray()
 {
     advanceStateFrom(EndArray);
 }
@@ -1286,7 +1286,7 @@ static bool isAligned(uint32 value, uint32 alignment)
     return (value & (0x7 >> (3 - zeroBits))) == 0;
 }
 
-std::pair<ArgumentList::IoState, chunk> ArgumentList::Reader::readPrimitiveArray()
+std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
 {
     auto ret = std::make_pair(InvalidData, chunk());
 
@@ -1327,13 +1327,13 @@ std::pair<ArgumentList::IoState, chunk> ArgumentList::Reader::readPrimitiveArray
     return ret;
 }
 
-void ArgumentList::Reader::beginDict(bool *isEmpty)
+void Arguments::Reader::beginDict(bool *isEmpty)
 {
     VALID_IF(m_state == BeginDict, Error::ReadWrongType);
     beginArrayOrDict(true, isEmpty);
 }
 
-bool ArgumentList::Reader::nextDictEntry()
+bool Arguments::Reader::nextDictEntry()
 {
     if (m_state == NextDictEntry) {
         return nextArrayOrDictEntry(true);
@@ -1344,32 +1344,32 @@ bool ArgumentList::Reader::nextDictEntry()
     }
 }
 
-void ArgumentList::Reader::endDict()
+void Arguments::Reader::endDict()
 {
     advanceStateFrom(EndDict);
 }
 
-void ArgumentList::Reader::beginStruct()
+void Arguments::Reader::beginStruct()
 {
     advanceStateFrom(BeginStruct);
 }
 
-void ArgumentList::Reader::endStruct()
+void Arguments::Reader::endStruct()
 {
     advanceStateFrom(EndStruct);
 }
 
-void ArgumentList::Reader::beginVariant()
+void Arguments::Reader::beginVariant()
 {
     advanceStateFrom(BeginVariant);
 }
 
-void ArgumentList::Reader::endVariant()
+void Arguments::Reader::endVariant()
 {
     advanceStateFrom(EndVariant);
 }
 
-std::vector<ArgumentList::IoState> ArgumentList::Reader::aggregateStack() const
+std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
 {
     const int count = d->m_aggregateStack.size();
     std::vector<IoState> ret;
@@ -1379,7 +1379,7 @@ std::vector<ArgumentList::IoState> ArgumentList::Reader::aggregateStack() const
     return ret;
 }
 
-class ArgumentList::Writer::Private
+class Arguments::Writer::Private
 {
 public:
     Private()
@@ -1397,7 +1397,7 @@ public:
     int m_variantSignaturesCountBeforeNilArray;
     int m_dataPositionBeforeNilArray;
 
-    ArgumentList m_argList;
+    Arguments m_argList;
     NestingWithParenCounter m_nesting;
     cstring m_signature;
     int m_signaturePosition;
@@ -1478,13 +1478,13 @@ public:
     std::vector<ElementInfo> m_elements;
 };
 
-ArgumentList::Writer::Writer()
+Arguments::Writer::Writer()
    : d(new Private),
      m_state(AnyData)
 {
 }
 
-ArgumentList::Writer::Writer(Writer &&other)
+Arguments::Writer::Writer(Writer &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -1492,7 +1492,7 @@ ArgumentList::Writer::Writer(Writer &&other)
     other.d = nullptr;
 }
 
-void ArgumentList::Writer::operator=(Writer &&other)
+void Arguments::Writer::operator=(Writer &&other)
 {
     if (&other == this) {
         return;
@@ -1504,7 +1504,7 @@ void ArgumentList::Writer::operator=(Writer &&other)
     other.d = nullptr;
 }
 
-ArgumentList::Writer::~Writer()
+Arguments::Writer::~Writer()
 {
     for (int i = 0; i < d->m_variantSignatures.size(); i++) {
         free(d->m_variantSignatures[i].begin);
@@ -1530,22 +1530,22 @@ ArgumentList::Writer::~Writer()
     d = nullptr;
 }
 
-bool ArgumentList::Writer::isValid() const
+bool Arguments::Writer::isValid() const
 {
     return !d->m_argList.error().isError();
 }
 
-Error ArgumentList::Writer::error() const
+Error Arguments::Writer::error() const
 {
     return d->m_error;
 }
 
-cstring ArgumentList::Writer::stateString() const
+cstring Arguments::Writer::stateString() const
 {
     return printableState(m_state);
 }
 
-void ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
+void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
 {
     d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
     const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
@@ -1596,16 +1596,16 @@ void ArgumentList::Writer::doWritePrimitiveType(uint32 alignAndSize)
     d->m_elements.push_back(Private::ElementInfo(alignAndSize, alignAndSize));
 }
 
-void ArgumentList::Writer::doWriteString(int lengthPrefixSize)
+void Arguments::Writer::doWriteString(int lengthPrefixSize)
 {
     if (m_state == String) {
-        VALID_IF(ArgumentList::isStringValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isStringValid(cstring(m_u.String.begin, m_u.String.length)),
                  Error::InvalidString);
     } else if (m_state == ObjectPath) {
-        VALID_IF(ArgumentList::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length)),
                  Error::InvalidObjectPath);
     } else if (m_state == Signature) {
-        VALID_IF(ArgumentList::isSignatureValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isSignatureValid(cstring(m_u.String.begin, m_u.String.length)),
                  Error::InvalidSignature);
     }
 
@@ -1635,7 +1635,7 @@ void ArgumentList::Writer::doWriteString(int lengthPrefixSize)
     }
 }
 
-void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newState)
+void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
 {
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
@@ -1857,7 +1857,7 @@ void ArgumentList::Writer::advanceState(chunk signatureFragment, IoState newStat
     m_state = AnyData;
 }
 
-void ArgumentList::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
+void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
 {
     isEmpty = isEmpty || d->m_nilArrayNesting;
     if (isEmpty) {
@@ -1878,12 +1878,12 @@ void ArgumentList::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
     }
 }
 
-void ArgumentList::Writer::beginArray(bool isEmpty)
+void Arguments::Writer::beginArray(bool isEmpty)
 {
     beginArrayOrDict(false, isEmpty);
 }
 
-void ArgumentList::Writer::nextArrayOrDictEntry(bool isDict)
+void Arguments::Writer::nextArrayOrDictEntry(bool isDict)
 {
     // TODO sanity / syntax checks, data length check too?
 
@@ -1914,52 +1914,52 @@ void ArgumentList::Writer::nextArrayOrDictEntry(bool isDict)
     }
 }
 
-void ArgumentList::Writer::nextArrayEntry()
+void Arguments::Writer::nextArrayEntry()
 {
     nextArrayOrDictEntry(false);
 }
 
-void ArgumentList::Writer::endArray()
+void Arguments::Writer::endArray()
 {
     advanceState(chunk(), EndArray);
 }
 
-void ArgumentList::Writer::beginDict(bool isEmpty)
+void Arguments::Writer::beginDict(bool isEmpty)
 {
     beginArrayOrDict(true, isEmpty);
 }
 
-void ArgumentList::Writer::nextDictEntry()
+void Arguments::Writer::nextDictEntry()
 {
     nextArrayOrDictEntry(true);
 }
 
-void ArgumentList::Writer::endDict()
+void Arguments::Writer::endDict()
 {
     advanceState(chunk("}", strlen("}")), EndDict);
 }
 
-void ArgumentList::Writer::beginStruct()
+void Arguments::Writer::beginStruct()
 {
     advanceState(chunk("(", strlen("(")), BeginStruct);
 }
 
-void ArgumentList::Writer::endStruct()
+void Arguments::Writer::endStruct()
 {
     advanceState(chunk(")", strlen(")")), EndStruct);
 }
 
-void ArgumentList::Writer::beginVariant()
+void Arguments::Writer::beginVariant()
 {
     advanceState(chunk("v", strlen("v")), BeginVariant);
 }
 
-void ArgumentList::Writer::endVariant()
+void Arguments::Writer::endVariant()
 {
     advanceState(chunk(), EndVariant);
 }
 
-void ArgumentList::Writer::writePrimitiveArray(IoState type, chunk data)
+void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);
     if (letterCode == 'c' || data.length > s_specMaxArrayLength) {
@@ -2019,11 +2019,11 @@ void ArgumentList::Writer::writePrimitiveArray(IoState type, chunk data)
     endArray();
 }
 
-ArgumentList ArgumentList::Writer::finish()
+Arguments Arguments::Writer::finish()
 {
     if (!d->m_argList.d) {
         // TODO proper error - what must have happened is that finish() was called > 1 times
-        return ArgumentList();
+        return Arguments();
     }
     finishInternal();
 
@@ -2038,7 +2038,7 @@ struct ArrayLengthField
     uint32 dataStartPosition;
 };
 
-void ArgumentList::Writer::finishInternal()
+void Arguments::Writer::finishInternal()
 {
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
@@ -2047,7 +2047,7 @@ void ArgumentList::Writer::finishInternal()
     if (m_state == InvalidData) {
         return;
     }
-    VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentListHere);
+    VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentsHere);
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
     d->m_signature.begin[d->m_signaturePosition] = '\0';
@@ -2130,7 +2130,7 @@ void ArgumentList::Writer::finishInternal()
 
         if (success && bufferPos > s_specMaxMessageLength) {
             success = false;
-            d->m_error.setCode(Error::ArgumentListTooLong);
+            d->m_error.setCode(Error::ArgumentsTooLong);
         }
 
         if (success) {
@@ -2165,7 +2165,7 @@ void ArgumentList::Writer::finishInternal()
     m_state = success ? Finished : InvalidData;
 }
 
-std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
+std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
 {
     const int count = d->m_aggregateStack.size();
     std::vector<IoState> ret;
@@ -2175,82 +2175,82 @@ std::vector<ArgumentList::IoState> ArgumentList::Writer::aggregateStack() const
     return ret;
 }
 
-void ArgumentList::Writer::writeBoolean(bool b)
+void Arguments::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;
     advanceState(chunk("b", strlen("b")), Boolean);
 }
 
-void ArgumentList::Writer::writeByte(byte b)
+void Arguments::Writer::writeByte(byte b)
 {
     m_u.Byte = b;
     advanceState(chunk("y", strlen("y")), Byte);
 }
 
-void ArgumentList::Writer::writeInt16(int16 i)
+void Arguments::Writer::writeInt16(int16 i)
 {
     m_u.Int16 = i;
     advanceState(chunk("n", strlen("n")), Int16);
 }
 
-void ArgumentList::Writer::writeUint16(uint16 i)
+void Arguments::Writer::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
     advanceState(chunk("q", strlen("q")), Uint16);
 }
 
-void ArgumentList::Writer::writeInt32(int32 i)
+void Arguments::Writer::writeInt32(int32 i)
 {
     m_u.Int32 = i;
     advanceState(chunk("i", strlen("i")), Int32);
 }
 
-void ArgumentList::Writer::writeUint32(uint32 i)
+void Arguments::Writer::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
     advanceState(chunk("u", strlen("u")), Uint32);
 }
 
-void ArgumentList::Writer::writeInt64(int64 i)
+void Arguments::Writer::writeInt64(int64 i)
 {
     m_u.Int64 = i;
     advanceState(chunk("x", strlen("x")), Int64);
 }
 
-void ArgumentList::Writer::writeUint64(uint64 i)
+void Arguments::Writer::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
     advanceState(chunk("t", strlen("t")), Uint64);
 }
 
-void ArgumentList::Writer::writeDouble(double d)
+void Arguments::Writer::writeDouble(double d)
 {
     m_u.Double = d;
     advanceState(chunk("d", strlen("d")), Double);
 }
 
-void ArgumentList::Writer::writeString(cstring string)
+void Arguments::Writer::writeString(cstring string)
 {
     m_u.String.begin = string.begin;
     m_u.String.length = string.length;
     advanceState(chunk("s", strlen("s")), String);
 }
 
-void ArgumentList::Writer::writeObjectPath(cstring objectPath)
+void Arguments::Writer::writeObjectPath(cstring objectPath)
 {
     m_u.String.begin = objectPath.begin;
     m_u.String.length = objectPath.length;
     advanceState(chunk("o", strlen("o")), ObjectPath);
 }
 
-void ArgumentList::Writer::writeSignature(cstring signature)
+void Arguments::Writer::writeSignature(cstring signature)
 {
     m_u.String.begin = signature.begin;
     m_u.String.length = signature.length;
     advanceState(chunk("g", strlen("g")), Signature);
 }
 
-void ArgumentList::Writer::writeUnixFd(uint32 fd)
+void Arguments::Writer::writeUnixFd(uint32 fd)
 {
     m_u.Uint32 = fd;
     advanceState(chunk("h", strlen("h")), UnixFd);

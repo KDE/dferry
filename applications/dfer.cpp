@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "connectioninfo.h"
 #include "error.h"
 #include "eventdispatcher.h"
@@ -38,11 +38,11 @@ static Message createEavesdropMessage(const char *messageType)
 {
     Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
     ret.setDestination("org.freedesktop.DBus");
-    ArgumentList::Writer writer;
+    Arguments::Writer writer;
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
-    ret.setArgumentList(writer.finish());
+    ret.setArguments(writer.finish());
     return ret;
 }
 
@@ -60,7 +60,7 @@ void ReplyPrinter::spontaneousMessageReceived(Message m)
 int main(int argc, char *argv[])
 {
     EventDispatcher dispatcher;
-    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::Session);
+    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::System);
     ReplyPrinter receiver;
     transceiver.setSpontaneousMessageReceiver(&receiver);
     {

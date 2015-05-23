@@ -24,7 +24,7 @@
 #include "argumentsmodel.h"
 
 #include "message.h"
-#include "argumentlist.h"
+#include "arguments.h"
 
 #include <QStandardItemModel>
 
@@ -83,7 +83,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
 
     QStandardItem *parent = model->invisibleRootItem();
 
-    ArgumentList::Reader reader(message->argumentList());
+    Arguments::Reader reader(message->argumentList());
     if (!reader.isValid()) {
         return withFaultyData(model);
     }
@@ -93,94 +93,94 @@ QAbstractItemModel* createArgumentsModel(Message *message)
 
     while (!isDone) {
         switch(reader.state()) {
-        case ArgumentList::Finished:
+        case Arguments::Finished:
             isDone = true;
             break;
-        case ArgumentList::BeginStruct:
+        case Arguments::BeginStruct:
             reader.beginStruct();
             parent = descend(parent, "Struct");
             break;
-        case ArgumentList::EndStruct:
+        case Arguments::EndStruct:
             reader.endStruct();
             parent = ascend(parent, model);
             break;
-        case ArgumentList::BeginVariant:
+        case Arguments::BeginVariant:
             reader.beginVariant();
             parent = descend(parent, "Variant");
             break;
-        case ArgumentList::EndVariant:
+        case Arguments::EndVariant:
             reader.endVariant();
             parent = ascend(parent, model);
             break;
-        case ArgumentList::BeginArray: {
+        case Arguments::BeginArray: {
             bool isEmpty;
             reader.beginArray(&isEmpty);
             parent = descend(parent, isEmpty ? "Array (no elements)" : "Array");
             emptyNesting += isEmpty ? 1 : 0;
             break; }
-        case ArgumentList::NextArrayEntry:
+        case Arguments::NextArrayEntry:
             reader.nextArrayEntry();
             break;
-        case ArgumentList::EndArray:
+        case Arguments::EndArray:
             reader.endArray();
             parent = ascend(parent, model);
             emptyNesting = qMax(emptyNesting - 1, 0);
             break;
-        case ArgumentList::BeginDict: {
+        case Arguments::BeginDict: {
             bool isEmpty = false;
             reader.beginDict(&isEmpty);
             parent = descend(parent, isEmpty ? "Dict (no elements)" : "Dict");
             emptyNesting += isEmpty ? 1 : 0;
             break; }
-        case ArgumentList::NextDictEntry:
+        case Arguments::NextDictEntry:
             reader.nextDictEntry();
             break;
-        case ArgumentList::EndDict:
+        case Arguments::EndDict:
             reader.endDict();
             parent = ascend(parent, model);
             emptyNesting = qMax(emptyNesting - 1, 0);
             break;
-        case ArgumentList::Byte:
+        case Arguments::Byte:
             addKeyValue(parent, "byte", emptyNesting, reader.readByte());
             break;
-        case ArgumentList::Boolean:
+        case Arguments::Boolean:
             addKeyValue(parent, "boolean", emptyNesting, reader.readBoolean());
             break;
-        case ArgumentList::Int16:
+        case Arguments::Int16:
             addKeyValue(parent, "int16", emptyNesting, reader.readInt16());
             break;
-        case ArgumentList::Uint16:
+        case Arguments::Uint16:
             addKeyValue(parent, "uint16", emptyNesting, reader.readUint16());
             break;
-        case ArgumentList::Int32:
+        case Arguments::Int32:
             addKeyValue(parent, "int32", emptyNesting, reader.readInt32());
             break;
-        case ArgumentList::Uint32:
+        case Arguments::Uint32:
             addKeyValue(parent, "uint32", emptyNesting, reader.readUint32());
             break;
-        case ArgumentList::Int64:
+        case Arguments::Int64:
             addKeyValue(parent, "int64", emptyNesting, reader.readInt64());
             break;
-        case ArgumentList::Uint64:
+        case Arguments::Uint64:
             addKeyValue(parent, "uint64", emptyNesting, reader.readUint64());
             break;
-        case ArgumentList::Double:
+        case Arguments::Double:
             addKeyValue(parent, "double", emptyNesting, reader.readDouble());
             break;
-        case ArgumentList::String:
+        case Arguments::String:
             addKeyValue(parent, "string", emptyNesting, reader.readString().begin);
             break;
-        case ArgumentList::ObjectPath:
+        case Arguments::ObjectPath:
             addKeyValue(parent, "object path", emptyNesting, reader.readObjectPath().begin);
             break;
-        case ArgumentList::Signature:
+        case Arguments::Signature:
             addKeyValue(parent, "type signature", emptyNesting, reader.readSignature().begin);
             break;
-        case ArgumentList::UnixFd:
+        case Arguments::UnixFd:
             addKeyValue(parent, "file descriptor", emptyNesting, QVariant());
             break;
-        case ArgumentList::InvalidData:
-        case ArgumentList::NeedMoreData:
+        case Arguments::InvalidData:
+        case Arguments::NeedMoreData:
         default:
             return withFaultyData(model);
             break;

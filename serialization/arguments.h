@@ -34,28 +34,28 @@
 class Error;
 class Message;
 
-class DFERRY_EXPORT ArgumentList
+class DFERRY_EXPORT Arguments
 {
 public:
-    ArgumentList(); // constructs an empty argument list
+    Arguments(); // constructs an empty argument list
     // constructs an argument list to deserialize data in @p data with signature @p signature;
     // if memOwnership is non-null, this means that signature and data's memory is contained in
-    // a malloc()ed block starting at memOwnership, and ~ArgumentList will free it.
+    // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
     // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
-    // you need to make sure that the memory lives as long as the ArgumentList.
+    // you need to make sure that the memory lives as long as the Arguments.
     // The copy contructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
-    ArgumentList(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
+    Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
 
     // use these wherever possible if you care at all about efficiency!!
-    ArgumentList(ArgumentList &&other);
-    ArgumentList &operator=(ArgumentList &&other);
+    Arguments(Arguments &&other);
+    Arguments &operator=(Arguments &&other);
 
     // copying needs special treatment due to the d-pointer
-    ArgumentList(const ArgumentList &other);
-    ArgumentList &operator=(const ArgumentList &other);
+    Arguments(const Arguments &other);
+    Arguments &operator=(const Arguments &other);
 
-    ~ArgumentList();
+    ~Arguments();
 
     // error (if any) propagates to Message, so it is still available later
     Error error() const;
@@ -150,7 +150,7 @@ public:
     class Reader
     {
     public:
-        explicit Reader(const ArgumentList &al);
+        explicit Reader(const Arguments &al);
         explicit Reader(const Message &msg);
         Reader(Reader &&other);
         void operator=(Reader &&other);
@@ -167,7 +167,7 @@ public:
          // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
          // ### will need to fix up any VariantInfo::prevSignature on the stack where prevSignature
          //     is inside m_data; length will still work but begin will be outdated.
-        void replaceData(chunk data); // TODO move this to ArgumentList
+        void replaceData(chunk data); // TODO move this to Arguments
 
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; } // TODO remove
@@ -217,7 +217,7 @@ public:
         // primitive type. You must copy the data before destroying the Reader or changing its backing store
         // with replaceData().
         // (### it might be possible to extend this feature to all fixed-length types including structs)
-        std::pair<ArgumentList::IoState, chunk> readPrimitiveArray();
+        std::pair<Arguments::IoState, chunk> readPrimitiveArray();
 
     private:
         class Private;
@@ -252,7 +252,7 @@ public:
         ~Writer();
 
         bool isValid() const;
-        // error propagates to ArgumentList (if the error wasn't that the ArgumentList is not writable),
+        // error propagates to Arguments (if the error wasn't that the Arguments is not writable),
         // so it is still available later
         Error error() const; // see also: aggregateStack()
 
@@ -275,7 +275,7 @@ public:
         void beginVariant();
         void endVariant();
 
-        ArgumentList finish();
+        Arguments finish();
 
         std::vector<IoState> aggregateStack() const; // the aggregates the writer is currently in
 

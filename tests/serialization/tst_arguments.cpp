@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentlist.h"
+#include "arguments.h"
 
 #include "../testutil.h"
 
@@ -64,11 +64,11 @@ static bool stringsEqual(cstring s1, cstring s2)
     return chunksEqual(chunk(s1.begin, s1.length), chunk(s2.begin, s2.length));
 }
 
-static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryAtArrayStart,
+static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtArrayStart,
                                int dataIncrement, bool debugPrint)
 {
-    ArgumentList::Reader reader(original);
-    ArgumentList::Writer writer;
+    Arguments::Reader reader(original);
+    Arguments::Writer writer;
 
     chunk data = original.data();
     chunk shortData;
@@ -77,16 +77,16 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
     bool isFirstEntry = false;
 
     while (!isDone) {
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         if (debugPrint) {
             std::cout << "Reader state: " << reader.stateString().begin << '\n';
         }
 
         switch(reader.state()) {
-        case ArgumentList::Finished:
+        case Arguments::Finished:
             isDone = true;
             break;
-        case ArgumentList::NeedMoreData: {
+        case Arguments::NeedMoreData: {
             TEST(shortData.length < data.length);
             // reallocate shortData to test that Reader can handle the data moving around - and
             // allocate the new one before destroying the old one to make sure that the pointer differs
@@ -105,30 +105,30 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
             }
             reader.replaceData(shortData);
             break; }
-        case ArgumentList::BeginStruct:
+        case Arguments::BeginStruct:
             reader.beginStruct();
             writer.beginStruct();
             break;
-        case ArgumentList::EndStruct:
+        case Arguments::EndStruct:
             reader.endStruct();
             writer.endStruct();
             break;
-        case ArgumentList::BeginVariant:
+        case Arguments::BeginVariant:
             reader.beginVariant();
             writer.beginVariant();
             break;
-        case ArgumentList::EndVariant:
+        case Arguments::EndVariant:
             reader.endVariant();
             writer.endVariant();
             break;
-        case ArgumentList::BeginArray: {
+        case Arguments::BeginArray: {
             isFirstEntry = true;
             bool isEmpty;
             reader.beginArray(&isEmpty);
             writer.beginArray(isEmpty);
             emptyNesting += isEmpty ? 1 : 0;
             break; }
-        case ArgumentList::NextArrayEntry:
+        case Arguments::NextArrayEntry:
             if (reader.nextArrayEntry()) {
                 if (isFirstEntry && skipNextEntryAtArrayStart) {
                     isFirstEntry = false;
@@ -137,19 +137,19 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
                 }
             }
             break;
-        case ArgumentList::EndArray:
+        case Arguments::EndArray:
             reader.endArray();
             writer.endArray();
             emptyNesting = std::max(emptyNesting - 1, 0);
             break;
-        case ArgumentList::BeginDict: {
+        case Arguments::BeginDict: {
             isFirstEntry = true;
             bool isEmpty;
             reader.beginDict(&isEmpty);
             writer.beginDict(isEmpty);
             emptyNesting += isEmpty ? 1 : 0;
             break; }
-        case ArgumentList::NextDictEntry:
+        case Arguments::NextDictEntry:
             if (reader.nextDictEntry()) {
                 if (isFirstEntry && skipNextEntryAtArrayStart) {
                     isFirstEntry = false;
@@ -158,66 +158,66 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
                 }
             }
             break;
-        case ArgumentList::EndDict:
+        case Arguments::EndDict:
             reader.endDict();
             writer.endDict();
             emptyNesting = std::max(emptyNesting - 1, 0);
             break;
-        case ArgumentList::Byte:
+        case Arguments::Byte:
             writer.writeByte(reader.readByte());
             break;
-        case ArgumentList::Boolean:
+        case Arguments::Boolean:
             writer.writeBoolean(reader.readBoolean());
             break;
-        case ArgumentList::Int16:
+        case Arguments::Int16:
             writer.writeInt16(reader.readInt16());
             break;
-        case ArgumentList::Uint16:
+        case Arguments::Uint16:
             writer.writeUint16(reader.readUint16());
             break;
-        case ArgumentList::Int32:
+        case Arguments::Int32:
             writer.writeInt32(reader.readInt32());
             break;
-        case ArgumentList::Uint32:
+        case Arguments::Uint32:
             writer.writeUint32(reader.readUint32());
             break;
-        case ArgumentList::Int64:
+        case Arguments::Int64:
             writer.writeInt64(reader.readInt64());
             break;
-        case ArgumentList::Uint64:
+        case Arguments::Uint64:
             writer.writeUint64(reader.readUint64());
             break;
-        case ArgumentList::Double:
+        case Arguments::Double:
             writer.writeDouble(reader.readDouble());
             break;
-        case ArgumentList::String: {
+        case Arguments::String: {
             cstring s = reader.readString();
             if (emptyNesting) {
                 s = cstring("");
             } else {
-                TEST(ArgumentList::isStringValid(s));
+                TEST(Arguments::isStringValid(s));
             }
             writer.writeString(s);
             break; }
-        case ArgumentList::ObjectPath: {
+        case Arguments::ObjectPath: {
             cstring objectPath = reader.readObjectPath();
             if (emptyNesting) {
                 objectPath = cstring("/");
             } else {
-                TEST(ArgumentList::isObjectPathValid(objectPath));
+                TEST(Arguments::isObjectPathValid(objectPath));
             }
             writer.writeObjectPath(objectPath);
             break; }
-        case ArgumentList::Signature: {
+        case Arguments::Signature: {
             cstring signature = reader.readSignature();
             if (emptyNesting) {
                 signature = cstring("");
             } else {
-                TEST(ArgumentList::isSignatureValid(signature));
+                TEST(Arguments::isSignatureValid(signature));
             }
             writer.writeSignature(signature);
             break; }
-        case ArgumentList::UnixFd:
+        case Arguments::UnixFd:
             writer.writeUnixFd(reader.readUnixFd());
             break;
         default:
@@ -226,19 +226,19 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
         }
     }
 
-    ArgumentList copy = writer.finish();
-    TEST(reader.state() == ArgumentList::Finished);
-    TEST(writer.state() == ArgumentList::Finished);
+    Arguments copy = writer.finish();
+    TEST(reader.state() == Arguments::Finished);
+    TEST(writer.state() == Arguments::Finished);
     cstring originalSignature = original.signature();
     cstring copySignature = copy.signature();
     if (originalSignature.length) {
-        TEST(ArgumentList::isSignatureValid(copySignature));
+        TEST(Arguments::isSignatureValid(copySignature));
         TEST(stringsEqual(originalSignature, copySignature));
     } else {
         TEST(copySignature.length == 0);
     }
 
-    // TODO when it's wired up between Reader and ArgumentList: chunk originalData = arg.data();
+    // TODO when it's wired up between Reader and Arguments: chunk originalData = arg.data();
     chunk originalData = original.data();
 
     chunk copyData = copy.data();
@@ -256,21 +256,21 @@ static void doRoundtripForReal(const ArgumentList &original, bool skipNextEntryA
 
 // not returning by value to avoid the move constructor or assignment operator -
 // those should have separate tests
-static ArgumentList *shallowCopy(const ArgumentList &original)
+static Arguments *shallowCopy(const Arguments &original)
 {
     cstring signature = original.signature();
     chunk data = original.data();
-    return new ArgumentList(nullptr, signature, data);
+    return new Arguments(nullptr, signature, data);
 }
 
-static void shallowAssign(ArgumentList *copy, const ArgumentList &original)
+static void shallowAssign(Arguments *copy, const Arguments &original)
 {
     cstring signature = original.signature();
     chunk data = original.data();
-    *copy = ArgumentList(nullptr, signature, data);
+    *copy = Arguments(nullptr, signature, data);
 }
 
-static void doRoundtripWithCopyAssignEtc(const ArgumentList &arg_in, bool skipNextEntryAtArrayStart,
+static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextEntryAtArrayStart,
                                          int dataIncrement, bool debugPrint)
 {
     {
@@ -279,52 +279,52 @@ static void doRoundtripWithCopyAssignEtc(const ArgumentList &arg_in, bool skipNe
     }
     {
         // shallow copy
-        ArgumentList *shallowDuplicate = shallowCopy(arg_in);
+        Arguments *shallowDuplicate = shallowCopy(arg_in);
         doRoundtripForReal(*shallowDuplicate, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
         // assignment from shallow copy
-        ArgumentList shallowAssigned;
+        Arguments shallowAssigned;
         shallowAssign(&shallowAssigned, arg_in);
         doRoundtripForReal(shallowAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
     }
     {
         // deep copy
-        ArgumentList original(arg_in);
+        Arguments original(arg_in);
         doRoundtripForReal(original, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
     }
     {
         // move construction from shallow copy
-        ArgumentList *shallowDuplicate = shallowCopy(arg_in);
-        ArgumentList shallowMoveConstructed(std::move(*shallowDuplicate));
+        Arguments *shallowDuplicate = shallowCopy(arg_in);
+        Arguments shallowMoveConstructed(std::move(*shallowDuplicate));
         doRoundtripForReal(shallowMoveConstructed, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
         // move assignment (hopefully, may the compiler optimize this to move-construction?) from shallow copy
-        ArgumentList *shallowDuplicate = shallowCopy(arg_in);
-        ArgumentList shallowMoveAssigned;
+        Arguments *shallowDuplicate = shallowCopy(arg_in);
+        Arguments shallowMoveAssigned;
         shallowMoveAssigned = std::move(*shallowDuplicate);
         doRoundtripForReal(shallowMoveAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
         // move construction from deep copy
-        ArgumentList duplicate(arg_in);
-        ArgumentList moveConstructed(std::move(duplicate));
+        Arguments duplicate(arg_in);
+        Arguments moveConstructed(std::move(duplicate));
         doRoundtripForReal(moveConstructed, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
     }
     {
         // move assignment (hopefully, may the compiler optimize this to move-construction?) from deep copy
-        ArgumentList duplicate(arg_in);
-        ArgumentList moveAssigned;
+        Arguments duplicate(arg_in);
+        Arguments moveAssigned;
         moveAssigned = std::move(duplicate);
         doRoundtripForReal(moveAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
     }
 }
 
-static void doRoundtrip(const ArgumentList &arg, bool debugPrint = false)
+static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
     int maxIncrement = arg.data().length;
     for (int i = 1; i <= maxIncrement; i++) {
@@ -345,136 +345,136 @@ static void test_stringValidation()
         cstring emptyWithNull("");
         cstring emptyWithoutNull;
 
-        TEST(!ArgumentList::isStringValid(emptyWithoutNull));
-        TEST(ArgumentList::isStringValid(emptyWithNull));
+        TEST(!Arguments::isStringValid(emptyWithoutNull));
+        TEST(Arguments::isStringValid(emptyWithNull));
 
-        TEST(!ArgumentList::isObjectPathValid(emptyWithoutNull));
-        TEST(!ArgumentList::isObjectPathValid(emptyWithNull));
+        TEST(!Arguments::isObjectPathValid(emptyWithoutNull));
+        TEST(!Arguments::isObjectPathValid(emptyWithNull));
 
-        TEST(ArgumentList::isSignatureValid(emptyWithNull));
-        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull));
-        TEST(!ArgumentList::isSignatureValid(emptyWithNull, ArgumentList::VariantSignature));
-        TEST(!ArgumentList::isSignatureValid(emptyWithoutNull, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(emptyWithNull));
+        TEST(!Arguments::isSignatureValid(emptyWithoutNull));
+        TEST(!Arguments::isSignatureValid(emptyWithNull, Arguments::VariantSignature));
+        TEST(!Arguments::isSignatureValid(emptyWithoutNull, Arguments::VariantSignature));
     }
     {
         cstring trivial("i");
-        TEST(ArgumentList::isSignatureValid(trivial));
-        TEST(ArgumentList::isSignatureValid(trivial, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(trivial));
+        TEST(Arguments::isSignatureValid(trivial, Arguments::VariantSignature));
     }
     {
         cstring list("iqb");
-        TEST(ArgumentList::isSignatureValid(list));
-        TEST(!ArgumentList::isSignatureValid(list, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(list));
+        TEST(!Arguments::isSignatureValid(list, Arguments::VariantSignature));
         cstring list2("aii");
-        TEST(ArgumentList::isSignatureValid(list2));
-        TEST(!ArgumentList::isSignatureValid(list2, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(list2));
+        TEST(!Arguments::isSignatureValid(list2, Arguments::VariantSignature));
     }
     {
         cstring simpleArray("ai");
-        TEST(ArgumentList::isSignatureValid(simpleArray));
-        TEST(ArgumentList::isSignatureValid(simpleArray, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(simpleArray));
+        TEST(Arguments::isSignatureValid(simpleArray, Arguments::VariantSignature));
     }
     {
         cstring messyArray("a(iaia{ia{iv}})");
-        TEST(ArgumentList::isSignatureValid(messyArray));
-        TEST(ArgumentList::isSignatureValid(messyArray, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(messyArray));
+        TEST(Arguments::isSignatureValid(messyArray, Arguments::VariantSignature));
     }
     {
         cstring dictFail("a{vi}");
-        TEST(!ArgumentList::isSignatureValid(dictFail));
-        TEST(!ArgumentList::isSignatureValid(dictFail, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(dictFail));
+        TEST(!Arguments::isSignatureValid(dictFail, Arguments::VariantSignature));
     }
     {
         cstring emptyStruct("()");
-        TEST(!ArgumentList::isSignatureValid(emptyStruct));
-        TEST(!ArgumentList::isSignatureValid(emptyStruct, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(emptyStruct));
+        TEST(!Arguments::isSignatureValid(emptyStruct, Arguments::VariantSignature));
         cstring emptyStruct2("(())");
-        TEST(!ArgumentList::isSignatureValid(emptyStruct2));
-        TEST(!ArgumentList::isSignatureValid(emptyStruct2, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(emptyStruct2));
+        TEST(!Arguments::isSignatureValid(emptyStruct2, Arguments::VariantSignature));
         cstring miniStruct("(t)");
-        TEST(ArgumentList::isSignatureValid(miniStruct));
-        TEST(ArgumentList::isSignatureValid(miniStruct, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(miniStruct));
+        TEST(Arguments::isSignatureValid(miniStruct, Arguments::VariantSignature));
         cstring badStruct("((i)");
-        TEST(!ArgumentList::isSignatureValid(badStruct));
-        TEST(!ArgumentList::isSignatureValid(badStruct, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(badStruct));
+        TEST(!Arguments::isSignatureValid(badStruct, Arguments::VariantSignature));
         cstring badStruct2("(i))");
-        TEST(!ArgumentList::isSignatureValid(badStruct2));
-        TEST(!ArgumentList::isSignatureValid(badStruct2, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(badStruct2));
+        TEST(!Arguments::isSignatureValid(badStruct2, Arguments::VariantSignature));
     }
     {
         cstring nullStr;
         cstring emptyStr("");
-        TEST(!ArgumentList::isObjectPathValid(nullStr));
-        TEST(!ArgumentList::isObjectPathValid(emptyStr));
-        TEST(ArgumentList::isObjectPathValid(cstring("/")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc/")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/abc")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/abc/def")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc&def")));
-        TEST(!ArgumentList::isObjectPathValid(cstring("/abc//def")));
-        TEST(ArgumentList::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
+        TEST(!Arguments::isObjectPathValid(nullStr));
+        TEST(!Arguments::isObjectPathValid(emptyStr));
+        TEST(Arguments::isObjectPathValid(cstring("/")));
+        TEST(!Arguments::isObjectPathValid(cstring("/abc/")));
+        TEST(Arguments::isObjectPathValid(cstring("/abc")));
+        TEST(Arguments::isObjectPathValid(cstring("/abc/def")));
+        TEST(!Arguments::isObjectPathValid(cstring("/abc&def")));
+        TEST(!Arguments::isObjectPathValid(cstring("/abc//def")));
+        TEST(Arguments::isObjectPathValid(cstring("/aZ/0123_zAZa9_/_")));
     }
     {
         cstring maxStruct("((((((((((((((((((((((((((((((((i"
                           "))))))))))))))))))))))))))))))))");
-        TEST(ArgumentList::isSignatureValid(maxStruct));
-        TEST(ArgumentList::isSignatureValid(maxStruct, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(maxStruct));
+        TEST(Arguments::isSignatureValid(maxStruct, Arguments::VariantSignature));
         cstring struct33("(((((((((((((((((((((((((((((((((i" // too much nesting by one
                          ")))))))))))))))))))))))))))))))))");
-        TEST(!ArgumentList::isSignatureValid(struct33));
-        TEST(!ArgumentList::isSignatureValid(struct33, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(struct33));
+        TEST(!Arguments::isSignatureValid(struct33, Arguments::VariantSignature));
 
         cstring maxArray("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
-        TEST(ArgumentList::isSignatureValid(maxArray));
-        TEST(ArgumentList::isSignatureValid(maxArray, ArgumentList::VariantSignature));
+        TEST(Arguments::isSignatureValid(maxArray));
+        TEST(Arguments::isSignatureValid(maxArray, Arguments::VariantSignature));
         cstring array33("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
-        TEST(!ArgumentList::isSignatureValid(array33));
-        TEST(!ArgumentList::isSignatureValid(array33, ArgumentList::VariantSignature));
+        TEST(!Arguments::isSignatureValid(array33));
+        TEST(!Arguments::isSignatureValid(array33, Arguments::VariantSignature));
     }
 }
 
 static void test_nesting()
 {
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginArray(false);
             writer.nextArrayEntry();
         }
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.beginArray(false);
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.beginStruct();
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict(false);
             writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.beginArray(false);
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         for (int i = 0; i < 64; i++) {
             writer.beginVariant();
         }
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.beginVariant();
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
 }
 
@@ -486,25 +486,25 @@ struct LengthPrefixedData
 
 static void test_roundtrip()
 {
-    doRoundtrip(ArgumentList(nullptr, cstring(""), chunk()));
+    doRoundtrip(Arguments(nullptr, cstring(""), chunk()));
     {
         byte data[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-        doRoundtrip(ArgumentList(nullptr, cstring("i"), chunk(data, 4)));
-        doRoundtrip(ArgumentList(nullptr, cstring("yyyy"), chunk(data, 4)));
-        doRoundtrip(ArgumentList(nullptr, cstring("iy"), chunk(data, 5)));
-        doRoundtrip(ArgumentList(nullptr, cstring("iiy"), chunk(data, 9)));
-        doRoundtrip(ArgumentList(nullptr, cstring("nquy"), chunk(data, 9)));
-        doRoundtrip(ArgumentList(nullptr, cstring("unqy"), chunk(data, 9)));
-        doRoundtrip(ArgumentList(nullptr, cstring("nqy"), chunk(data, 5)));
-        doRoundtrip(ArgumentList(nullptr, cstring("qny"), chunk(data, 5)));
-        doRoundtrip(ArgumentList(nullptr, cstring("yyny"), chunk(data, 5)));
-        doRoundtrip(ArgumentList(nullptr, cstring("qyyy"), chunk(data, 5)));
-        doRoundtrip(ArgumentList(nullptr, cstring("d"), chunk(data, 8)));
-        doRoundtrip(ArgumentList(nullptr, cstring("dy"), chunk(data, 9)));
-        doRoundtrip(ArgumentList(nullptr, cstring("x"), chunk(data, 8)));
-        doRoundtrip(ArgumentList(nullptr, cstring("xy"), chunk(data, 9)));
-        doRoundtrip(ArgumentList(nullptr, cstring("t"), chunk(data, 8)));
-        doRoundtrip(ArgumentList(nullptr, cstring("ty"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("i"), chunk(data, 4)));
+        doRoundtrip(Arguments(nullptr, cstring("yyyy"), chunk(data, 4)));
+        doRoundtrip(Arguments(nullptr, cstring("iy"), chunk(data, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("iiy"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("nquy"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("unqy"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("nqy"), chunk(data, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("qny"), chunk(data, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("yyny"), chunk(data, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("qyyy"), chunk(data, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("d"), chunk(data, 8)));
+        doRoundtrip(Arguments(nullptr, cstring("dy"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("x"), chunk(data, 8)));
+        doRoundtrip(Arguments(nullptr, cstring("xy"), chunk(data, 9)));
+        doRoundtrip(Arguments(nullptr, cstring("t"), chunk(data, 8)));
+        doRoundtrip(Arguments(nullptr, cstring("ty"), chunk(data, 9)));
     }
     {
         LengthPrefixedData testArray = {0};
@@ -514,19 +514,19 @@ static void test_roundtrip()
         byte *testData = reinterpret_cast<byte *>(&testArray);
 
         testArray.length = 1;
-        doRoundtrip(ArgumentList(nullptr, cstring("ay"), chunk(testData, 5)));
+        doRoundtrip(Arguments(nullptr, cstring("ay"), chunk(testData, 5)));
         testArray.length = 4;
-        doRoundtrip(ArgumentList(nullptr, cstring("ai"), chunk(testData, 8)));
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 8)));
         testArray.length = 8;
-        doRoundtrip(ArgumentList(nullptr, cstring("ai"), chunk(testData, 12)));
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 12)));
         testArray.length = 64;
-        doRoundtrip(ArgumentList(nullptr, cstring("ai"), chunk(testData, 68)));
-        doRoundtrip(ArgumentList(nullptr, cstring("an"), chunk(testData, 68)));
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 68)));
+        doRoundtrip(Arguments(nullptr, cstring("an"), chunk(testData, 68)));
 
         testArray.data[0] = 0; testArray.data[1] = 0; // zero out padding
         testArray.data[2] = 0; testArray.data[3] = 0;
         testArray.length = 56;
-        doRoundtrip(ArgumentList(nullptr, cstring("ad"), chunk(testData, 64)));
+        doRoundtrip(Arguments(nullptr, cstring("ad"), chunk(testData, 64)));
     }
     {
         LengthPrefixedData testString;
@@ -536,7 +536,7 @@ static void test_roundtrip()
         testString.data[200] = '\0';
         testString.length = 200;
         byte *testData = reinterpret_cast<byte *>(&testString);
-        doRoundtrip(ArgumentList(nullptr, cstring("s"), chunk(testData, 205)));
+        doRoundtrip(Arguments(nullptr, cstring("s"), chunk(testData, 205)));
     }
     {
         LengthPrefixedData testDict;
@@ -547,7 +547,7 @@ static void test_roundtrip()
         testDict.data[4] = 23;
         testDict.data[5] = 42;
         byte *testData = reinterpret_cast<byte *>(&testDict);
-        doRoundtrip(ArgumentList(nullptr, cstring("a{yy}"), chunk(testData, 10)));
+        doRoundtrip(Arguments(nullptr, cstring("a{yy}"), chunk(testData, 10)));
     }
     {
         byte testData[36] = {
@@ -561,7 +561,7 @@ static void test_roundtrip()
             1, 2, 3, 4, 5, 6, 7, 8, // the double
             20, 21, 22, 23 // the int (not part of the variant)
         };
-        doRoundtrip(ArgumentList(nullptr, cstring("vi"), chunk(testData, 36)));
+        doRoundtrip(Arguments(nullptr, cstring("vi"), chunk(testData, 36)));
     }
 }
 
@@ -569,123 +569,123 @@ static void test_writerMisuse()
 {
     // Array
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(false);
         writer.endArray(); // wrong,  must contain exactly one type
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(true);
         writer.endArray(); // even with no elements it, must contain exactly one type
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(false);
         writer.writeByte(1); // in Writer, calling nextArrayEntry() after beginArray() is optional
         writer.endArray();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(false);
         writer.nextArrayEntry();    // optional and may not trigger an error
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.endArray(); // wrong, must contain exactly one type
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(false);
         writer.nextArrayEntry();
         writer.writeByte(1);
         writer.writeByte(2);  // wrong, must contain exactly one type
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginArray(true);
         writer.nextArrayEntry();
         writer.beginVariant();
         writer.endVariant(); // empty variants are okay if and only if inside an empty array
         writer.endArray();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     // Dict
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginDict(false);
         writer.endDict(); // wrong, must contain exactly two types
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
         writer.endDict(); // wrong, a dict must contain exactly two types
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginDict(false);
         writer.writeByte(1); // in Writer, calling nextDictEntry() after beginDict() is optional
         writer.writeByte(2);
         writer.endDict();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.writeByte(1);
         writer.writeByte(2);
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.writeByte(3); // wrong, a dict contains only exactly two types
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginDict(false);
         writer.nextDictEntry();
         writer.beginVariant(); // wrong, key type must be basic
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     // Variant
     {
         // this and the next are a baseline to make sure that the following test fails for a good reason
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginVariant();
         writer.writeByte(1);
         writer.endVariant();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginVariant();
         writer.endVariant();
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginVariant();
         writer.writeByte(1);
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
-        TEST(writer.state() == ArgumentList::InvalidData);
+        TEST(writer.state() == Arguments::InvalidData);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.beginStruct();
         writer.writeByte(1);
-        TEST(writer.state() != ArgumentList::InvalidData);
-        ArgumentList arg = writer.finish();
-        TEST(writer.state() == ArgumentList::InvalidData); // can't finish while inside an aggregate
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::InvalidData); // can't finish while inside an aggregate
         TEST(arg.signature().length == 0); // should not be written on error
     }
 }
 
-void addSomeVariantStuff(ArgumentList::Writer *writer)
+void addSomeVariantStuff(Arguments::Writer *writer)
 {
     // maybe should have typed the following into hackertyper.com to make it look more "legit" ;)
     static const char *aVeryLongString = "ujfgosuideuvcevfgeoauiyetoraedtmzaubeodtraueonuljfgonuiljofnuilojf"
@@ -722,9 +722,9 @@ void addSomeVariantStuff(ArgumentList::Writer *writer)
 
 static void test_complicated()
 {
-    ArgumentList arg;
+    Arguments arg;
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         // NeedMoreData-related bugs are less dangerous inside arrays, so we try to provoke one here;
         // the reason for arrays preventing failures is that they have a length prefix which enables
         // and encourages pre-fetching all the array's data before processing *anything* inside the
@@ -774,18 +774,18 @@ static void test_complicated()
         writer.nextArrayEntry();
             writer.writeDouble(1.982342);
         writer.endArray();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.finish();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     doRoundtrip(arg);
 }
 
 static void test_alignment()
 {
-    ArgumentList arg;
+    Arguments arg;
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.writeByte(123);
         writer.beginArray(false);
         writer.writeByte(64);
@@ -795,13 +795,13 @@ static void test_alignment()
             writer.writeByte(i);
         }
 
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.finish();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.writeByte(123);
         writer.beginStruct();
         writer.writeByte(110);
@@ -814,10 +814,10 @@ static void test_alignment()
 
 static void test_arrayOfVariant()
 {
-    ArgumentList arg;
+    Arguments arg;
     // non-empty array
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.writeByte(123);
         writer.beginArray(false);
         writer.beginVariant();
@@ -826,14 +826,14 @@ static void test_arrayOfVariant()
         writer.endArray();
         writer.writeByte(123);
 
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.finish();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
     // empty array
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
         writer.writeByte(123);
         writer.beginArray(true);
         writer.beginVariant();
@@ -841,19 +841,19 @@ static void test_arrayOfVariant()
         writer.endArray();
         writer.writeByte(123);
 
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.finish();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
 }
 
 static void test_realMessage()
 {
-    ArgumentList arg;
+    Arguments arg;
     // non-empty array
     {
-        ArgumentList::Writer writer;
+        Arguments::Writer writer;
 
         writer.writeString(cstring("message"));
         writer.writeString(cstring("konversation"));
@@ -877,14 +877,14 @@ static void test_realMessage()
         writer.writeInt32(-1);
         writer.writeInt64(46137372);
 
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
         writer.finish();
-        TEST(writer.state() != ArgumentList::InvalidData);
+        TEST(writer.state() != Arguments::InvalidData);
     }
     doRoundtrip(arg);
 }
 
-static void writeValue(ArgumentList::Writer *writer, int typeIndex, const void *value)
+static void writeValue(Arguments::Writer *writer, int typeIndex, const void *value)
 {
     switch (typeIndex) {
     case 0:
@@ -902,7 +902,7 @@ static void writeValue(ArgumentList::Writer *writer, int typeIndex, const void *
     }
 }
 
-static bool checkValue(ArgumentList::Reader *reader, int typeIndex, const void *expected)
+static bool checkValue(Arguments::Reader *reader, int typeIndex, const void *expected)
 {
     switch (typeIndex) {
     case 0:
@@ -938,12 +938,12 @@ void test_primitiveArray()
 
         static const uint32 arrayTypesCount = 5;
         // those types must be compatible with writeValue() and readValue()
-        static ArgumentList::IoState arrayTypes[arrayTypesCount] = {
-            ArgumentList::InvalidData,
-            ArgumentList::Byte,
-            ArgumentList::Uint16,
-            ArgumentList::Uint32,
-            ArgumentList::Uint64
+        static Arguments::IoState arrayTypes[arrayTypesCount] = {
+            Arguments::InvalidData,
+            Arguments::Byte,
+            Arguments::Uint16,
+            Arguments::Uint32,
+            Arguments::Uint64
         };
 
         for (int otherType = 0; otherType < arrayTypesCount; otherType++) {
@@ -974,9 +974,9 @@ void test_primitiveArray()
                     const uint32 dataSize = arraySize << (typeInArray - 1);
                     TEST(dataSize <= testDataSize);
 
-                    ArgumentList arg;
+                    Arguments arg;
                     {
-                        ArgumentList::Writer writer;
+                        Arguments::Writer writer;
 
                         // write something before the array to test different starting position alignments
                         writeValue(&writer, otherType, &otherValue);
@@ -998,39 +998,39 @@ void test_primitiveArray()
                             writer.endArray();
                         }
 
-                        TEST(writer.state() != ArgumentList::InvalidData);
-                        // TEST(writer.state() == ArgumentList::AnyData);
+                        TEST(writer.state() != Arguments::InvalidData);
+                        // TEST(writer.state() == Arguments::AnyData);
                         // TODO do we handle AnyData consistently, and do we really need it anyway?
                         writeValue(&writer, otherType, &otherValue);
-                        TEST(writer.state() != ArgumentList::InvalidData);
+                        TEST(writer.state() != Arguments::InvalidData);
                         arg = writer.finish();
-                        TEST(writer.state() == ArgumentList::Finished);
+                        TEST(writer.state() == Arguments::Finished);
                     }
 
                     {
-                        ArgumentList::Reader reader(arg);
+                        Arguments::Reader reader(arg);
 
                         TEST(checkValue(&reader, otherType, &otherValue));
 
                         if (readAsPrimitive) {
-                            TEST(reader.state() == ArgumentList::BeginArray);
-                            std::pair<ArgumentList::IoState, chunk> ret = reader.readPrimitiveArray();
+                            TEST(reader.state() == Arguments::BeginArray);
+                            std::pair<Arguments::IoState, chunk> ret = reader.readPrimitiveArray();
                             TEST(ret.first == arrayTypes[typeInArray]);
                             TEST(chunksEqual(chunk(testData, dataSize), ret.second));
                         } else {
-                            TEST(reader.state() == ArgumentList::BeginArray);
+                            TEST(reader.state() == Arguments::BeginArray);
                             bool isEmpty = false;
                             reader.beginArray(&isEmpty);
                             TEST(isEmpty == (arraySize == 0));
-                            TEST(reader.state() != ArgumentList::InvalidData);
+                            TEST(reader.state() != Arguments::InvalidData);
                             byte *testDataPtr = testData;
 
                             if (arraySize) {
                                 for (int m = 0; m < arraySize; m++) {
-                                    TEST(reader.state() != ArgumentList::InvalidData);
+                                    TEST(reader.state() != Arguments::InvalidData);
                                     TEST(reader.nextArrayEntry());
                                     TEST(checkValue(&reader, typeInArray, testDataPtr));
-                                    TEST(reader.state() != ArgumentList::InvalidData);
+                                    TEST(reader.state() != Arguments::InvalidData);
                                     testDataPtr += 1 << (typeInArray - 1);
                                 }
                             } else {
@@ -1038,18 +1038,18 @@ void test_primitiveArray()
                                 TEST(reader.state() == arrayTypes[typeInArray]);
                                 // next: dummy read; not really necessary, just a sanity check
                                 checkValue(&reader, typeInArray, testDataPtr);
-                                TEST(reader.state() != ArgumentList::InvalidData);
+                                TEST(reader.state() != Arguments::InvalidData);
                             }
 
                             TEST(!reader.nextArrayEntry());
-                            TEST(reader.state() != ArgumentList::InvalidData);
+                            TEST(reader.state() != Arguments::InvalidData);
                             reader.endArray();
-                            TEST(reader.state() != ArgumentList::InvalidData);
+                            TEST(reader.state() != Arguments::InvalidData);
                         }
 
-                        TEST(reader.state() != ArgumentList::InvalidData);
+                        TEST(reader.state() != Arguments::InvalidData);
                         TEST(checkValue(&reader, otherType, &otherValue));
-                        TEST(reader.state() == ArgumentList::Finished);
+                        TEST(reader.state() == Arguments::Finished);
                     }
                 }
             }

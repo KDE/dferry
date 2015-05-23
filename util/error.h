@@ -2,12 +2,12 @@
     Design notes about errors.
 
     Errors can come (including but not limited to...) from these areas:
-    - ArgumentList assembly
+    - Arguments assembly
       - invalid construct, e.g. empty struct, dict with key but no value, dict with invalid key type,
         writing different (non-variant) types in different array elements
       - limit exceeded (message size, nesting depth etc)
       - invalid single data (e.g. null in string, too long string)
-    - ArgumentList disassembly
+    - Arguments disassembly
       - malformed data (mostly manifesting as limit exceeded, since the format has little room for
         "grammar errors" - almost everything could theoretically be valid data)
       - invalid single data
@@ -28,7 +28,7 @@
       stuff should really be separate! Maybe separate namespace, in any case separate enum
 
     an error (if any) propagates in the following way, so you don't need to check at every step:
-    ArgumentList::Writer -> ArgumentList -> Message -> PendingReply
+    Arguments::Writer -> Arguments -> Message -> PendingReply
 
 */
 
@@ -45,8 +45,8 @@ public:
         // Error error ;)
         NoError = 0,
 
-        // ArgumentList errors
-        NotAttachedToArgumentList,
+        // Arguments errors
+        NotAttachedToArguments,
         InvalidSignature,
         ReplacementDataIsShorter,
         MalformedMessageData,
@@ -56,8 +56,8 @@ public:
         InvalidObjectPath,
         SignatureTooLong,
         ExcessiveNesting,
-        CannotEndArgumentListHere,
-        ArgumentListTooLong,
+        CannotEndArgumentsHere,
+        ArgumentsTooLong,
 
         NotSingleCompleteTypeInVariant,
         EmptyVariant,
@@ -78,8 +78,8 @@ public:
         ArrayOrDictTooLong,
         // we have a lot of error codes at our disposal, so reserve some for easy classification
         // by range
-        MaxArgumentListError = 1023,
-        // end ArgumentList errors
+        MaxArgumentsError = 1023,
+        // end Arguments errors
 
         // Message  / PendingReply
         DetachedPendingReply,

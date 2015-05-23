@@ -44,7 +44,7 @@ set(DFER_SOURCES
     events/iioeventclient.cpp
     events/platformtime.cpp
     events/timer.cpp
-    serialization/argumentlist.cpp
+    serialization/arguments.cpp
     serialization/message.cpp
     util/error.cpp
     util/icompletionclient.cpp
@@ -59,7 +59,7 @@ set(DFER_PUBLIC_HEADERS
     events/eventdispatcher.h
     events/timer.h
     serialization/message.h
-    serialization/argumentlist.h
+    serialization/arguments.h
     util/error.h
     util/export.h
     util/icompletionclient.h)

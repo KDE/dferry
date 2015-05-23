@@ -26,7 +26,7 @@
 
 #include "message.h"
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "error.h"
 #include "iconnectionclient.h"
 
@@ -102,7 +102,7 @@ public:
     bool deserializeVariableHeaders();
     bool serialize();
     void serializeFixedHeaders();
-    ArgumentList serializeVariableHeaders();
+    Arguments serializeVariableHeaders();
 
     void clearBuffer();
     void reserveBuffer(int newSize);
@@ -137,7 +137,7 @@ public:
 
     Error m_error;
 
-    ArgumentList m_mainArguments;
+    Arguments m_mainArguments;
 
     VarHeaderStorage m_varHeaders;
 

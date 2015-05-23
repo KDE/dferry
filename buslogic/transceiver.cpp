@@ -24,7 +24,7 @@
 #include "transceiver.h"
 #include "transceiver_p.h"
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "authnegotiator.h"
 #include "event.h"
 #include "eventdispatcher_p.h"
@@ -234,14 +234,14 @@ void TransceiverPrivate::handleHelloReply()
 {
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
-    ArgumentList argList = m_helloReceiver->m_helloReply.reply()->argumentList();
+    Arguments argList = m_helloReceiver->m_helloReply.reply()->argumentList();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 
-    ArgumentList::Reader reader(argList);
-    assert(reader.state() == ArgumentList::String);
+    Arguments::Reader reader(argList);
+    assert(reader.state() == Arguments::String);
     cstring busName = reader.readString();
-    assert(reader.state() == ArgumentList::Finished);
+    assert(reader.state() == Arguments::Finished);
     m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
 
     // update unique name for future secondaries...

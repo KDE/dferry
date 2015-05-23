@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentlist.h"
+#include "arguments.h"
 #include "connectioninfo.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
@@ -57,8 +57,8 @@ public:
             return;
         }
         {
-            ArgumentList args = ping.argumentList();
-            ArgumentList::Reader reader(args);
+            Arguments args = ping.argumentList();
+            Arguments::Reader reader(args);
             cstring payload = reader.readString();
             TEST(!reader.error().isError());
             TEST(reader.isFinished());
@@ -67,9 +67,9 @@ public:
 
         {
             Message pong = Message::createReplyTo(ping);
-            ArgumentList::Writer writer;
+            Arguments::Writer writer;
             writer.writeString(pongPayload);
-            pong.setArgumentList(writer.finish());
+            pong.setArguments(writer.finish());
 
             Error replyError = m_transceiver->sendNoReply(std::move(pong));
             TEST(!replyError.isError());
@@ -106,8 +106,8 @@ public:
     {
         Message pong = pongReply->takeReply();
 
-        ArgumentList args = pong.argumentList();
-        ArgumentList::Reader reader(args);
+        Arguments args = pong.argumentList();
+        Arguments::Reader reader(args);
         cstring payload = reader.readString();
         TEST(!reader.error().isError());
         TEST(reader.isFinished());
@@ -124,9 +124,9 @@ static void testPingPong()
 
     // send ping message to other thread
     Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
-    ArgumentList::Writer writer;
+    Arguments::Writer writer;
     writer.writeString(pingPayload);
-    ping.setArgumentList(writer.finish());
+    ping.setArguments(writer.finish());
 
     // finish creating the connection
     while (trans.uniqueName().empty()) {

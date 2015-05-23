@@ -656,14 +656,14 @@ void MessagePrivate::setCompletionClient(ICompletionClient *client)
     m_completionClient = client;
 }
 
-void Message::setArgumentList(ArgumentList arguments)
+void Message::setArguments(Arguments arguments)
 {
     d->m_dirty = true;
     d->m_error = arguments.error();
     d->m_mainArguments = std::move(arguments);
 }
 
-const ArgumentList &Message::argumentList() const
+const Arguments &Message::argumentList() const
 {
     return d->m_mainArguments;
 }
@@ -672,7 +672,7 @@ static const int s_properFixedHeaderLength = 12;
 static const int s_extendedFixedHeaderLength = 16;
 static const int s_maxMessageLength = 134217728;
 
-// This does not return bool because full validation of the main argument list would take quite
+// This does not return bool because full validation of the main arguments would take quite
 // a few cycles. Validating only the header of the message doesn't seem to be worth it.
 void Message::load(const std::vector<byte> &data)
 {
@@ -702,7 +702,7 @@ void Message::load(const std::vector<byte> &data)
 
     std::string sig = signature();
     chunk bodyData(d->m_buffer.begin + d->m_headerLength, d->m_bodyLength);
-    d->m_mainArguments = ArgumentList(nullptr, cstring(sig.c_str(), sig.length()),
+    d->m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
                                       bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Deserialized;
 }
@@ -757,7 +757,7 @@ void MessagePrivate::notifyConnectionReadyRead()
                 sig = m_varHeaders.stringHeader(Message::SignatureHeader);
             }
             chunk bodyData(m_buffer.begin + m_headerLength, m_bodyLength);
-            m_mainArguments = ArgumentList(nullptr, cstring(sig.c_str(), sig.length()),
+            m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
                                            bodyData, m_isByteSwapped);
             assert(!isError);
             connection()->removeClient(this);
@@ -907,21 +907,21 @@ bool MessagePrivate::deserializeFixedHeaders()
 
 bool MessagePrivate::deserializeVariableHeaders()
 {
-    // use ArgumentList to parse the variable header fields
-    // HACK: the fake first int argument is there to start the ArgumentList's data 8 byte aligned
+    // use Arguments to parse the variable header fields
+    // HACK: the fake first int argument is there to start the Arguments's data 8 byte aligned
     byte *base = m_buffer.begin + s_properFixedHeaderLength - sizeof(int32);
     chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
     cstring varHeadersSig("ia(yv)");
-    ArgumentList argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
+    Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
 
-    ArgumentList::Reader reader(argList);
+    Arguments::Reader reader(argList);
     assert(reader.isValid());
 
-    if (reader.state() != ArgumentList::Int32) {
+    if (reader.state() != Arguments::Int32) {
         return false;
     }
     reader.readInt32();
-    if (reader.state() != ArgumentList::BeginArray) {
+    if (reader.state() != Arguments::BeginArray) {
         return false;
     }
     reader.beginArray();
@@ -939,20 +939,20 @@ bool MessagePrivate::deserializeVariableHeaders()
         bool ok = true; // short-circuit evaluation ftw
         if (isStringHeader(headerField)) {
             if (headerField == Message::PathHeader) {
-                ok = ok && reader.state() == ArgumentList::ObjectPath;
+                ok = ok && reader.state() == Arguments::ObjectPath;
                 ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readObjectPath()));
             } else if (headerField == Message::SignatureHeader) {
-                ok = ok && reader.state() == ArgumentList::Signature;
+                ok = ok && reader.state() == Arguments::Signature;
                 // The spec allows having no signature header, which means "empty signature". However...
                 // We do not drop empty signature headers when deserializing, in order to preserve
                 // the original message contents. This could be useful for debugging and testing.
                 ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readSignature()));
             } else {
-                ok = ok && reader.state() == ArgumentList::String;
+                ok = ok && reader.state() == Arguments::String;
                 ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readString()));
             }
         } else {
-            ok = ok && reader.state() == ArgumentList::Uint32;
+            ok = ok && reader.state() == Arguments::Uint32;
             if (headerField == Message::UnixFdsHeader) {
                 reader.readUint32(); // discard it, for now (TODO)
             } else {
@@ -996,11 +996,11 @@ bool MessagePrivate::serialize()
         m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
     }
 
-    ArgumentList headerArgs = serializeVariableHeaders();
+    Arguments headerArgs = serializeVariableHeaders();
 
     // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
     // the original dbus code aligns based on address in the final data stream
-    // (offset s_properFixedHeaderLength == 12), we align based on address in the ArgumentList's buffer
+    // (offset s_properFixedHeaderLength == 12), we align based on address in the Arguments's buffer
     // (offset 0) - note that our modification keeps the stream valid because length is measured from end
     // of padding
 
@@ -1057,7 +1057,7 @@ void MessagePrivate::serializeFixedHeaders()
     basic::writeUint32(p + sizeof(uint32), m_serial);
 }
 
-static void doVarHeaderPrologue(ArgumentList::Writer *writer, Message::VariableHeader field)
+static void doVarHeaderPrologue(Arguments::Writer *writer, Message::VariableHeader field)
 {
     writer->nextArrayEntry();
     writer->beginStruct();
@@ -1065,15 +1065,15 @@ static void doVarHeaderPrologue(ArgumentList::Writer *writer, Message::VariableH
     writer->beginVariant();
 }
 
-static void doVarHeaderEpilogue(ArgumentList::Writer *writer)
+static void doVarHeaderEpilogue(Arguments::Writer *writer)
 {
     writer->endVariant();
     writer->endStruct();
 }
 
-ArgumentList MessagePrivate::serializeVariableHeaders()
+Arguments MessagePrivate::serializeVariableHeaders()
 {
-    ArgumentList::Writer writer;
+    Arguments::Writer writer;
 
     // note that we don't have to deal with zero-length arrays because all valid message types require
     // at least one of the variable headers
@@ -1106,7 +1106,7 @@ ArgumentList MessagePrivate::serializeVariableHeaders()
                     Error::MessageSignature
                 };
                 m_error.setCode(stringHeaderErrors[i]);
-                return ArgumentList();
+                return Arguments();
             }
         }
     }
