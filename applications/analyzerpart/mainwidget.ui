@@ -100,7 +100,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QTreeView" name="argumentList"/>
+     <widget class="QTreeView" name="arguments"/>
     </widget>
    </item>
   </layout>

@@ -83,7 +83,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
 
     QStandardItem *parent = model->invisibleRootItem();
 
-    Arguments::Reader reader(message->argumentList());
+    Arguments::Reader reader(message->arguments());
     if (!reader.isValid()) {
         return withFaultyData(model);
     }

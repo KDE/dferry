@@ -51,7 +51,7 @@ public:
     void pendingReplyFinished(PendingReply *pr) override
     {
         pr->dumpState();
-        std::cout << "got it!\n" << pr->reply()->argumentList().prettyPrint();
+        std::cout << "got it!\n" << pr->reply()->arguments().prettyPrint();
         TEST(pr->isFinished());
         TEST(!pr->isError());
 

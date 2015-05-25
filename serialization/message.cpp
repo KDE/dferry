@@ -663,7 +663,7 @@ void Message::setArguments(Arguments arguments)
     d->m_mainArguments = std::move(arguments);
 }
 
-const Arguments &Message::argumentList() const
+const Arguments &Message::arguments() const
 {
     return d->m_mainArguments;
 }

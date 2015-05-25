@@ -134,7 +134,7 @@ public:
 
     // setArguments also sets the signature header of the message
     void setArguments(Arguments arguments);
-    const Arguments &argumentList() const;
+    const Arguments &arguments() const;
 
     std::vector<byte> save();
     void load(const std::vector<byte> &data);

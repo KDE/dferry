@@ -235,7 +235,7 @@ void TransceiverPrivate::handleHelloReply()
 {
     assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
     // ### following line is ugly and slow!! Indicates a need for better API.
-    Arguments argList = m_helloReceiver->m_helloReply.reply()->argumentList();
+    Arguments argList = m_helloReceiver->m_helloReply.reply()->arguments();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 

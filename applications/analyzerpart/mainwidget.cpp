@@ -46,8 +46,8 @@ MainWidget::MainWidget()
     m_ui.messageList->setAlternatingRowColors(true);
     m_ui.messageList->setUniformRowHeights(true);
 
-    m_ui.argumentList->setModel(createArgumentsModel(0));
-    m_ui.argumentList->resizeColumnToContents(0);
+    m_ui.arguments->setModel(createArgumentsModel(0));
+    m_ui.arguments->resizeColumnToContents(0);
 
     // TODO: when a new item appears (what to do if it comes from filter changes?), and the list view scroll
     //       position is at the bottom, keep it scrolled to the bottom (that is scroll after appending).
@@ -56,7 +56,7 @@ MainWidget::MainWidget()
 
 void MainWidget::clear()
 {
-    m_ui.argumentList->setModel(createArgumentsModel(0));
+    m_ui.arguments->setModel(createArgumentsModel(0));
     m_model->clear();
 }
 
@@ -67,14 +67,14 @@ void MainWidget::setGrouping(bool enable)
 
 void MainWidget::itemClicked(const QModelIndex &index)
 {
-    QAbstractItemModel *oldModel = m_ui.argumentList->model();
+    QAbstractItemModel *oldModel = m_ui.arguments->model();
     const int row = m_sortFilter->mapToSource(index).row();
-    m_ui.argumentList->setModel(createArgumentsModel(m_model->m_messages[row].message));
-    m_ui.argumentList->expandAll();
+    m_ui.arguments->setModel(createArgumentsModel(m_model->m_messages[row].message));
+    m_ui.arguments->expandAll();
 
     // increase the first column's width if necessary, never shrink it automatically.
-    QAbstractItemView *aiv = m_ui.argumentList; // sizeHintForColumn is only protected in the subclass?!
-    QHeaderView *headerView = m_ui.argumentList->header();
+    QAbstractItemView *aiv = m_ui.arguments; // sizeHintForColumn is only protected in the subclass?!
+    QHeaderView *headerView = m_ui.arguments->header();
     headerView->resizeSection(0, qMax(aiv->sizeHintForColumn(0), headerView->sectionSize(0)));
     delete oldModel;
 }

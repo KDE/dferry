@@ -715,7 +715,7 @@ Arguments::Reader::Reader(const Message &msg)
    : d(new Private),
      m_state(NotStarted)
 {
-    d->m_argList = &msg.argumentList();
+    d->m_argList = &msg.arguments();
     beginRead();
 }
 

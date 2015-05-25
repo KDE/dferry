@@ -57,7 +57,7 @@ public:
             return;
         }
         {
-            Arguments args = ping.argumentList();
+            Arguments args = ping.arguments();
             Arguments::Reader reader(args);
             cstring payload = reader.readString();
             TEST(!reader.error().isError());
@@ -113,7 +113,7 @@ public:
         TEST(!pongReply->error().isError());
         Message pong = pongReply->takeReply();
 
-        Arguments args = pong.argumentList();
+        Arguments args = pong.arguments();
         Arguments::Reader reader(args);
         cstring payload = reader.readString();
         TEST(!reader.error().isError());
