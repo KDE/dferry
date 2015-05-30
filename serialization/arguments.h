@@ -65,7 +65,8 @@ public:
     cstring signature() const;
     chunk data() const;
 
-    enum SignatureType {
+    enum SignatureType
+    {
         MethodSignature = 0,
         VariantSignature
     };
