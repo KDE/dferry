@@ -366,9 +366,8 @@ std::string Arguments::prettyPrint() const
             ret << nestingPrefix << "end variant\n";
             break;
         case Arguments::BeginArray: {
-            bool isEmpty;
-            reader.beginArray(&isEmpty);
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            emptyNesting += hasData ? 0 : 1;
             ret << nestingPrefix << "begin array\n";
             nestingPrefix += "[ ";
             break; }
@@ -382,9 +381,8 @@ std::string Arguments::prettyPrint() const
             ret << nestingPrefix << "end array\n";
             break;
         case Arguments::BeginDict: {
-            bool isEmpty = false;
-            reader.beginDict(&isEmpty);
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            emptyNesting += hasData ? 0 : 1;
             ret << nestingPrefix << "begin dict\n";
             nestingPrefix += "{K ";
             break; }
@@ -1176,18 +1174,14 @@ void Arguments::Reader::advanceStateFrom(IoState expectedState)
     advanceState();
 }
 
-void Arguments::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
+void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
 {
     assert(!d->m_aggregateStack.empty());
     Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
     assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
 
-    if (isEmpty) {
-        *isEmpty = d->m_nilArrayNesting;
-    }
-
     if (unlikely(d->m_nilArrayNesting)) {
-        if (!isEmpty) {
+        if (option == SkipIfEmpty) {
             // TODO this whole branch seems to be not covered by the tests
             // need to move d->m_signaturePosition to the end of the array signature *here* or it won't happen
 
@@ -1217,10 +1211,15 @@ void Arguments::Reader::beginArrayOrDict(bool isDict, bool *isEmpty)
     m_state = isDict ? NextDictEntry : NextArrayEntry;
 }
 
-void Arguments::Reader::beginArray(bool *isEmpty)
+bool Arguments::Reader::beginArray(EmptyArrayOption option)
 {
-    VALID_IF(m_state == BeginArray, Error::ReadWrongType);
-    beginArrayOrDict(false, isEmpty);
+    if (unlikely(m_state != BeginArray)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+        return false;
+    }
+    beginArrayOrDict(false, option);
+    return !d->m_nilArrayNesting;
 }
 
 bool Arguments::Reader::nextArrayOrDictEntry(bool isDict)
@@ -1327,10 +1326,15 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     return ret;
 }
 
-void Arguments::Reader::beginDict(bool *isEmpty)
+bool Arguments::Reader::beginDict(EmptyArrayOption option)
 {
-    VALID_IF(m_state == BeginDict, Error::ReadWrongType);
-    beginArrayOrDict(true, isEmpty);
+    if (unlikely(m_state != BeginDict)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+        return false;
+    }
+    beginArrayOrDict(true, option);
+    return !d->m_nilArrayNesting;
 }
 
 bool Arguments::Reader::nextDictEntry()
@@ -1878,9 +1882,9 @@ void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
     }
 }
 
-void Arguments::Writer::beginArray(bool isEmpty)
+void Arguments::Writer::beginArray(ArrayOption option)
 {
-    beginArrayOrDict(false, isEmpty);
+    beginArrayOrDict(false, option == WriteTypesOfEmptyArray);
 }
 
 void Arguments::Writer::nextArrayOrDictEntry(bool isDict)
@@ -1924,9 +1928,9 @@ void Arguments::Writer::endArray()
     advanceState(chunk(), EndArray);
 }
 
-void Arguments::Writer::beginDict(bool isEmpty)
+void Arguments::Writer::beginDict(ArrayOption option)
 {
-    beginArrayOrDict(true, isEmpty);
+    beginArrayOrDict(true, option == WriteTypesOfEmptyArray);
 }
 
 void Arguments::Writer::nextDictEntry()
@@ -1973,7 +1977,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
         return;
     }
 
-    beginArray(!data.length);
+    beginArray(data.length ? NonEmptyArray : WriteTypesOfEmptyArray);
 
     // dummy write to write the signature...
     m_u.Uint64 = 0;

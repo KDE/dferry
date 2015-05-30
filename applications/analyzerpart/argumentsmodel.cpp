@@ -113,10 +113,9 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = ascend(parent, model);
             break;
         case Arguments::BeginArray: {
-            bool isEmpty;
-            reader.beginArray(&isEmpty);
-            parent = descend(parent, isEmpty ? "Array (no elements)" : "Array");
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            parent = descend(parent, hasData ? "Array" : "Array (no elements, showing just types)");
+            emptyNesting += hasData ? 0 : 1;
             break; }
         case Arguments::NextArrayEntry:
             reader.nextArrayEntry();
@@ -127,10 +126,9 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             emptyNesting = qMax(emptyNesting - 1, 0);
             break;
         case Arguments::BeginDict: {
-            bool isEmpty = false;
-            reader.beginDict(&isEmpty);
-            parent = descend(parent, isEmpty ? "Dict (no elements)" : "Dict");
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            parent = descend(parent, hasData ? "Dict" : "Dict (no elements, showing just types)");
+            emptyNesting += hasData ? 0 : 1;
             break; }
         case Arguments::NextDictEntry:
             reader.nextDictEntry();

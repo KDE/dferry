@@ -1075,9 +1075,9 @@ Arguments MessagePrivate::serializeVariableHeaders()
 {
     Arguments::Writer writer;
 
-    // note that we don't have to deal with zero-length arrays because all valid message types require
+    // note that we don't have to deal with empty arrays because all valid message types require
     // at least one of the variable headers
-    writer.beginArray(false);
+    writer.beginArray();
 
     for (int i = 0; i < VarHeaderStorage::s_stringHeaderCount; i++) {
         const Message::VariableHeader field = s_stringHeaderAtIndex[i];

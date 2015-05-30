@@ -173,20 +173,30 @@ public:
         bool isFinished() const { return m_state == Finished; }
         bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; } // TODO remove
 
-        // when @p isEmpty is not null and the array contains no elements, the array is
-        // iterated over once so you can get the type information. due to lack of data,
-        // all contained containers (arrays, dicts and variants) will contain no elements,
-        // but you can iterate once over them as well to obtain type information.
-        // any values returned by read... will be garbage.
-        // in any case, *isEmpty will be set to indicate whether the array is empty.
+        enum EmptyArrayOption
+        {
+            SkipIfEmpty = 0,
+            ReadTypesOnlyIfEmpty
+        };
 
-        void beginArray(bool *isEmpty = 0);
+        // Start reading an array. @p option only changes behavior in case the current array is
+        // empty, i.e. it has zero elements. It will still have type information.
+        // If @p option == SkipIfEmpty, empty arrays will work according to the usual rules:
+        // you call nextArrayEntry() and it returns false, you call endArray() and proceed to the next
+        // value or aggregate.
+        // If @p option == ReadTypesOnlyIfEmpty, you will be taken on a single iteration through the array
+        // if it is empty, which makes it possible to extract the type(s) of data inside the array. In
+        // that mode, all data returned from read...() is undefined and should be discarded. Only use state()
+        // to get the types and call read...() purely to move from one type to the next.
+        // Empty arrays are handled that way for symmetry with regular data extraction code so there is no
+        // need to use completely different approaches to do similar things.
+        bool beginArray(EmptyArrayOption option = SkipIfEmpty);
         // call this before reading each entry; when it returns false the array has ended.
         // TODO implement & document that all values returned by read... are zero/null?
         bool nextArrayEntry();
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
-        void beginDict(bool *isEmpty = 0);
+        bool beginDict(EmptyArrayOption option = SkipIfEmpty);
         bool nextDictEntry(); // like nextArrayEntry()
         void endDict(); // like endArray()
 
@@ -228,7 +238,7 @@ public:
         void doReadString(int lengthPrefixSize);
         void advanceState();
         void advanceStateFrom(IoState expectedState);
-        void beginArrayOrDict(bool isDict, bool *isEmpty);
+        void beginArrayOrDict(bool isDict, EmptyArrayOption option);
         bool nextArrayOrDictEntry(bool isDict);
 
         Private *d;
@@ -260,13 +270,19 @@ public:
         IoState state() const { return m_state; }
         cstring stateString() const;
 
-        void beginArray(bool isEmpty);
+        enum ArrayOption
+        {
+            NonEmptyArray = 0,
+            WriteTypesOfEmptyArray
+        };
+
+        void beginArray(ArrayOption option = NonEmptyArray);
         // call this before writing each entry; calling it before the first entry is optional for
         // the convenience of client code.
         void nextArrayEntry();
         void endArray();
 
-        void beginDict(bool isEmpty);
+        void beginDict(ArrayOption option = NonEmptyArray);
         void nextDictEntry();
         void endDict();
 

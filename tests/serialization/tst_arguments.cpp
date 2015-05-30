@@ -123,10 +123,10 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             break;
         case Arguments::BeginArray: {
             isFirstEntry = true;
-            bool isEmpty;
-            reader.beginArray(&isEmpty);
-            writer.beginArray(isEmpty);
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            writer.beginArray(hasData ? Arguments::Writer::NonEmptyArray
+                                      : Arguments::Writer::WriteTypesOfEmptyArray);
+            emptyNesting += hasData ? 0 : 1;
             break; }
         case Arguments::NextArrayEntry:
             if (reader.nextArrayEntry()) {
@@ -144,10 +144,10 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             break;
         case Arguments::BeginDict: {
             isFirstEntry = true;
-            bool isEmpty;
-            reader.beginDict(&isEmpty);
-            writer.beginDict(isEmpty);
-            emptyNesting += isEmpty ? 1 : 0;
+            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            writer.beginDict(hasData ? Arguments::Writer::NonEmptyArray
+                                     : Arguments::Writer::WriteTypesOfEmptyArray);
+            emptyNesting += hasData ? 0 : 1;
             break; }
         case Arguments::NextDictEntry:
             if (reader.nextDictEntry()) {
@@ -438,17 +438,17 @@ static void test_nesting()
     {
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
-            writer.beginArray(false);
+            writer.beginArray();
             writer.nextArrayEntry();
         }
         TEST(writer.state() != Arguments::InvalidData);
-        writer.beginArray(false);
+        writer.beginArray();
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
-            writer.beginDict(false);
+            writer.beginDict();
             writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
@@ -459,12 +459,12 @@ static void test_nesting()
     {
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
-            writer.beginDict(false);
+            writer.beginDict();
             writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
         TEST(writer.state() != Arguments::InvalidData);
-        writer.beginArray(false);
+        writer.beginArray();
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
@@ -570,26 +570,26 @@ static void test_writerMisuse()
     // Array
     {
         Arguments::Writer writer;
-        writer.beginArray(false);
+        writer.beginArray();
         writer.endArray(); // wrong,  must contain exactly one type
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.endArray(); // even with no elements it, must contain exactly one type
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
-        writer.beginArray(false);
+        writer.beginArray();
         writer.writeByte(1); // in Writer, calling nextArrayEntry() after beginArray() is optional
         writer.endArray();
         TEST(writer.state() != Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
-        writer.beginArray(false);
+        writer.beginArray();
         writer.nextArrayEntry();    // optional and may not trigger an error
         TEST(writer.state() != Arguments::InvalidData);
         writer.endArray(); // wrong, must contain exactly one type
@@ -597,7 +597,7 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginArray(false);
+        writer.beginArray();
         writer.nextArrayEntry();
         writer.writeByte(1);
         writer.writeByte(2);  // wrong, must contain exactly one type
@@ -605,7 +605,7 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.nextArrayEntry();
         writer.beginVariant();
         writer.endVariant(); // empty variants are okay if and only if inside an empty array
@@ -615,13 +615,13 @@ static void test_writerMisuse()
     // Dict
     {
         Arguments::Writer writer;
-        writer.beginDict(false);
+        writer.beginDict();
         writer.endDict(); // wrong, must contain exactly two types
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
-        writer.beginDict(false);
+        writer.beginDict();
         writer.nextDictEntry();
         writer.writeByte(1);
         writer.endDict(); // wrong, a dict must contain exactly two types
@@ -629,7 +629,7 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginDict(false);
+        writer.beginDict();
         writer.writeByte(1); // in Writer, calling nextDictEntry() after beginDict() is optional
         writer.writeByte(2);
         writer.endDict();
@@ -637,7 +637,7 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginDict(false);
+        writer.beginDict();
         writer.nextDictEntry();
         writer.writeByte(1);
         writer.writeByte(2);
@@ -647,7 +647,7 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginDict(false);
+        writer.beginDict();
         writer.nextDictEntry();
         writer.beginVariant(); // wrong, key type must be basic
         TEST(writer.state() == Arguments::InvalidData);
@@ -736,7 +736,7 @@ static void test_complicated()
         writer.writeInt64(234234);
         writer.writeByte(115);
         writer.beginVariant();
-            writer.beginDict(false);
+            writer.beginDict();
                 writer.writeByte(23);
                 writer.beginVariant();
                     writer.writeString(cstring("twenty-three"));
@@ -749,7 +749,7 @@ static void test_complicated()
             writer.nextDictEntry();
                 writer.writeByte(234);
                 writer.beginVariant();
-                    writer.beginArray(false);
+                    writer.beginArray();
                         writer.writeUint16(234);
                     writer.nextArrayEntry();
                         writer.writeUint16(234);
@@ -765,7 +765,7 @@ static void test_complicated()
             writer.endDict();
         writer.endVariant();
         writer.writeString("Hello D-Bus!");
-        writer.beginArray(false);
+        writer.beginArray();
             writer.writeDouble(1.567898);
         writer.nextArrayEntry();
             writer.writeDouble(1.523428);
@@ -787,7 +787,7 @@ static void test_alignment()
     {
         Arguments::Writer writer;
         writer.writeByte(123);
-        writer.beginArray(false);
+        writer.beginArray();
         writer.writeByte(64);
         writer.endArray();
         writer.writeByte(123);
@@ -819,7 +819,7 @@ static void test_arrayOfVariant()
     {
         Arguments::Writer writer;
         writer.writeByte(123);
-        writer.beginArray(false);
+        writer.beginArray();
         writer.beginVariant();
         writer.writeByte(64);
         writer.endVariant();
@@ -835,7 +835,7 @@ static void test_arrayOfVariant()
     {
         Arguments::Writer writer;
         writer.writeByte(123);
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.beginVariant();
         writer.endVariant();
         writer.endArray();
@@ -858,7 +858,7 @@ static void test_realMessage()
         writer.writeString(cstring("message"));
         writer.writeString(cstring("konversation"));
 
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.beginVariant();
         writer.endVariant();
         writer.endArray();
@@ -866,11 +866,11 @@ static void test_realMessage()
         writer.writeString(cstring(""));
         writer.writeString(cstring("&lt;fredrikh&gt; he's never on irc"));
 
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.writeByte(123); // may not show up in the output
         writer.endArray();
 
-        writer.beginArray(true);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
         writer.writeString(cstring("dummy, I may not show up in the output!"));
         writer.endArray();
 
@@ -984,7 +984,8 @@ void test_primitiveArray()
                         if (writeAsPrimitive) {
                             writer.writePrimitiveArray(arrayTypes[typeInArray], chunk(testData, dataSize));
                         } else {
-                            writer.beginArray(!arraySize);
+                            writer.beginArray(arraySize ? Arguments::Writer::NonEmptyArray
+                                                        : Arguments::Writer::WriteTypesOfEmptyArray);
                             byte *testDataPtr = testData;
                             if (arraySize) {
                                 for (int m = 0; m < arraySize; m++) {
@@ -1019,9 +1020,8 @@ void test_primitiveArray()
                             TEST(chunksEqual(chunk(testData, dataSize), ret.second));
                         } else {
                             TEST(reader.state() == Arguments::BeginArray);
-                            bool isEmpty = false;
-                            reader.beginArray(&isEmpty);
-                            TEST(isEmpty == (arraySize == 0));
+                            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+                            TEST(hasData == (arraySize != 0));
                             TEST(reader.state() != Arguments::InvalidData);
                             byte *testDataPtr = testData;
 
