@@ -1036,7 +1036,7 @@ void test_primitiveArray()
                             } else {
                                 TEST(reader.nextArrayEntry());
                                 TEST(reader.state() == arrayTypes[typeInArray]);
-                                // next: dummy read; not really necessary, just a sanity check
+                                // next: dummy read, necessary to move forward; value is ignored
                                 checkValue(&reader, typeInArray, testDataPtr);
                                 TEST(reader.state() != Arguments::InvalidData);
                             }
