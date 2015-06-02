@@ -5,6 +5,7 @@
 #include "message.h"
 #include <string>
 
+class Commutex;
 class TransceiverPrivate;
 
 // these are exclusively sent from and to Transceiver instances so far, nevertheless it seems logical
@@ -19,6 +20,7 @@ struct Event
         PendingReplyFailure,
         PendingReplyCancel,
         MainTransceiverDisconnect,
+        SecondaryTransceiverConnect,
         SecondaryTransceiverDisconnect,
         UniqueNameReceived
     };
@@ -71,6 +73,13 @@ struct MainTransceiverDisconnectEvent : public Event
 {
     MainTransceiverDisconnectEvent() : Event(Event::MainTransceiverDisconnect) {}
     // no additiona3 data members - we could also just use Event
+};
+
+struct SecondaryTransceiverConnectEvent : public Event
+{
+    SecondaryTransceiverConnectEvent() : Event(Event::SecondaryTransceiverConnect) {}
+    TransceiverPrivate *transceiver;
+    Commutex *id;
 };
 
 struct SecondaryTransceiverDisconnectEvent : public Event

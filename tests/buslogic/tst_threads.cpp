@@ -74,13 +74,12 @@ public:
             Error replyError = m_transceiver->sendNoReply(std::move(pong));
             TEST(!replyError.isError());
 
-            //m_transceiver->eventDispatcher()->poll();
             m_transceiver->eventDispatcher()->interrupt();
         }
     }
 };
 
-static void pongThreadRun(Transceiver::CommRef primary)
+static void pongThreadRun(Transceiver::CommRef primary, std::atomic<bool> *secondaryReady)
 {
     // open a Transceiver "slaved" to the other Transceiver - it has its own event loop, but uses
     // the same connection as the other Transceiver
@@ -94,6 +93,13 @@ static void pongThreadRun(Transceiver::CommRef primary)
     trans.setSpontaneousMessageReceiver(&responder);
 
     while (eventDispatcher.poll()) {
+        if (trans.uniqueName().length()) {
+            *secondaryReady = true;
+            // HACK: we do this only to wake up the main thread's event loop
+            Message wakey = Message::createCall(echoPath, "org.notexample.foo", echoMethod);
+            wakey.setDestination(trans.uniqueName());
+            trans.sendNoReply(std::move(wakey));
+        }
         // receive ping message
         // send pong message
     }
@@ -104,6 +110,7 @@ class PongReceiver : public IMessageReceiver
 public:
     void pendingReplyFinished(PendingReply *pongReply) override
     {
+        TEST(!pongReply->error().isError());
         Message pong = pongReply->takeReply();
 
         Arguments args = pong.argumentList();
@@ -120,13 +127,8 @@ static void testPingPong()
     EventDispatcher eventDispatcher;
     Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
 
-    std::thread pongThread(pongThreadRun, trans.createCommRef());
-
-    // send ping message to other thread
-    Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
-    Arguments::Writer writer;
-    writer.writeString(pingPayload);
-    ping.setArguments(writer.finish());
+    std::atomic<bool> secondaryReady(false);
+    std::thread pongThread(pongThreadRun, trans.createCommRef(), &secondaryReady);
 
     // finish creating the connection
     while (trans.uniqueName().empty()) {
@@ -136,14 +138,24 @@ static void testPingPong()
 
     std::cout << "we have connection! " << trans.uniqueName() << "\n";
 
+    // send ping message to other thread
+    Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
+    Arguments::Writer writer;
+    writer.writeString(pingPayload);
+    ping.setArguments(writer.finish());
     ping.setDestination(trans.uniqueName());
-    PendingReply pongReply = trans.send(std::move(ping));
 
     PongReceiver pongReceiver;
-    pongReply.setReceiver(&pongReceiver);
+    PendingReply pongReply;
 
-    while (!pongReply.isFinished()) {
+    bool sentPing = false;
+    while (!sentPing || !pongReply.isFinished()) {
         eventDispatcher.poll();
+        if (secondaryReady && !sentPing) {
+            pongReply = trans.send(std::move(ping));
+            pongReply.setReceiver(&pongReceiver);
+            sentPing = true;
+        }
     }
     TEST(pongReply.hasNonErrorReply());
 
@@ -178,7 +190,7 @@ static void timeoutThreadRun(Transceiver::CommRef primary, std::atomic<bool> *do
     Message notRepliedTo = Message::createCall(echoPath, echoInterface, echoMethod);
 
     notRepliedTo.setDestination(trans.uniqueName());
-    PendingReply neverGonnaReply = trans.send(std::move(notRepliedTo), 200);
+    PendingReply neverGonnaReply = trans.send(std::move(notRepliedTo), 50);
     TimeoutReceiver timeoutReceiver;
     neverGonnaReply.setReceiver(&timeoutReceiver);
 

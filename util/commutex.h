@@ -18,6 +18,12 @@
 #include <cassert>
 #include <memory>
 
+#ifdef HAVE_VALGRIND
+#include <valgrind/helgrind.h>
+#else
+#include "valgrind-noop.h"
+#endif
+
 // Commutex: Mutex-like thing for communicating objects. Better names welcome.
 class Commutex
 {
@@ -35,13 +41,27 @@ public:
         Success // state was Free and transitioned to Locked
     };
 
+    Commutex()
+       : m_state(Free)
+    {
+        // We're hopefully close enough to a mutex for Helgrind to work...
+        VALGRIND_HG_MUTEX_INIT_POST(this, 0);
+    }
+
+    ~Commutex()
+    {
+        VALGRIND_HG_MUTEX_DESTROY_PRE(this);
+    }
+
 private:
     friend class CommutexPeer;
 
     TryLockResult tryLock()
     {
         State prevState = Free;
+        VALGRIND_HG_MUTEX_LOCK_PRE(this, 1);
         if (m_state.compare_exchange_strong(prevState, Locked)) {
+            VALGRIND_HG_MUTEX_LOCK_POST(this);
             return Success;
         }
         return prevState == Broken ? PermanentFailure : TransientFailure;
@@ -62,11 +82,14 @@ private:
     // the state is already Broken?
     bool unlock()
     {
+        VALGRIND_HG_MUTEX_UNLOCK_PRE(this);
         State prevState = Locked;
         if (m_state.compare_exchange_strong(prevState, Free)) {
+            VALGRIND_HG_MUTEX_UNLOCK_POST(this);
             return true;
         }
         assert(prevState == Broken); // unlocking when already Free indicates wrong accounting
+        VALGRIND_HG_MUTEX_UNLOCK_POST(this);
         return false;
     }
 
@@ -85,9 +108,13 @@ private:
 
     void unlinkFromLocked()
     {
-        // we don't have the data to check if the Locked state is "owned" by the calling thread
+        // we don't have the data to check if the Locked state is "owned" by the calling thread :/
         State prevState = Locked;
+        VALGRIND_HG_MUTEX_UNLOCK_PRE(this);
         bool success = m_state.compare_exchange_strong(prevState, Broken);
+        if (success) {
+            VALGRIND_HG_MUTEX_UNLOCK_POST(this);
+        }
         assert(success);
     }
 

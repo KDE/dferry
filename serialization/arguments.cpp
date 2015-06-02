@@ -779,7 +779,8 @@ void Arguments::Reader::replaceData(chunk data)
 
     ptrdiff_t offset = data.begin - d->m_data.begin;
 
-    // fix up saved signatures on the aggregate stack except for the first, which is not contained in m_data
+    // fix up variant signature addresses occurring on the aggregate stack pointing into m_data;
+    // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
     bool isOriginalSignature = true;
     const int size = d->m_aggregateStack.size();
     for (int i = 0; i < size; i++) {

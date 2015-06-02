@@ -136,6 +136,7 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef
     CommutexLocker locker(&d->m_mainThreadLink);
     Commutex *const id = d->m_mainThreadLink.id();
     if (!id) {
+        assert(false);
         return; // stay in Unconnected state
     }
 
@@ -143,18 +144,18 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef
 
     d->m_mainThreadTransceiver = mainTransceiverRef.transceiver;
     TransceiverPrivate *mainD = d->m_mainThreadTransceiver;
-    // m_connectionInfo *currently* can't change after initialization, so we don't need to lock
+
+    // get the current values - if we got them from e.g. the CommRef they could be outdated
+    // and we don't want to wait for more event ping-pong
+    SpinLocker mainLocker(&mainD->m_lock);
     d->m_connectionInfo = mainD->m_connectionInfo;
 
-    // redeem the reference in the main Transceiver
-    SpinLocker mainLocker(&mainD->m_lock);
-    auto it = find_if(mainD->m_unredeemedCommRefs.begin(), mainD->m_unredeemedCommRefs.end(),
-                      [id](const CommutexPeer &item) { return item.id() == id; } );
-    assert(it != mainD->m_unredeemedCommRefs.end());
-    mainD->m_secondaryThreadLinks.emplace(d, std::move(*it));
-    mainD->m_unredeemedCommRefs.erase(it);
-
-    d->m_uniqueName = mainD->m_uniqueNameForSecondaries;
+    // register with the main Transceiver
+    SecondaryTransceiverConnectEvent *evt = new SecondaryTransceiverConnectEvent();
+    evt->transceiver = d;
+    evt->id = id;
+    EventDispatcherPrivate::get(mainD->m_eventDispatcher)
+                                ->queueEvent(std::unique_ptr<Event>(evt));
 }
 
 Transceiver::~Transceiver()
@@ -244,11 +245,7 @@ void TransceiverPrivate::handleHelloReply()
     assert(reader.state() == Arguments::Finished);
     m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
 
-    // update unique name for future secondaries...
-    SpinLocker locker(&m_lock);
-    m_uniqueNameForSecondaries = m_uniqueName;
-
-    // and current secondaries
+    // tell current secondaries
     UniqueNameReceivedEvent evt;
     evt.uniqueName = m_uniqueName;
     for (auto &it : m_secondaryThreadLinks) {
@@ -463,7 +460,6 @@ void TransceiverPrivate::notifyCompletion(void *task)
                     m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
                 }
                 // dispatch to other threads listening to spontaneous messages, if any
-                SpinLocker locker(&m_lock);
                 for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
                     SpontaneousMessageReceivedEvent *evt = new SpontaneousMessageReceivedEvent();
                     evt->message = *receivedMessage;
@@ -561,7 +557,7 @@ void TransceiverPrivate::cancelAllPendingReplies()
     for (auto it = m_pendingReplies.begin() ; it != m_pendingReplies.end(); ) {
         PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
         it = m_pendingReplies.erase(it);
-        if (pendingPriv) {
+        if (pendingPriv) { // if from this thread
             pendingPriv->doErrorCompletion(Error::LocalDisconnect);
         }
     }
@@ -607,9 +603,9 @@ void TransceiverPrivate::processEvent(Event *evt)
 
     case Event::PendingReplyFailure: {
         PendingReplyFailureEvent *prfe = static_cast<PendingReplyFailureEvent *>(evt);
-        auto it = m_pendingReplies.find(prfe->m_serial);
+        const auto it = m_pendingReplies.find(prfe->m_serial);
         if (it == m_pendingReplies.end()) {
-            // this can fail spuriously due to the asynchrony of event-based communication
+            // not a disaster, but when it happens in debug mode I want to check it out
             assert(false);
             break;
         }
@@ -624,10 +620,31 @@ void TransceiverPrivate::processEvent(Event *evt)
         m_pendingReplies.erase(static_cast<PendingReplyCancelEvent *>(evt)->serial);
         break;
 
+    case Event::SecondaryTransceiverConnect: {
+        SecondaryTransceiverConnectEvent *sce = static_cast<SecondaryTransceiverConnectEvent *>(evt);
+
+        const auto it = find_if(m_unredeemedCommRefs.begin(), m_unredeemedCommRefs.end(),
+                            [sce](const CommutexPeer &item) { return item.id() == sce->id; } );
+        assert(it != m_unredeemedCommRefs.end());
+        const auto emplaced = m_secondaryThreadLinks.emplace(sce->transceiver, std::move(*it)).first;
+        m_unredeemedCommRefs.erase(it);
+
+        // "welcome package" - it's done (only) as an event to avoid locking order issues
+        CommutexLocker locker(&emplaced->second);
+        if (locker.hasLock()) {
+            UniqueNameReceivedEvent *evt = new UniqueNameReceivedEvent;
+            evt->uniqueName = m_uniqueName;
+            EventDispatcherPrivate::get(sce->transceiver->m_eventDispatcher)
+                ->queueEvent(std::unique_ptr<Event>(evt));
+        }
+
+        break;
+    }
+
     case Event::SecondaryTransceiverDisconnect: {
         SecondaryTransceiverDisconnectEvent *sde = static_cast<SecondaryTransceiverDisconnectEvent *>(evt);
         // delete our records to make sure we don't call into it in the future!
-        auto found = m_secondaryThreadLinks.find(sde->transceiver);
+        const auto found = m_secondaryThreadLinks.find(sde->transceiver);
         if (found == m_secondaryThreadLinks.end()) {
             // looks like we've noticed the disappearance of the other thread earlier
             return;
@@ -656,7 +673,10 @@ Transceiver::CommRef Transceiver::createCommRef()
     CommRef ret;
     ret.transceiver = d;
     pair<CommutexPeer, CommutexPeer> link = CommutexPeer::createLink();
-    d->m_unredeemedCommRefs.emplace_back(move(link.first));
+    {
+        SpinLocker mainLocker(&d->m_lock);
+        d->m_unredeemedCommRefs.emplace_back(move(link.first));
+    }
     ret.commutex = move(link.second);
     return ret;
 }

@@ -89,6 +89,12 @@ add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
 include_directories(${LIBTINYXML2_INCLUDE_DIRS})
 
+find_package(Valgrind) # for checking homemade multithreading primitives
+if (VALGRIND_INCLUDE_DIR)
+   add_definitions(-DHAVE_VALGRIND)
+   include_directories(${VALGRIND_INCLUDE_DIR})
+endif()
+
 set(DFERCLIENT_SOURCES
     client/introspection.h)
 

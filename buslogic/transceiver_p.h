@@ -154,13 +154,10 @@ public:
     // here we break the grouping by topic area to group together the variables protected by m_lock
     // BEGIN variables protected by m_lock
     int m_sendSerial; // TODO handle recycling of serials
-    // ATTENTION! Order here decides destruction order if we don't explicitly clear the containers in
-    // the destructor. (Note: constructors run in member order, destructors in reversed member order)
-    // This order should be suitable.
-    std::string m_uniqueNameForSecondaries; // avoids a (read-write) lock around m_uniqueName
+    // END variables protected by m_lock
+
     std::unordered_map<TransceiverPrivate *, CommutexPeer> m_secondaryThreadLinks;
     std::vector<CommutexPeer> m_unredeemedCommRefs; // for createCommRef() and the constructor from CommRef
-    // END variables protected by m_lock
 
     TransceiverPrivate *m_mainThreadTransceiver;
     CommutexPeer m_mainThreadLink;
