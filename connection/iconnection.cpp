@@ -36,8 +36,8 @@ using namespace std;
 
 IConnection::IConnection()
    : m_eventDispatcher(0),
-     m_isReadNotificationEnabled(false),
-     m_isWriteNotificationEnabled(false)
+     m_readNotificationEnabled(false),
+     m_writeNotificationEnabled(false)
 {
 }
 
@@ -79,19 +79,19 @@ void IConnection::updateReadWriteInterest()
     bool readInterest = false;
     bool writeInterest = false;
     for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->isReadNotificationEnabled()) {
+        if (m_clients[i]->readNotificationEnabled()) {
             readInterest = true;
         }
-        if (m_clients[i]->isWriteNotificationEnabled()) {
+        if (m_clients[i]->writeNotificationEnabled()) {
             writeInterest = true;
         }
     }
-    if (readInterest != m_isReadNotificationEnabled || writeInterest != m_isWriteNotificationEnabled) {
-        m_isReadNotificationEnabled = readInterest;
-        m_isWriteNotificationEnabled = writeInterest;
+    if (readInterest != m_readNotificationEnabled || writeInterest != m_writeNotificationEnabled) {
+        m_readNotificationEnabled = readInterest;
+        m_writeNotificationEnabled = writeInterest;
 
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->setReadWriteInterest(this, m_isReadNotificationEnabled, m_isWriteNotificationEnabled);
+        ep->setReadWriteInterest(this, m_readNotificationEnabled, m_writeNotificationEnabled);
     }
 }
 
@@ -108,8 +108,8 @@ void IConnection::setEventDispatcher(EventDispatcher *ed)
     if (m_eventDispatcher) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
         ep->addIoEventClient(this);
-        m_isReadNotificationEnabled = false;
-        m_isWriteNotificationEnabled = false;
+        m_readNotificationEnabled = false;
+        m_writeNotificationEnabled = false;
         updateReadWriteInterest();
     }
 }
@@ -122,7 +122,7 @@ EventDispatcher *IConnection::eventDispatcher() const
 void IConnection::notifyRead()
 {
     for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->isReadNotificationEnabled()) {
+        if (m_clients[i]->readNotificationEnabled()) {
             m_clients[i]->notifyConnectionReadyRead();
             break;
         }
@@ -132,7 +132,7 @@ void IConnection::notifyRead()
 void IConnection::notifyWrite()
 {
     for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->isWriteNotificationEnabled()) {
+        if (m_clients[i]->writeNotificationEnabled()) {
             m_clients[i]->notifyConnectionReadyWrite();
             break;
         }

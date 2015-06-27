@@ -32,11 +32,11 @@ public:
     IConnectionClient();
     virtual ~IConnectionClient();
 
-    void setIsReadNotificationEnabled(bool enable);
-    bool isReadNotificationEnabled() const;
+    void setReadNotificationEnabled(bool enable);
+    bool readNotificationEnabled() const;
 
-    void setIsWriteNotificationEnabled(bool enable);
-    bool isWriteNotificationEnabled() const;
+    void setWriteNotificationEnabled(bool enable);
+    bool writeNotificationEnabled() const;
 
     // public mainly for testing purposes - only call if you know what you're doing
     // no-op default implementations are provided so you only need to reimplement what you need
@@ -45,8 +45,8 @@ public:
 
 protected:
     IConnection *connection() const; // returns m_connection
-    bool m_isReadNotificationEnabled;
-    bool m_isWriteNotificationEnabled;
+    bool m_readNotificationEnabled;
+    bool m_writeNotificationEnabled;
     friend class IConnection;
 private:
     IConnection *m_connection; // set from IConnection::addClient() / removeClient()

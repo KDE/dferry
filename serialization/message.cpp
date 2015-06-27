@@ -617,7 +617,7 @@ void MessagePrivate::receive(IConnection *conn)
         return;
     }
     conn->addClient(this);
-    setIsReadNotificationEnabled(true);
+    setReadNotificationEnabled(true);
     m_state = MessagePrivate::Deserializing;
     m_headerLength = 0;
     m_bodyLength = 0;
@@ -642,7 +642,7 @@ void MessagePrivate::send(IConnection *conn)
         return;
     }
     conn->addClient(this);
-    setIsWriteNotificationEnabled(true);
+    setWriteNotificationEnabled(true);
     m_state = MessagePrivate::Serializing;
 }
 
@@ -750,7 +750,7 @@ void MessagePrivate::notifyConnectionReadyRead()
         if (m_headerLength > 0 && m_bufferPos >= m_headerLength + m_bodyLength) {
             // all done!
             assert(m_bufferPos == m_headerLength + m_bodyLength);
-            setIsReadNotificationEnabled(false);
+            setReadNotificationEnabled(false);
             m_state = Deserialized;
             std::string sig;
             if (m_varHeaders.hasStringHeader(Message::SignatureHeader)) {
@@ -771,7 +771,7 @@ void MessagePrivate::notifyConnectionReadyRead()
     } while (in.length);
 
     if (isError) {
-        setIsReadNotificationEnabled(false);
+        setReadNotificationEnabled(false);
         m_state = Empty;
         clearBuffer();
         connection()->removeClient(this);
@@ -806,7 +806,7 @@ void MessagePrivate::notifyConnectionReadyWrite()
         assert(m_buffer.length >= m_bufferPos);
         const int toWrite = m_buffer.length - m_bufferPos;
         if (!toWrite) {
-            setIsWriteNotificationEnabled(false);
+            setWriteNotificationEnabled(false);
             m_state = Serialized;
             clearBuffer();
             connection()->removeClient(this);

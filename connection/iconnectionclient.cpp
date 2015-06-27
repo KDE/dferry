@@ -27,8 +27,8 @@
 
 
 IConnectionClient::IConnectionClient()
-   : m_isReadNotificationEnabled(false),
-     m_isWriteNotificationEnabled(false),
+   : m_readNotificationEnabled(false),
+     m_writeNotificationEnabled(false),
      m_connection(0)
 {
 }
@@ -41,32 +41,32 @@ IConnectionClient::~IConnectionClient()
     m_connection = 0;
 }
 
-void IConnectionClient::setIsReadNotificationEnabled(bool enable)
+void IConnectionClient::setReadNotificationEnabled(bool enable)
 {
-    if (enable == m_isReadNotificationEnabled) {
+    if (enable == m_readNotificationEnabled) {
         return;
     }
-    m_isReadNotificationEnabled = enable;
+    m_readNotificationEnabled = enable;
     m_connection->updateReadWriteInterest();
 }
 
-bool IConnectionClient::isReadNotificationEnabled() const
+bool IConnectionClient::readNotificationEnabled() const
 {
-    return m_isReadNotificationEnabled;
+    return m_readNotificationEnabled;
 }
 
-void IConnectionClient::setIsWriteNotificationEnabled(bool enable)
+void IConnectionClient::setWriteNotificationEnabled(bool enable)
 {
-    if (enable == m_isWriteNotificationEnabled) {
+    if (enable == m_writeNotificationEnabled) {
         return;
     }
-    m_isWriteNotificationEnabled = enable;
+    m_writeNotificationEnabled = enable;
     m_connection->updateReadWriteInterest();
 }
 
-bool IConnectionClient::isWriteNotificationEnabled() const
+bool IConnectionClient::writeNotificationEnabled() const
 {
-    return m_isWriteNotificationEnabled;
+    return m_writeNotificationEnabled;
 }
 
 void IConnectionClient::notifyConnectionReadyRead()

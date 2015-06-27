@@ -72,8 +72,8 @@ private:
 
     EventDispatcher *m_eventDispatcher;
     std::vector<IConnectionClient *> m_clients;
-    bool m_isReadNotificationEnabled;
-    bool m_isWriteNotificationEnabled;
+    bool m_readNotificationEnabled;
+    bool m_writeNotificationEnabled;
 };
 
 #endif // ICONNECTION_H

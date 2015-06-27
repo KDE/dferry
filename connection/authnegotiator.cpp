@@ -40,7 +40,7 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
      m_completionClient(0)
 {
     connection->addClient(this);
-    setIsReadNotificationEnabled(true);
+    setReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
     connection->write(chunk(nullBuf, 1));
 
