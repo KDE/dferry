@@ -1006,8 +1006,8 @@ bool MessagePrivate::serialize()
 
     assert(headerArgs.data().length > 0); // if this fails the headerLength hack will break down
 
-    const int headerLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
-    m_headerLength = align(headerLength, 8);
+    const int unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
+    m_headerLength = align(unalignedHeaderLength, 8);
     m_bodyLength = m_mainArguments.data().length;
     const int messageLength = m_headerLength + m_bodyLength;
 
@@ -1026,7 +1026,7 @@ bool MessagePrivate::serialize()
            headerArgs.data().begin + 2 * sizeof(uint32),
            headerArgs.data().length - 2 * sizeof(uint32));
     // zero padding between variable headers and message body
-    for (int i = headerLength; i < m_headerLength; i++) {
+    for (int i = unalignedHeaderLength; i < m_headerLength; i++) {
         m_buffer.begin[i] = '\0';
     }
     // copy message body
