@@ -90,8 +90,8 @@ public:
                         // Since the reply isn't fully pre-validated for performance reasons,
                         // absence of this error is no guarantee of well-formedness.
 
-        MessageType,        // ||| all of these may potentially mean not given or locally determined invalid
-        MessageSender,      // vvv
+        MessageType,        // ||| all of these may potentially mean missing for the type of message
+        MessageSender,      // vvv or locally found to be invalid (invalid object path for example)
         MessageDestination,
         MessagePath,
         MessageInterface,
