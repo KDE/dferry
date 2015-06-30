@@ -1040,7 +1040,7 @@ bool MessagePrivate::serialize()
     const uint32 messageLength = m_headerLength + m_bodyLength;
 
     if (messageLength > s_maxMessageLength) {
-        return false;
+        return false; // TODO set error ArgumentsTooLong? is this the correct error code, and if so should it be renamed?
     }
 
     reserveBuffer(messageLength);
