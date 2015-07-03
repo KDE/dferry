@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ARGUMENTLIST_H
-#define ARGUMENTLIST_H
+#ifndef ARGUMENTS_H
+#define ARGUMENTS_H
 
 #include "export.h"
 #include "types.h"
@@ -335,4 +335,4 @@ private:
     Private *d;
 };
 
-#endif // ARGUMENTLIST_H
+#endif // ARGUMENTS_H
