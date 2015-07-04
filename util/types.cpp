@@ -29,6 +29,6 @@
 // to include just basic typey stuff.
 
 cstring::cstring(const char *b)
-   : begin(reinterpret_cast<byte *>(const_cast<char *>(b))),
+   : ptr(const_cast<char *>(b)),
      length(strlen(b))
 {}

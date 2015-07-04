@@ -37,10 +37,9 @@ static void addKeyValue(QStandardItem *parent, const char *k, bool isEmpty, cons
 }
 
 // when isEmpty, str is an invalid pointer. getting the pointer is safe, only dereferencing is not.
-static void addKeyValue(QStandardItem *parent, const char *k, bool isEmpty, const byte *str)
+static void addKeyValue(QStandardItem *parent, const char *k, bool isEmpty, const char *str)
 {
-    addKeyValue(parent, k, isEmpty,
-                isEmpty ? QVariant() : QString::fromUtf8(reinterpret_cast<const char *>(str)));
+    addKeyValue(parent, k, isEmpty, isEmpty ? QVariant() : QString::fromUtf8(str));
 }
 
 static QStandardItem *ascend(QStandardItem *parent, QStandardItemModel *model)
@@ -166,13 +165,13 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             addKeyValue(parent, "double", emptyNesting, reader.readDouble());
             break;
         case Arguments::String:
-            addKeyValue(parent, "string", emptyNesting, reader.readString().begin);
+            addKeyValue(parent, "string", emptyNesting, reader.readString().ptr);
             break;
         case Arguments::ObjectPath:
-            addKeyValue(parent, "object path", emptyNesting, reader.readObjectPath().begin);
+            addKeyValue(parent, "object path", emptyNesting, reader.readObjectPath().ptr);
             break;
         case Arguments::Signature:
-            addKeyValue(parent, "type signature", emptyNesting, reader.readSignature().begin);
+            addKeyValue(parent, "type signature", emptyNesting, reader.readSignature().ptr);
             break;
         case Arguments::UnixFd:
             addKeyValue(parent, "file descriptor", emptyNesting, QVariant());

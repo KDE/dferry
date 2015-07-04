@@ -126,7 +126,7 @@ private:
     struct podCstring // Same as cstring but without ctor.
                       // Can't put the cstring type into a union because it has a constructor :/
     {
-        byte *begin;
+        char *ptr;
         uint32 length;
     };
 
@@ -217,9 +217,9 @@ public:
         int64 readInt64() { int64 ret = m_u.Int64; advanceState(); return ret; }
         uint64 readUint64() { uint64 ret = m_u.Uint64; advanceState(); return ret; }
         double readDouble() { double ret = m_u.Double; advanceState(); return ret; }
-        cstring readString() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
-        cstring readObjectPath() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
-        cstring readSignature() { cstring ret(m_u.String.begin, m_u.String.length); advanceState(); return ret; }
+        cstring readString() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
+        cstring readObjectPath() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
+        cstring readSignature() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
         uint32 readUnixFd() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
 
         // Returns primitive type and the raw array data if in BeginArray state of an array containing only a

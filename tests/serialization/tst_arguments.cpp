@@ -35,7 +35,7 @@ static void printChunk(chunk a)
 {
     std::cout << "Array: ";
     for (int i = 0; i < a.length; i++) {
-        std::cout << int(a.begin[i]) << '|';
+        std::cout << int(a.ptr[i]) << '|';
     }
     std::cout << '\n';
 }
@@ -49,7 +49,7 @@ static bool chunksEqual(chunk a1, chunk a2)
         return false;
     }
     for (int i = 0; i < a1.length; i++) {
-        if (a1.begin[i] != a2.begin[i]) {
+        if (a1.ptr[i] != a2.ptr[i]) {
             std::cout << "Different content.\n";
             printChunk(a1);
             printChunk(a2);
@@ -61,7 +61,7 @@ static bool chunksEqual(chunk a1, chunk a2)
 
 static bool stringsEqual(cstring s1, cstring s2)
 {
-    return chunksEqual(chunk(s1.begin, s1.length), chunk(s2.begin, s2.length));
+    return chunksEqual(chunk(s1.ptr, s1.length), chunk(s2.ptr, s2.length));
 }
 
 static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtArrayStart,
@@ -79,7 +79,7 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
     while (!isDone) {
         TEST(writer.state() != Arguments::InvalidData);
         if (debugPrint) {
-            std::cout << "Reader state: " << reader.stateString().begin << '\n';
+            std::cout << "Reader state: " << reader.stateString().ptr << '\n';
         }
 
         switch(reader.state()) {
@@ -92,16 +92,16 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             // allocate the new one before destroying the old one to make sure that the pointer differs
             chunk oldData = shortData;
             shortData.length = std::min(shortData.length + dataIncrement, data.length);
-            shortData.begin = reinterpret_cast<byte *>(malloc(shortData.length));
+            shortData.ptr = reinterpret_cast<byte *>(malloc(shortData.length));
             for (int i = 0; i < shortData.length; i++) {
-                shortData.begin[i] = data.begin[i];
+                shortData.ptr[i] = data.ptr[i];
             }
             // clobber it to provoke errors that only valgrind might find otherwise
             for (int i = 0; i < oldData.length; i++) {
-                oldData.begin[i] = '\xff';
+                oldData.ptr[i] = '\xff';
             }
-            if (oldData.begin) {
-                free(oldData.begin);
+            if (oldData.ptr) {
+                free(oldData.ptr);
             }
             reader.replaceData(shortData);
             break; }
@@ -249,8 +249,8 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
     }
     TEST(chunksEqual(originalData, copyData));
 
-    if (shortData.begin) {
-        free(shortData.begin);
+    if (shortData.ptr) {
+        free(shortData.ptr);
     }
 }
 

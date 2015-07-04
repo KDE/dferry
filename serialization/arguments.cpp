@@ -102,21 +102,21 @@ void Arguments::Private::initFrom(const Private &other)
         // deep copy if there is any data
         m_memOwnership = reinterpret_cast<byte *>(malloc(fullLength));
 
-        m_signature.begin = m_memOwnership;
-        memcpy(m_signature.begin, other.m_signature.begin, other.m_signature.length);
+        m_signature.ptr = reinterpret_cast<char *>(m_memOwnership);
+        memcpy(m_signature.ptr, other.m_signature.ptr, other.m_signature.length);
         int bufferPos = other.m_signature.length;
-        zeroPad(m_signature.begin, 8, &bufferPos);
+        zeroPad(reinterpret_cast<byte *>(m_signature.ptr), 8, &bufferPos);
         assert(bufferPos == alignedSigLength);
 
         if (other.m_data.length) {
-            m_data.begin = m_memOwnership + alignedSigLength;
-            memcpy(m_data.begin, other.m_data.begin, other.m_data.length);
+            m_data.ptr = m_memOwnership + alignedSigLength;
+            memcpy(m_data.ptr, other.m_data.ptr, other.m_data.length);
         } else {
-            m_data.begin = nullptr;
+            m_data.ptr = nullptr;
         }
     } else {
-        m_signature.begin = nullptr;
-        m_data.begin = nullptr;
+        m_signature.ptr = nullptr;
+        m_data.ptr = nullptr;
     }
 }
 
@@ -458,18 +458,18 @@ std::string Arguments::prettyPrint() const
 
 static void chopFirst(cstring *s)
 {
-    s->begin++;
+    s->ptr++;
     s->length--;
 }
 
 // static
 bool Arguments::isStringValid(cstring string)
 {
-    if (!string.begin || string.length + 1 >= s_specMaxArrayLength || string.begin[string.length] != 0) {
+    if (!string.ptr || string.length + 1 >= s_specMaxArrayLength || string.ptr[string.length] != 0) {
         return false;
     }
     // check that there are no embedded nulls, exploiting the highly optimized strlen...
-    return strlen(reinterpret_cast<char *>(string.begin)) == string.length;
+    return strlen(string.ptr) == string.length;
 }
 
 static inline bool isObjectNameLetter(byte b)
@@ -480,10 +480,10 @@ static inline bool isObjectNameLetter(byte b)
 // static
 bool Arguments::isObjectPathValid(cstring path)
 {
-    if (!path.begin || path.length + 1 >= s_specMaxArrayLength || path.begin[path.length] != 0) {
+    if (!path.ptr || path.length + 1 >= s_specMaxArrayLength || path.ptr[path.length] != 0) {
         return false;
     }
-    byte prevLetter = path.begin[0];
+    byte prevLetter = path.ptr[0];
     if (prevLetter != '/') {
         return false;
     }
@@ -491,7 +491,7 @@ bool Arguments::isObjectPathValid(cstring path)
         return true; // "/" special case
     }
     for (int i = 1; i < path.length; i++) {
-        byte currentLetter = path.begin[i];
+        byte currentLetter = path.ptr[i];
         if (prevLetter == '/') {
             if (!isObjectNameLetter(currentLetter)) {
                 return false;
@@ -513,7 +513,7 @@ bool Arguments::isObjectPathElementValid(cstring pathElement)
         return false;
     }
     for (int i = 0; i < pathElement.length; i++) {
-        if (!isObjectNameLetter(pathElement.begin[i])) {
+        if (!isObjectNameLetter(pathElement.ptr[i])) {
             return false;
         }
     }
@@ -523,11 +523,11 @@ bool Arguments::isObjectPathElementValid(cstring pathElement)
 static bool parseBasicType(cstring *s)
 {
     // ### not checking if zero-terminated
-    assert(s->begin);
+    assert(s->ptr);
     if (s->length < 0) {
         return false;
     }
-    switch (*s->begin) {
+    switch (*s->ptr) {
     case 'y':
     case 'b':
     case 'n':
@@ -550,10 +550,10 @@ static bool parseBasicType(cstring *s)
 
 static bool parseSingleCompleteType(cstring *s, Nesting *nest)
 {
-    assert(s->begin);
+    assert(s->ptr);
     // ### not cheching if zero-terminated
 
-    switch (*s->begin) {
+    switch (*s->ptr) {
     case 'y':
     case 'b':
     case 'n':
@@ -585,7 +585,7 @@ static bool parseSingleCompleteType(cstring *s, Nesting *nest)
         while (parseSingleCompleteType(s, nest)) {
             isEmptyStruct = false;
         }
-        if (!s->length || *s->begin != ')' || isEmptyStruct) {
+        if (!s->length || *s->ptr != ')' || isEmptyStruct) {
             return false;
         }
         chopFirst(s);
@@ -596,7 +596,7 @@ static bool parseSingleCompleteType(cstring *s, Nesting *nest)
             return false;
         }
         chopFirst(s);
-        if (*s->begin == '{') { // an "array of dict entries", i.e. a dict
+        if (*s->ptr == '{') { // an "array of dict entries", i.e. a dict
             if (!nest->beginParen() || s->length < 4) {
                 return false;
             }
@@ -609,7 +609,7 @@ static bool parseSingleCompleteType(cstring *s, Nesting *nest)
             if (!parseSingleCompleteType(s, nest)) {
                 return false;
             }
-            if (!s->length || *s->begin != '}') {
+            if (!s->length || *s->ptr != '}') {
                 return false;
             }
             chopFirst(s);
@@ -630,7 +630,7 @@ static bool parseSingleCompleteType(cstring *s, Nesting *nest)
 bool Arguments::isSignatureValid(cstring signature, SignatureType type)
 {
     Nesting nest;
-    if (!signature.begin || signature.begin[signature.length] != 0) {
+    if (!signature.ptr || signature.ptr[signature.length] != 0) {
         return false;
     }
     if (type == VariantSignature) {
@@ -777,7 +777,7 @@ void Arguments::Reader::replaceData(chunk data)
 {
     VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
 
-    ptrdiff_t offset = data.begin - d->m_data.begin;
+    ptrdiff_t offset = data.ptr - d->m_data.ptr;
 
     // fix up variant signature addresses occurring on the aggregate stack pointing into m_data;
     // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
@@ -788,12 +788,12 @@ void Arguments::Reader::replaceData(chunk data)
             if (isOriginalSignature) {
                 isOriginalSignature = false;
             } else {
-                d->m_aggregateStack[i].var.prevSignature.begin += offset;
+                d->m_aggregateStack[i].var.prevSignature.ptr += offset;
             }
         }
     }
     if (!isOriginalSignature) {
-        d->m_signature.begin += offset;
+        d->m_signature.ptr += offset;
     }
 
     d->m_data = data;
@@ -881,36 +881,36 @@ void Arguments::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
     case Boolean: {
-        uint32 num = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        uint32 num = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         m_u.Boolean = num == 1;
         VALID_IF(num <= 1, Error::MalformedMessageData);
         break; }
     case Byte:
-        m_u.Byte = d->m_data.begin[d->m_dataPosition];
+        m_u.Byte = d->m_data.ptr[d->m_dataPosition];
         break;
     case Int16:
-        m_u.Int16 = basic::readInt16(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int16 = basic::readInt16(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Uint16:
-        m_u.Uint16 = basic::readUint16(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint16 = basic::readUint16(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Int32:
-        m_u.Int32 = basic::readInt32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int32 = basic::readInt32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Uint32:
-        m_u.Uint32 = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint32 = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Int64:
-        m_u.Int64 = basic::readInt64(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int64 = basic::readInt64(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Uint64:
-        m_u.Uint64 = basic::readUint64(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint64 = basic::readUint64(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case Double:
-        m_u.Double = basic::readDouble(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Double = basic::readDouble(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         break;
     case UnixFd: {
-        uint32 index = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
         uint32 ret; // TODO use index to retrieve the actual file descriptor
         m_u.Uint32 = ret;
         break; }
@@ -924,9 +924,9 @@ void Arguments::Reader::doReadString(int lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
-        stringLength += d->m_data.begin[d->m_dataPosition];
+        stringLength += d->m_data.ptr[d->m_dataPosition];
     } else {
-        stringLength += basic::readUint32(d->m_data.begin + d->m_dataPosition,
+        stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
                                           d->m_argList->d->m_isByteSwapped);
         VALID_IF(stringLength + 1 < s_specMaxArrayLength, Error::MalformedMessageData);
     }
@@ -935,16 +935,16 @@ void Arguments::Reader::doReadString(int lengthPrefixSize)
         m_state = NeedMoreData;
         return;
     }
-    m_u.String.begin = d->m_data.begin + d->m_dataPosition;
+    m_u.String.ptr = reinterpret_cast<char *>(d->m_data.ptr) + d->m_dataPosition;
     m_u.String.length = stringLength - 1; // terminating null is not counted
     d->m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == String) {
-        isValidString = Arguments::isStringValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length));
     } else if (m_state == ObjectPath) {
-        isValidString = Arguments::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length));
     } else if (m_state == Signature) {
-        isValidString = Arguments::isSignatureValid(cstring(m_u.String.begin, m_u.String.length));
+        isValidString = Arguments::isSignatureValid(cstring(m_u.String.ptr, m_u.String.length));
     }
     VALID_IF(isValidString, Error::MalformedMessageData);
 }
@@ -988,7 +988,7 @@ void Arguments::Reader::advanceState()
                 m_state = EndVariant;
                 d->m_nesting.endVariant();
                 const Private::VariantInfo &variantInfo = aggregateInfo.var;
-                d->m_signature.begin = variantInfo.prevSignature.begin;
+                d->m_signature.ptr = variantInfo.prevSignature.ptr;
                 d->m_signature.length = variantInfo.prevSignature.length;
                 d->m_signaturePosition = variantInfo.prevSignaturePosition;
                 d->m_aggregateStack.pop_back();
@@ -1014,7 +1014,7 @@ void Arguments::Reader::advanceState()
 
     // for aggregate types, ty.alignment is just the alignment.
     // for primitive types, it's also the actual size.
-    const TypeInfo ty = typeInfo(d->m_signature.begin[d->m_signaturePosition]);
+    const TypeInfo ty = typeInfo(d->m_signature.ptr[d->m_signaturePosition]);
     m_state = ty.state();
 
     VALID_IF(m_state != InvalidData, Error::MalformedMessageData);
@@ -1079,8 +1079,8 @@ void Arguments::Reader::advanceState()
             if (unlikely(d->m_dataPosition >= d->m_data.length)) {
                 goto out_needMoreData;
             }
-            signature.length = d->m_data.begin[d->m_dataPosition++];
-            signature.begin = d->m_data.begin + d->m_dataPosition;
+            signature.length = d->m_data.ptr[d->m_dataPosition++];
+            signature.ptr = reinterpret_cast<char *>(d->m_data.ptr) + d->m_dataPosition;
             d->m_dataPosition += signature.length + 1;
             if (unlikely(d->m_dataPosition > d->m_data.length)) {
                 goto out_needMoreData;
@@ -1093,7 +1093,7 @@ void Arguments::Reader::advanceState()
 
         aggregateInfo.aggregateType = BeginVariant;
         Private::VariantInfo &variantInfo = aggregateInfo.var;
-        variantInfo.prevSignature.begin = d->m_signature.begin;
+        variantInfo.prevSignature.ptr = d->m_signature.ptr;
         variantInfo.prevSignature.length = d->m_signature.length;
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
         d->m_aggregateStack.push_back(aggregateInfo);
@@ -1107,12 +1107,12 @@ void Arguments::Reader::advanceState()
             if (unlikely(d->m_dataPosition + sizeof(uint32) > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            arrayLength = basic::readUint32(d->m_data.begin + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+            arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
             VALID_IF(arrayLength <= s_specMaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
         }
 
-        const TypeInfo firstElementTy = typeInfo(d->m_signature.begin[d->m_signaturePosition + 1]);
+        const TypeInfo firstElementTy = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
 
         m_state = firstElementTy.state() == BeginDict ? BeginDict : BeginArray;
         aggregateInfo.aggregateType = m_state;
@@ -1195,7 +1195,7 @@ void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
 
             // parse the array signature in order to skip it
             // barring bugs, must have been too deep nesting inside variants if parsing fails
-            cstring sigTail(d->m_signature.begin + d->m_signaturePosition,
+            cstring sigTail(d->m_signature.ptr + d->m_signaturePosition,
                             d->m_signature.length - d->m_signaturePosition);
             VALID_IF(parseSingleCompleteType(&sigTail, &d->m_nesting), Error::MalformedMessageData);
             // TODO tests don't seem to cover the next line - is it really correct and is
@@ -1297,7 +1297,7 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     // the point of "primitive array" accessors is that the data can be just memcpy()ed, so we
     // reject anything that needs validation, including booleans
 
-    const TypeInfo elementType = typeInfo(d->m_signature.begin[d->m_signaturePosition + 1]);
+    const TypeInfo elementType = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
     if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
         return ret;
     }
@@ -1312,7 +1312,7 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
             return ret;
         }
 
-        ret.second.begin = d->m_data.begin + d->m_dataPosition;
+        ret.second.ptr = d->m_data.ptr + d->m_dataPosition;
         ret.second.length = size;
     }
     ret.first = elementType.state();
@@ -1512,19 +1512,19 @@ void Arguments::Writer::operator=(Writer &&other)
 Arguments::Writer::~Writer()
 {
     for (int i = 0; i < d->m_variantSignatures.size(); i++) {
-        free(d->m_variantSignatures[i].begin);
-        if (d->m_variantSignatures[i].begin == d->m_signature.begin) {
+        free(d->m_variantSignatures[i].ptr);
+        if (d->m_variantSignatures[i].ptr == d->m_signature.ptr) {
             d->m_signature = cstring(); // don't free it again
         }
     }
-    if (d->m_signature.begin) {
-        free(d->m_signature.begin);
+    if (d->m_signature.ptr) {
+        free(d->m_signature.ptr);
         d->m_signature = cstring();
     }
     // free the original signature, which is the prevSignature lowest on the stack
     for (int i = 0; i < d->m_aggregateStack.size(); i++) {
         if (d->m_aggregateStack[i].aggregateType == BeginVariant) {
-            free(d->m_aggregateStack[i].var.prevSignature.begin);
+            free(d->m_aggregateStack[i].var.prevSignature.ptr);
             break;
         }
     }
@@ -1604,13 +1604,13 @@ void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
 void Arguments::Writer::doWriteString(int lengthPrefixSize)
 {
     if (m_state == String) {
-        VALID_IF(Arguments::isStringValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidString);
     } else if (m_state == ObjectPath) {
-        VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidObjectPath);
     } else if (m_state == Signature) {
-        VALID_IF(Arguments::isSignatureValid(cstring(m_u.String.begin, m_u.String.length)),
+        VALID_IF(Arguments::isSignatureValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidSignature);
     }
 
@@ -1631,7 +1631,7 @@ void Arguments::Writer::doWriteString(int lengthPrefixSize)
     d->m_dataPosition += lengthPrefixSize;
     d->m_elements.push_back(Private::ElementInfo(lengthPrefixSize, lengthPrefixSize));
 
-    memcpy(d->m_data + d->m_dataPosition, m_u.String.begin, m_u.String.length + 1);
+    memcpy(d->m_data + d->m_dataPosition, m_u.String.ptr, m_u.String.length + 1);
     d->m_dataPosition = newDataPosition;
     for (uint32 l = m_u.String.length + 1; l; ) {
         uint32 chunkSize = std::min(l, uint32(Private::ElementInfo::LargestSize));
@@ -1670,7 +1670,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
     bool isStringType = false;
 
     if (signatureFragment.length) {
-        TypeInfo ty = typeInfo(signatureFragment.begin[0]);
+        TypeInfo ty = typeInfo(signatureFragment.ptr[0]);
         alignment = ty.alignment;
         isPrimitiveType = ty.isPrimitive;
         isStringType = ty.isString;
@@ -1714,7 +1714,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
 
         // finally, extend the signature
         for (int i = 0; i < signatureFragment.length; i++) {
-            d->m_signature.begin[d->m_signaturePosition++] = signatureFragment.begin[i];
+            d->m_signature.ptr[d->m_signaturePosition++] = signatureFragment.ptr[i];
         }
         d->m_signature.length += signatureFragment.length;
     } else {
@@ -1724,7 +1724,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         // TODO need to apply special checks for state changes with no explicit signature char?
         // (end of array, end of variant)
         for (int i = 0; i < signatureFragment.length; i++) {
-            VALID_IF(d->m_signature.begin[d->m_signaturePosition++] == signatureFragment.begin[i],
+            VALID_IF(d->m_signature.ptr[d->m_signaturePosition++] == signatureFragment.ptr[i],
                      Error::TypeMismatchInSubsequentArrayIteration);
         }
     }
@@ -1763,7 +1763,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         aggregateInfo.aggregateType = BeginVariant;
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
-        variantInfo.prevSignature.begin = d->m_signature.begin;
+        variantInfo.prevSignature.ptr = d->m_signature.ptr;
         variantInfo.prevSignature.length = d->m_signature.length;
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
         variantInfo.signatureIndex = d->m_variantSignatures.size();
@@ -1787,15 +1787,15 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
             // allowed for writing a type signature like "av" in the shortest possible way.
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
         }
-        d->m_signature.begin[d->m_signaturePosition] = '\0';
+        d->m_signature.ptr[d->m_signaturePosition] = '\0';
 
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
         assert(variantInfo.signatureIndex < d->m_variantSignatures.size());
         d->m_variantSignatures[variantInfo.signatureIndex].length = d->m_signaturePosition;
-        assert(d->m_variantSignatures[variantInfo.signatureIndex].begin = d->m_signature.begin);
+        assert(d->m_variantSignatures[variantInfo.signatureIndex].ptr = d->m_signature.ptr);
 
-        d->m_signature.begin = variantInfo.prevSignature.begin;
+        d->m_signature.ptr = variantInfo.prevSignature.ptr;
         d->m_signature.length = variantInfo.prevSignature.length;
         d->m_signaturePosition = variantInfo.prevSignaturePosition;
         d->m_aggregateStack.pop_back();
@@ -1841,7 +1841,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
                 auto sigBeginIt = d->m_variantSignatures.begin() + d->m_variantSignaturesCountBeforeNilArray;
                 auto sigEndIt = d->m_variantSignatures.end();
                 for (auto it = sigBeginIt; it != sigEndIt; ++it) {
-                    free(it->begin);
+                    free(it->ptr);
                 }
                 d->m_variantSignatures.erase(sigBeginIt, sigEndIt);
                 d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
@@ -2004,7 +2004,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
     }
 
     // copy the data
-    memcpy(d->m_data + d->m_dataPosition, data.begin, data.length);
+    memcpy(d->m_data + d->m_dataPosition, data.ptr, data.length);
     d->m_dataPosition = newDataPosition;
 
     // Store ElementInfos about the data
@@ -2055,7 +2055,7 @@ void Arguments::Writer::finishInternal()
     VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentsHere);
     assert(!d->m_nilArrayNesting);
     assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
-    d->m_signature.begin[d->m_signaturePosition] = '\0';
+    d->m_signature.ptr[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
     if (d->m_argList.d->m_memOwnership) {
@@ -2079,7 +2079,7 @@ void Arguments::Writer::finishInternal()
         const int bufferSize = alignedSigLength +
                                d->m_dataCapacity * 2 + d->m_nesting.parenCount * 7;
         byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(Private::InitialDataCapacity), bufferSize)));
-        memcpy(buffer, d->m_signature.begin, d->m_signature.length + 1);
+        memcpy(buffer, d->m_signature.ptr, d->m_signature.length + 1);
         int bufferPos = d->m_signature.length + 1;
         zeroPad(buffer, 8, &bufferPos);
         int variantSignatureIndex = 0;
@@ -2126,9 +2126,9 @@ void Arguments::Writer::finishInternal()
                     // fill in signature (should already include trailing null)
                     cstring signature = d->m_variantSignatures[variantSignatureIndex++];
                     buffer[bufferPos++] = signature.length;
-                    memcpy(buffer + bufferPos, signature.begin, signature.length + 1);
+                    memcpy(buffer + bufferPos, signature.ptr, signature.length + 1);
                     bufferPos += signature.length + 1;
-                    free(signature.begin);
+                    free(signature.ptr);
                 }
             }
         }
@@ -2151,7 +2151,7 @@ void Arguments::Writer::finishInternal()
         } else {
             d->m_aggregateStack.clear();
             for (int i = 0; i < d->m_variantSignatures.size(); i++) {
-                free(d->m_variantSignatures[i].begin);
+                free(d->m_variantSignatures[i].ptr);
             }
         }
     } else {
@@ -2236,21 +2236,21 @@ void Arguments::Writer::writeDouble(double d)
 
 void Arguments::Writer::writeString(cstring string)
 {
-    m_u.String.begin = string.begin;
+    m_u.String.ptr = string.ptr;
     m_u.String.length = string.length;
     advanceState(chunk("s", strlen("s")), String);
 }
 
 void Arguments::Writer::writeObjectPath(cstring objectPath)
 {
-    m_u.String.begin = objectPath.begin;
+    m_u.String.ptr = objectPath.ptr;
     m_u.String.length = objectPath.length;
     advanceState(chunk("o", strlen("o")), ObjectPath);
 }
 
 void Arguments::Writer::writeSignature(cstring signature)
 {
-    m_u.String.begin = signature.begin;
+    m_u.String.ptr = signature.ptr;
     m_u.String.length = signature.length;
     advanceState(chunk("g", strlen("g")), Signature);
 }

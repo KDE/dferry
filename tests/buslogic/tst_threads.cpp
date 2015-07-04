@@ -62,7 +62,7 @@ public:
             cstring payload = reader.readString();
             TEST(!reader.error().isError());
             TEST(reader.isFinished());
-            std::cout << "we have ping with payload: " << reinterpret_cast<char *>(payload.begin) << std::endl;
+            std::cout << "we have ping with payload: " << payload.ptr << std::endl;
         }
 
         {

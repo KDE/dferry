@@ -36,6 +36,7 @@
 #include "message_p.h"
 #include "pendingreply.h"
 #include "pendingreply_p.h"
+#include "stringtools.h"
 
 #include <algorithm>
 #include <cassert>
@@ -243,7 +244,7 @@ void TransceiverPrivate::handleHelloReply()
     assert(reader.state() == Arguments::String);
     cstring busName = reader.readString();
     assert(reader.state() == Arguments::Finished);
-    m_uniqueName = std::string(reinterpret_cast<char *>(busName.begin));
+    m_uniqueName = toStdString(busName);
 
     // tell current secondaries
     UniqueNameReceivedEvent evt;

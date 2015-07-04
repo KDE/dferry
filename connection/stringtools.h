@@ -35,7 +35,7 @@ std::string hexEncode(const std::string &s);
 
 inline std::string toStdString(cstring cstr)
 {
-    return std::string(reinterpret_cast<const char *>(cstr.begin), cstr.length);
+    return std::string(cstr.ptr, cstr.length);
 }
 
 #endif // STRINGTOOLS_H

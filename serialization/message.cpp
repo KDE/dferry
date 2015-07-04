@@ -228,13 +228,13 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
      m_varHeaders(other.m_varHeaders),
      m_completionClient(nullptr)
 {
-    if (other.m_buffer.begin) {
+    if (other.m_buffer.ptr) {
         // we don't keep pointers into the buffer (only indexes), right? right?
-        m_buffer.begin = static_cast<byte *>(malloc(other.m_buffer.length));
+        m_buffer.ptr = static_cast<byte *>(malloc(other.m_buffer.length));
         m_buffer.length = other.m_buffer.length;
         // Simplification: don't try to figure out which part of other.m_buffer contains "valid" data,
         // just copy everything.
-        memcpy(m_buffer.begin, other.m_buffer.begin, other.m_buffer.length);
+        memcpy(m_buffer.ptr, other.m_buffer.ptr, other.m_buffer.length);
     } else {
         assert(!m_buffer.length);
     }
@@ -685,8 +685,8 @@ void Message::load(const std::vector<byte> &data)
     d->clearBuffer();
     d->m_buffer.length = data.size();
     d->m_bufferPos = d->m_buffer.length;
-    d->m_buffer.begin = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
-    memcpy(d->m_buffer.begin, &data[0], d->m_buffer.length);
+    d->m_buffer.ptr = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
+    memcpy(d->m_buffer.ptr, &data[0], d->m_buffer.length);
 
     bool ok = d->m_buffer.length >= s_extendedFixedHeaderLength;
     ok = ok && d->deserializeFixedHeaders();
@@ -701,7 +701,7 @@ void Message::load(const std::vector<byte> &data)
     }
 
     std::string sig = signature();
-    chunk bodyData(d->m_buffer.begin + d->m_headerLength, d->m_bodyLength);
+    chunk bodyData(d->m_buffer.ptr + d->m_headerLength, d->m_bodyLength);
     d->m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
                                       bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Deserialized;
@@ -728,7 +728,7 @@ void MessagePrivate::notifyConnectionReadyRead()
 
         const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
-        in = connection()->read(m_buffer.begin + m_bufferPos, readMax);
+        in = connection()->read(m_buffer.ptr + m_bufferPos, readMax);
         assert(in.length > 0); // TODO real error checking - abort if there was a connection problem
         m_bufferPos += in.length;
         assert(m_bufferPos <= m_buffer.length);
@@ -756,7 +756,7 @@ void MessagePrivate::notifyConnectionReadyRead()
             if (m_varHeaders.hasStringHeader(Message::SignatureHeader)) {
                 sig = m_varHeaders.stringHeader(Message::SignatureHeader);
             }
-            chunk bodyData(m_buffer.begin + m_headerLength, m_bodyLength);
+            chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
             m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
                                            bodyData, m_isByteSwapped);
             assert(!isError);
@@ -792,7 +792,7 @@ std::vector<byte> Message::save()
     }
     ret.reserve(d->m_buffer.length);
     for (int i = 0; i < d->m_buffer.length; i++) {
-        ret.push_back(d->m_buffer.begin[i]);
+        ret.push_back(d->m_buffer.ptr[i]);
     }
     return ret;
 }
@@ -814,7 +814,7 @@ void MessagePrivate::notifyConnectionReadyWrite()
             notifyCompletionClient();
             break;
         }
-        int written = connection()->write(chunk(m_buffer.begin + m_bufferPos, toWrite));
+        int written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         if (written <= 0) {
             // TODO error handling
             break;
@@ -880,7 +880,7 @@ Error MessagePrivate::checkRequiredHeaders() const
 bool MessagePrivate::deserializeFixedHeaders()
 {
     assert(m_bufferPos >= s_extendedFixedHeaderLength);
-    byte *p = m_buffer.begin;
+    byte *p = m_buffer.ptr;
 
     byte endianness = *p++;
     if (endianness != 'l' && endianness != 'B') {
@@ -909,7 +909,7 @@ bool MessagePrivate::deserializeVariableHeaders()
 {
     // use Arguments to parse the variable header fields
     // HACK: the fake first int argument is there to start the Arguments's data 8 byte aligned
-    byte *base = m_buffer.begin + s_properFixedHeaderLength - sizeof(int32);
+    byte *base = m_buffer.ptr + s_properFixedHeaderLength - sizeof(int32);
     chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
     cstring varHeadersSig("ia(yv)");
     Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
@@ -969,7 +969,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     reader.endArray();
 
     // check that header->body padding is in fact zero filled
-    base = m_buffer.begin;
+    base = m_buffer.ptr;
     for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
         if (base[i] != '\0') {
             return false;
@@ -1020,17 +1020,17 @@ bool MessagePrivate::serialize()
     serializeFixedHeaders();
 
     // copy header data: uint32 length...
-    memcpy(m_buffer.begin + s_properFixedHeaderLength, headerArgs.data().begin, sizeof(uint32));
+    memcpy(m_buffer.ptr + s_properFixedHeaderLength, headerArgs.data().ptr, sizeof(uint32));
     // skip four bytes of padding and copy the rest
-    memcpy(m_buffer.begin + s_properFixedHeaderLength + sizeof(uint32),
-           headerArgs.data().begin + 2 * sizeof(uint32),
+    memcpy(m_buffer.ptr + s_properFixedHeaderLength + sizeof(uint32),
+           headerArgs.data().ptr + 2 * sizeof(uint32),
            headerArgs.data().length - 2 * sizeof(uint32));
     // zero padding between variable headers and message body
     for (int i = unalignedHeaderLength; i < m_headerLength; i++) {
-        m_buffer.begin[i] = '\0';
+        m_buffer.ptr[i] = '\0';
     }
     // copy message body
-    memcpy(m_buffer.begin + m_headerLength, m_mainArguments.data().begin, m_mainArguments.data().length);
+    memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_mainArguments.data().length);
     m_bufferPos = m_headerLength + m_mainArguments.data().length;
     assert(m_bufferPos <= m_buffer.length);
 
@@ -1046,7 +1046,7 @@ bool MessagePrivate::serialize()
 void MessagePrivate::serializeFixedHeaders()
 {
     assert(m_buffer.length >= s_extendedFixedHeaderLength);
-    byte *p = m_buffer.begin;
+    byte *p = m_buffer.ptr;
 
     *p++ = s_thisMachineEndianness;
     *p++ = byte(m_messageType);
@@ -1126,8 +1126,8 @@ Arguments MessagePrivate::serializeVariableHeaders()
 
 void MessagePrivate::clearBuffer()
 {
-    if (m_buffer.begin) {
-        free (m_buffer.begin);
+    if (m_buffer.ptr) {
+        free (m_buffer.ptr);
         m_buffer = chunk();
         m_bufferPos = 0;
     } else {
@@ -1161,7 +1161,7 @@ void MessagePrivate::reserveBuffer(int newLen)
     newLen = nextPowerOf2(newLen);
     assert(newLen >= oldLen);
     if (newLen > oldLen) {
-        m_buffer.begin = reinterpret_cast<byte *>(realloc(m_buffer.begin, newLen));
+        m_buffer.ptr = reinterpret_cast<byte *>(realloc(m_buffer.ptr, newLen));
         m_buffer.length = newLen;
     }
 }

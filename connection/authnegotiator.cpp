@@ -90,7 +90,7 @@ bool AuthNegotiator::readLine()
         byte readBuf[1];
         chunk in = connection()->read(readBuf, 1);
         assert(in.length == 1);
-        m_line += in.begin[0];
+        m_line += in.ptr[0];
 
         if (isEndOfLine()) {
             return true;
@@ -117,15 +117,15 @@ void AuthNegotiator::advanceState()
     case ExpectOkState: {
         // TODO check the OK
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
-        cout << negotiateLine.begin;
-        connection()->write(chunk(negotiateLine.begin, negotiateLine.length));
+        cout << negotiateLine.ptr;
+        connection()->write(chunk(negotiateLine.ptr, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
-        cout << beginLine.begin;
-        connection()->write(chunk(beginLine.begin, beginLine.length));
+        cout << beginLine.ptr;
+        connection()->write(chunk(beginLine.ptr, beginLine.length));
         m_state = AuthenticatedState;
         break; }
     default:

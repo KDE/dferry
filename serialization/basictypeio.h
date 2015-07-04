@@ -36,7 +36,7 @@ static inline bool isPaddingZero(const chunk &buffer, int padStart, int padEnd)
 {
     padEnd = std::min(padEnd, buffer.length);
     for (; padStart < padEnd; padStart++) {
-        if (unlikely(buffer.begin[padStart] != '\0')) {
+        if (unlikely(buffer.ptr[padStart] != '\0')) {
             return false;
         }
     }

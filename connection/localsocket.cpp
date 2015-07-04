@@ -102,7 +102,7 @@ int LocalSocket::write(chunk a)
     send_msg.msg_iov = &iov;
     send_msg.msg_iovlen = 1;
 
-    iov.iov_base = a.begin;
+    iov.iov_base = a.ptr;
     iov.iov_len = a.length;
 
     // we can only send a fixed number of fds anyway due to the non-flexible size of the control message
@@ -192,9 +192,9 @@ chunk LocalSocket::read(byte *buffer, int maxSize)
 
     // end boilerplate
 
-    ret.begin = buffer;
+    ret.ptr = buffer;
     ret.length = 0;
-    iov.iov_base = ret.begin;
+    iov.iov_base = ret.ptr;
     iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
         int nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
