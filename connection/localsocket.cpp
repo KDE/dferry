@@ -202,9 +202,13 @@ chunk LocalSocket::read(byte *buffer, int maxSize)
             if (errno == EINTR) {
                 continue;
             }
-            // if we were notified for reading, we must have read at least one byte before getting
-            // EAGAIN aka EWOULDBLOCK
-            if (errno == EAGAIN && iov.iov_len < maxSize) {
+            // If we were notified for reading directly by the event dispatcher, we must be able to read at
+            // least one byte before getting AGAIN aka EWOULDBLOCK - *however* the event loop might notify
+            // something that is very eager to read everything (like Message::notifyRead()...) by reading
+            // multiple times and in that case, we may be called in an attempt to read more when there is
+            // currently no more data.
+            // Just return zero bytes and no error in that case.
+            if (errno == EAGAIN /* && iov.iov_len < maxSize */) {
                 break;
             }
             close();
