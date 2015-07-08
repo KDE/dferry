@@ -89,9 +89,10 @@ void IConnection::updateReadWriteInterest()
     if (readInterest != m_readNotificationEnabled || writeInterest != m_writeNotificationEnabled) {
         m_readNotificationEnabled = readInterest;
         m_writeNotificationEnabled = writeInterest;
-
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->setReadWriteInterest(this, m_readNotificationEnabled, m_writeNotificationEnabled);
+        if (m_eventDispatcher) {
+            EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+            ep->setReadWriteInterest(this, m_readNotificationEnabled, m_writeNotificationEnabled);
+        }
     }
 }
 
