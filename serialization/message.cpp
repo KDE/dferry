@@ -729,7 +729,6 @@ void MessagePrivate::notifyConnectionReadyRead()
         const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
         in = connection()->read(m_buffer.ptr + m_bufferPos, readMax);
-        assert(in.length > 0); // TODO real error checking - abort if there was a connection problem
         m_bufferPos += in.length;
         assert(m_bufferPos <= m_buffer.length);
 
@@ -776,7 +775,7 @@ void MessagePrivate::notifyConnectionReadyRead()
         clearBuffer();
         connection()->removeClient(this);
         notifyCompletionClient();
-        // TODO reset other data members
+        // TODO reset other data members, generally revisit error handling to make it robust
     }
 }
 
