@@ -60,9 +60,12 @@ set(DFER_PUBLIC_HEADERS
     events/timer.h
     serialization/message.h
     serialization/arguments.h
+    util/commutex.h
     util/error.h
     util/export.h
-    util/icompletionclient.h)
+    util/icompletionclient.h
+    util/types.h
+    util/valgrind-noop.h)
 
 set(DFER_PRIVATE_HEADERS
     connection/authnegotiator.h
@@ -79,8 +82,7 @@ set(DFER_PRIVATE_HEADERS
     events/ieventpoller.h
     events/iioeventclient.h
     events/platformtime.h
-    serialization/basictypeio.h
-    util/types.h)
+    serialization/basictypeio.h)
 
 set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
