@@ -150,13 +150,9 @@ int LocalSocket::write(chunk a)
 
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
         iov.iov_len -= nbytes;
-        // sendmsg() should always send the number of bytes asked for or block, so...
-        if (nbytes != 0) {
-            assert(iov.iov_len == 0);
-        }
     }
 
-    return a.length - iov.iov_len; // "- iov.iov_len" is for later, TODO revisit
+    return a.length - iov.iov_len;
 }
 
 int LocalSocket::availableBytesForReading()
