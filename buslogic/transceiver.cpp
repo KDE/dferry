@@ -234,8 +234,13 @@ void TransceiverPrivate::authAndHello(Transceiver *parent)
 
 void TransceiverPrivate::handleHelloReply()
 {
-    assert(m_helloReceiver->m_helloReply.hasNonErrorReply()); // TODO real error handling (more below)
-    // ### following line is ugly and slow!! Indicates a need for better API.
+    if (!m_helloReceiver->m_helloReply.hasNonErrorReply()) {
+        delete m_helloReceiver;
+        m_helloReceiver = nullptr;
+        m_state = Unconnected;
+        // TODO set an error, provide access to it, also set it on messages when trying to send / receive them
+        return;
+    }
     Arguments argList = m_helloReceiver->m_helloReply.reply()->arguments();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
