@@ -139,9 +139,9 @@ int LocalSocket::write(chunk a)
             if (errno == EINTR) {
                 continue;
             }
-            // if we were notified for writing, we must have written at least one byte before getting
-            // EAGAIN aka EWOULDBLOCK
-            if (errno == EAGAIN && iov.iov_len < a.length) {
+            // see EAGAIN comment in read()
+            if (errno == EAGAIN /* && iov.iov_len < a.length */ ) {
+                // TODO fix the error case
                 break;
             }
             close();
