@@ -141,7 +141,6 @@ int LocalSocket::write(chunk a)
             }
             // see EAGAIN comment in read()
             if (errno == EAGAIN /* && iov.iov_len < a.length */ ) {
-                // TODO fix the error case
                 break;
             }
             close();
