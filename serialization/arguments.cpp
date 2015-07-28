@@ -285,30 +285,34 @@ chunk Arguments::data() const
     return d->m_data;
 }
 
-template<typename T>
-std::string printMaybeNil(bool isNil, T value, const char *typeName)
+
+static void printMaybeNilProlog(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
+                                const char *typeName)
 {
-    std::stringstream ret;
-    ret << typeName << ": ";
+    *out << typeName << ": ";
     if (isNil) {
-        ret << "<nil>\n";
-    } else {
-        ret << value << '\n';
+        *out << "<nil>\n";
     }
-    return ret.str();
+}
+
+template<typename T>
+void printMaybeNil(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
+                   T value, const char *typeName)
+{
+    printMaybeNilProlog(out, nestingPrefix, isNil, typeName);
+    if (!isNil) {
+        *out << value << '\n';
+    }
 }
 
 template<>
-std::string printMaybeNil<cstring>(bool isNil, cstring cstr, const char *typeName)
+void printMaybeNil<cstring>(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
+                            cstring cstr, const char *typeName)
 {
-    std::stringstream ret;
-    ret << typeName << ": ";
-    if (isNil) {
-        ret << "<nil>\n";
-    } else {
-        ret << '"' << toStdString(cstr) << "\"\n";
+    printMaybeNilProlog(out, nestingPrefix, isNil, typeName);
+    if (!isNil) {
+        *out << '"' << toStdString(cstr) << "\"\n";
     }
-    return ret.str();
 }
 
 static bool strEndsWith(const std::string &str, const std::string &ending)
@@ -410,37 +414,37 @@ std::string Arguments::prettyPrint() const
             ret << '\n';
             break; }
         case Arguments::Byte:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, int(reader.readByte()), "byte");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, int(reader.readByte()), "byte");
             break;
         case Arguments::Int16:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt16(), "int16");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt16(), "int16");
             break;
         case Arguments::Uint16:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint16(), "uint16");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint16(), "uint16");
             break;
         case Arguments::Int32:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt32(), "int32");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt32(), "int32");
             break;
         case Arguments::Uint32:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint32(), "uint32");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint32(), "uint32");
             break;
         case Arguments::Int64:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readInt64(), "int64");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt64(), "int64");
             break;
         case Arguments::Uint64:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readUint64(), "uint64");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint64(), "uint64");
             break;
         case Arguments::Double:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readDouble(), "double");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readDouble(), "double");
             break;
         case Arguments::String:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readString(), "string");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readString(), "string");
             break;
         case Arguments::ObjectPath:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readObjectPath(), "object path");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readObjectPath(), "object path");
             break;
         case Arguments::Signature:
-            ret << nestingPrefix << printMaybeNil(emptyNesting, reader.readSignature(), "type signature");
+            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readSignature(), "type signature");
             break;
         case Arguments::UnixFd:
             // TODO

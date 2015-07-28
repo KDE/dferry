@@ -423,25 +423,23 @@ string Message::prettyPrint() const
         return string("Invalid message.\n");
     }
 
+    ostringstream os;
     for (int i = 0; i < stringHeadersCount; i++ ) {
         bool isPresent = false;
         string str = stringHeader(stringHeaderPrinters[i].field, &isPresent);
         if (isPresent) {
-            ostringstream os;
             os << "; " << stringHeaderPrinters[i].name << ": \"" << str << '"';
-            ret += os.str();
+
         }
     }
-
     for (int i = 0; i < intHeadersCount; i++ ) {
         bool isPresent = false;
         uint32 intValue = intHeader(intHeaderPrinters[i].field, &isPresent);
         if (isPresent) {
-            ostringstream os;
             os << "; " << intHeaderPrinters[i].name << ": " << intValue;
-            ret += os.str();
         }
     }
+    ret += os.str();
 
     ret += '\n';
     ret += d->m_mainArguments.prettyPrint();
