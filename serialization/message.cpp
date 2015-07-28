@@ -27,11 +27,13 @@
 #include "basictypeio.h"
 #include "icompletionclient.h"
 #include "iconnection.h"
+#include "malloccache.h"
 #include "stringtools.h"
 
 #include <cassert>
 #include <cstring>
 #include <sstream>
+#include <thread>
 
 using namespace std;
 
@@ -40,6 +42,14 @@ static const byte s_thisMachineEndianness = 'b';
 #else
 static const byte s_thisMachineEndianness = 'l';
 #endif
+
+struct MsgAllocCaches
+{
+    MallocCache<sizeof(MessagePrivate), 4> msgPrivate;
+    MallocCache<256, 4> msgBuffer;
+};
+
+thread_local static MsgAllocCaches msgAllocCaches;
 
 static const byte s_storageForHeader[Message::UnixFdsHeader + 1] = {
     0, // dummy entry: there is no enum value for 0
@@ -141,13 +151,13 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
     }
 }
 
-bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, string value)
+bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, cstring value)
 {
     if (hasHeader(header)) {
         return false;
     }
     m_headerPresenceBitmap |= 1 << header;
-    new(stringHeaders() + indexOfHeader(header)) string(move(value));
+    new(stringHeaders() + indexOfHeader(header)) string(value.ptr, value.length);
     return true;
 }
 
@@ -244,7 +254,7 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
 }
 
 Message::Message()
-   : d(new MessagePrivate(this))
+   : d(new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(this))
 {
 }
 
@@ -258,7 +268,8 @@ Message::Message(Message &&other)
 Message &Message::operator=(Message &&other)
 {
     if (&other != this) {
-        delete d;
+        d->~MessagePrivate();
+        msgAllocCaches.msgPrivate.free(d);
         d = other.d;
         other.d = nullptr;
         d->m_message = this;
@@ -272,7 +283,7 @@ Message::Message(const Message &other)
     if (!other.d) {
         return;
     }
-    d = new MessagePrivate(*other.d, this);
+    d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
 }
 
 Message &Message::operator=(const Message &other)
@@ -281,16 +292,17 @@ Message &Message::operator=(const Message &other)
         return *this;
     }
     if (d) {
-        delete d;
+        d->~MessagePrivate();
+        msgAllocCaches.msgPrivate.free(d);
         if (other.d) {
             // ### can be optimized by implementing and using assignment of MessagePrivate
-            d = new MessagePrivate(*other.d, this);
+            d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
         } else {
             d = nullptr;
         }
     } else {
         if (other.d) {
-            d = new MessagePrivate(*other.d, this);
+            d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
         }
     }
     return *this;
@@ -301,9 +313,10 @@ Message::~Message()
 {
     if (d) {
         d->clearBuffer();
+        d->~MessagePrivate();
+        msgAllocCaches.msgPrivate.free(d);
+        d = nullptr;
     }
-    delete d;
-    d = nullptr;
 }
 
 Error Message::error() const
@@ -937,16 +950,16 @@ bool MessagePrivate::deserializeVariableHeaders()
         if (isStringHeader(headerField)) {
             if (headerField == Message::PathHeader) {
                 ok = ok && reader.state() == Arguments::ObjectPath;
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readObjectPath()));
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readObjectPath());
             } else if (headerField == Message::SignatureHeader) {
                 ok = ok && reader.state() == Arguments::Signature;
                 // The spec allows having no signature header, which means "empty signature". However...
                 // We do not drop empty signature headers when deserializing, in order to preserve
                 // the original message contents. This could be useful for debugging and testing.
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readSignature()));
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readSignature());
             } else {
                 ok = ok && reader.state() == Arguments::String;
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, toStdString(reader.readString()));
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readString());
             }
         } else {
             ok = ok && reader.state() == Arguments::Uint32;
@@ -1150,17 +1163,24 @@ void MessagePrivate::reserveBuffer(int newLen)
     if (newLen <= oldLen) {
         return;
     }
-#ifdef NDEBUG
-    newLen = std::max(newLen, 255); // nextPowerOf2(255) == 256
-#else
-    newLen = std::max(newLen, 1); // more likely to trigger errors due to reallocation during testing
-#endif
-    newLen = nextPowerOf2(newLen);
-    assert(newLen >= oldLen);
-    if (newLen > oldLen) {
-        m_buffer.ptr = reinterpret_cast<byte *>(realloc(m_buffer.ptr, newLen));
-        m_buffer.length = newLen;
+    if (newLen <= 256) {
+        assert(oldLen == 0);
+        newLen = 256;
+        m_buffer.ptr = reinterpret_cast<byte *>(msgAllocCaches.msgBuffer.allocate());
+    } else {
+        newLen = nextPowerOf2(newLen);
+        if (oldLen == 256) {
+            byte *newAlloc = reinterpret_cast<byte *>(malloc(newLen));
+            memcpy(newAlloc, m_buffer.ptr, oldLen);
+
+            msgAllocCaches.msgBuffer.free(m_buffer.ptr);
+            m_buffer.ptr = newAlloc;
+        } else {
+            m_buffer.ptr = reinterpret_cast<byte *>(realloc(m_buffer.ptr, newLen));
+        }
     }
+
+    m_buffer.length = newLen;
 }
 
 void MessagePrivate::notifyCompletionClient()

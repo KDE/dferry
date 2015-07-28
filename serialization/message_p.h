@@ -53,7 +53,7 @@ public:
     // for use during header deserialization: returns false if a header occurs twice,
     // but does not check if the given header is of the right type (int / string).
     bool setIntHeader_deser(Message::VariableHeader header, uint32 value);
-    bool setStringHeader_deser(Message::VariableHeader header, std::string value);
+    bool setStringHeader_deser(Message::VariableHeader header, cstring value);
 
     const std::string *stringHeaders() const
     {
