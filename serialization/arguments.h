@@ -310,10 +310,10 @@ public:
 
         void writePrimitiveArray(IoState type, chunk data);
 
-    private:
         class Private;
         friend class Private;
 
+    private:
         void doWritePrimitiveType(uint32 alignAndSize);
         void doWriteString(int lengthPrefixSize);
         void advanceState(chunk signatureFragment, IoState newState);
@@ -330,8 +330,9 @@ public:
         DataUnion m_u;
     };
 
-private:
     class Private;
+
+private:
     Private *d;
 };
 

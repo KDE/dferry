@@ -25,6 +25,7 @@
 
 #include "basictypeio.h"
 #include "error.h"
+#include "malloccache.h"
 #include "message.h"
 #include "stringtools.h"
 
@@ -48,6 +49,37 @@ static byte alignmentLog2(uint alignment)
     return alignLog[alignment];
 }
 
+// helper to verify the max nesting requirements of the d-bus spec
+struct Nesting
+{
+    Nesting() : array(0), paren(0), variant(0) {}
+    static const int arrayMax = 32;
+    static const int parenMax = 32;
+    static const int totalMax = 64;
+
+    bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
+    void endArray() { array--; assert(array >= 0); }
+    bool beginParen() { paren++; return likely(paren <= parenMax && total() <= totalMax); }
+    void endParen() { paren--; assert(paren >= 0); }
+    bool beginVariant() { variant++; return likely(total() <= totalMax); }
+    void endVariant() { variant--; assert(variant >= 0); }
+    int total() { return array + paren + variant; }
+
+    int array;
+    int paren;
+    int variant;
+};
+
+struct NestingWithParenCounter : public Nesting
+{
+    NestingWithParenCounter() : parenCount(0) {}
+    // no need to be virtual, the type will be known statically
+    // theoretically it's unnecessary to check the return value: when it is false, the Arguments is
+    // already invalid so we could abandon all correctness.
+    bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
+    int parenCount;
+};
+
 class Arguments::Private
 {
 public:
@@ -67,6 +99,182 @@ public:
     cstring m_signature;
     chunk m_data;
 };
+
+class Arguments::Reader::Private
+{
+public:
+    Private()
+       : m_argList(nullptr),
+         m_signaturePosition(-1),
+         m_dataPosition(0),
+         m_nilArrayNesting(0)
+    {}
+
+    const Arguments *m_argList;
+    Nesting m_nesting;
+    cstring m_signature;
+    chunk m_data;
+    int m_signaturePosition;
+    int m_dataPosition;
+    int m_nilArrayNesting; // this keeps track of how many nil arrays we are in
+    Error m_error;
+
+    struct ArrayInfo
+    {
+        uint32 dataEnd; // one past the last data byte of the array
+        uint32 containedTypeBegin; // to rewind when reading the next element
+    };
+
+    struct VariantInfo
+    {
+        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
+        uint32 prevSignaturePosition; // need to store the old signature and parse position.
+    };
+
+    // for structs, we don't need to know more than that we are in a struct
+
+    struct AggregateInfo
+    {
+        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        union {
+            ArrayInfo arr;
+            VariantInfo var;
+        };
+    };
+
+    // this keeps track of which aggregates we are currently in
+    std::vector<AggregateInfo> m_aggregateStack;
+};
+
+class Arguments::Writer::Private
+{
+public:
+    Private()
+       : m_signature(m_mainSignatureStorage, 0),
+         m_signaturePosition(0),
+         m_data(m_initialDataBuffer),
+         m_dataCapacity(InitialDataCapacity),
+         m_dataPosition(0),
+         m_nilArrayNesting(0)
+    {
+        m_elements.reserve(16);
+    }
+
+    void reserveData(int size)
+    {
+        if (likely(size <= m_dataCapacity)) {
+            return;
+        }
+        int newCapacity = m_dataCapacity;
+        do {
+            newCapacity *= 2;
+        } while (size > newCapacity);
+
+        if (m_data == m_initialDataBuffer) {
+            byte *newAlloc = reinterpret_cast<byte *>(malloc(newCapacity));
+            memcpy(newAlloc, m_data, m_dataCapacity);
+            m_data = newAlloc;
+        } else {
+            m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
+        }
+        m_dataCapacity = newCapacity;
+    }
+
+    int m_dataElementsCountBeforeNilArray;
+    int m_variantSignaturesCountBeforeNilArray;
+    int m_dataPositionBeforeNilArray;
+
+    Arguments m_argList;
+    NestingWithParenCounter m_nesting;
+    cstring m_signature;
+    int m_signaturePosition;
+
+    byte *m_data;
+    int m_dataCapacity;
+    int m_dataPosition;
+
+    int m_nilArrayNesting;
+    Error m_error;
+
+    enum {
+        // got a linker error with static const int...
+        InitialDataCapacity = 256
+    };
+
+    struct ArrayInfo
+    {
+        uint32 dataBegin; // one past the last data byte of the array
+        uint32 containedTypeBegin; // to rewind when reading the next element
+    };
+
+    struct VariantInfo
+    {
+        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
+        uint32 prevSignaturePosition; // need to store the old signature and parse position.
+        uint32 signatureIndex; // index in m_variantSignatures
+    };
+
+    struct StructInfo
+    {
+        uint32 containedTypeBegin;
+    };
+
+    struct AggregateInfo
+    {
+        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        union {
+            ArrayInfo arr;
+            VariantInfo var;
+            StructInfo sct;
+        };
+    };
+
+    std::vector<cstring> m_variantSignatures;
+
+    // this keeps track of which aggregates we are currently in
+    std::vector<AggregateInfo> m_aggregateStack;
+
+
+    // we don't know how long a variant signature is when starting the variant, but we have to
+    // insert the signature into the datastream before the data. for that reason, we need a
+    // postprocessing pass to insert the signatures when the stream is otherwise finished.
+
+    // - need to split up long string data: all unaligned, arbitrary length
+    // - need to fix up array length because even the length excluding the padding before and
+    //   after varies with alignment of the first byte - for that the alignment parameters as
+    //   described in plan.txt need to be solved (we can use a worst-case estimate at first)
+    struct ElementInfo
+    {
+        ElementInfo(byte alignment, byte size_)
+            : size(size_)
+        {
+            alignmentExponent = alignmentLog2(alignment);
+        }
+        byte alignment() const { return 1 << alignmentExponent; }
+
+        byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
+        byte size : 6; // that's up to 63
+        enum SizeCode {
+            LargestSize = 60,
+            ArrayLengthField,
+            ArrayLengthEndMark,
+            VariantSignature
+        };
+    };
+
+    char m_mainSignatureStorage[maxSignatureLength + 1];
+    byte m_initialDataBuffer[InitialDataCapacity];
+    std::vector<ElementInfo> m_elements;
+};
+
+struct ArgAllocCaches
+{
+    MallocCache<sizeof(Arguments::Private), 4> argsPrivate;
+    MallocCache<sizeof(Arguments::Writer::Private), 4> writerPrivate;
+    MallocCache<Arguments::maxSignatureLength + 1, 8> writerSignatures;
+};
+
+thread_local static ArgAllocCaches allocCaches;
 
 Arguments::Private::Private(const Private &other)
 {
@@ -132,37 +340,6 @@ Arguments::Private::~Private()
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     m_state = InvalidData; d->m_error.setCode(errCode); return; }
 
-// helper to verify the max nesting requirements of the d-bus spec
-struct Nesting
-{
-    Nesting() : array(0), paren(0), variant(0) {}
-    static const int arrayMax = 32;
-    static const int parenMax = 32;
-    static const int totalMax = 64;
-
-    bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
-    void endArray() { array--; assert(array >= 0); }
-    bool beginParen() { paren++; return likely(paren <= parenMax && total() <= totalMax); }
-    void endParen() { paren--; assert(paren >= 0); }
-    bool beginVariant() { variant++; return likely(total() <= totalMax); }
-    void endVariant() { variant--; assert(variant >= 0); }
-    int total() { return array + paren + variant; }
-
-    int array;
-    int paren;
-    int variant;
-};
-
-struct NestingWithParenCounter : public Nesting
-{
-    NestingWithParenCounter() : parenCount(0) {}
-    // no need to be virtual, the type will be known statically
-    // theoretically it's unnecessary to check the return value: when it is false, the Arguments is
-    // already invalid so we could abandon all correctness.
-    bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
-    int parenCount;
-};
-
 static cstring printableState(Arguments::IoState state)
 {
     if (state < Arguments::NotStarted || state > Arguments::UnixFd) {
@@ -206,12 +383,12 @@ const int Arguments::maxSignatureLength; // for the linker; technically this is 
 static const int structAlignment = 8;
 
 Arguments::Arguments()
-   : d(new Private)
+   : d(new(allocCaches.argsPrivate.allocate()) Private)
 {
 }
 
 Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped)
-   : d(new Private)
+   : d(new(allocCaches.argsPrivate.allocate()) Private)
 {
     d->m_isByteSwapped = isByteSwapped;
     d->m_memOwnership = memOwnership;
@@ -228,7 +405,10 @@ Arguments::Arguments(Arguments &&other)
 Arguments &Arguments::operator=(Arguments &&other)
 {
     if (this != &other) {
-        delete d;
+        if (d) {
+            d->~Private();
+            allocCaches.argsPrivate.free(d);
+        }
         d = other.d;
         other.d = nullptr;
     }
@@ -252,13 +432,14 @@ Arguments &Arguments::operator=(const Arguments &other)
             *d = *other.d;
         } else {
             // other is a moved-from object
-            delete d;
+            d->~Private();
+            allocCaches.argsPrivate.free(d);
             d = nullptr;
         }
     } else {
         // *this is a moved-from object
         if (other.d) {
-            d = new Private(*other.d);
+            d = new(allocCaches.argsPrivate.allocate()) Private(*other.d);
         }
     }
     return *this;
@@ -266,8 +447,11 @@ Arguments &Arguments::operator=(const Arguments &other)
 
 Arguments::~Arguments()
 {
-    delete d;
-    d = nullptr;
+    if (d) {
+        d->~Private();
+        allocCaches.argsPrivate.free(d);
+        d = nullptr;
+    }
 }
 
 Error Arguments::error() const
@@ -660,52 +844,6 @@ bool Arguments::isSignatureValid(cstring signature, SignatureType type)
     assert(!nest.variant);
     return true;
 }
-
-class Arguments::Reader::Private
-{
-public:
-    Private()
-       : m_argList(nullptr),
-         m_signaturePosition(-1),
-         m_dataPosition(0),
-         m_nilArrayNesting(0)
-    {}
-
-    const Arguments *m_argList;
-    Nesting m_nesting;
-    cstring m_signature;
-    chunk m_data;
-    int m_signaturePosition;
-    int m_dataPosition;
-    int m_nilArrayNesting; // this keeps track of how many nil arrays we are in
-    Error m_error;
-
-    struct ArrayInfo
-    {
-        uint32 dataEnd; // one past the last data byte of the array
-        uint32 containedTypeBegin; // to rewind when reading the next element
-    };
-
-    struct VariantInfo
-    {
-        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
-        uint32 prevSignaturePosition; // need to store the old signature and parse position.
-    };
-
-    // for structs, we don't need to know more than that we are in a struct
-
-    struct AggregateInfo
-    {
-        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
-        union {
-            ArrayInfo arr;
-            VariantInfo var;
-        };
-    };
-
-    // this keeps track of which aggregates we are currently in
-    std::vector<AggregateInfo> m_aggregateStack;
-};
 
 Arguments::Reader::Reader(const Arguments &al)
    : d(new Private),
@@ -1388,107 +1526,8 @@ std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
     return ret;
 }
 
-class Arguments::Writer::Private
-{
-public:
-    Private()
-       : m_signature(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0),
-         m_signaturePosition(0),
-         m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
-         m_dataCapacity(InitialDataCapacity),
-         m_dataPosition(0),
-         m_nilArrayNesting(0)
-    {
-        m_elements.reserve(16);
-    }
-
-    int m_dataElementsCountBeforeNilArray;
-    int m_variantSignaturesCountBeforeNilArray;
-    int m_dataPositionBeforeNilArray;
-
-    Arguments m_argList;
-    NestingWithParenCounter m_nesting;
-    cstring m_signature;
-    int m_signaturePosition;
-
-    byte *m_data;
-    int m_dataCapacity;
-    int m_dataPosition;
-
-    int m_nilArrayNesting;
-    Error m_error;
-
-    enum {
-        // got a linker error with static const int...
-        InitialDataCapacity = 256
-    };
-
-    struct ArrayInfo
-    {
-        uint32 dataBegin; // one past the last data byte of the array
-        uint32 containedTypeBegin; // to rewind when reading the next element
-    };
-
-    struct VariantInfo
-    {
-        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
-        uint32 prevSignaturePosition; // need to store the old signature and parse position.
-        uint32 signatureIndex; // index in m_variantSignatures
-    };
-
-    struct StructInfo
-    {
-        uint32 containedTypeBegin;
-    };
-
-    struct AggregateInfo
-    {
-        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
-        union {
-            ArrayInfo arr;
-            VariantInfo var;
-            StructInfo sct;
-        };
-    };
-
-    std::vector<cstring> m_variantSignatures; // TODO; cstring might not work when reallocating data
-
-    // this keeps track of which aggregates we are currently in
-    std::vector<AggregateInfo> m_aggregateStack;
-
-
-    // we don't know how long a variant signature is when starting the variant, but we have to
-    // insert the signature into the datastream before the data. for that reason, we need a
-    // postprocessing pass to insert the signatures when the stream is otherwise finished.
-
-    // - need to split up long string data: all unaligned, arbitrary length
-    // - need to fix up array length because even the length excluding the padding before and
-    //   after varies with alignment of the first byte - for that the alignment parameters as
-    //   described in plan.txt need to be solved (we can use a worst-case estimate at first)
-    struct ElementInfo
-    {
-        ElementInfo(byte alignment, byte size_)
-            : size(size_)
-        {
-            alignmentExponent = alignmentLog2(alignment);
-        }
-        byte alignment() const { return 1 << alignmentExponent; }
-
-        byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
-        byte size : 6; // that's up to 63
-        enum SizeCode {
-            LargestSize = 60,
-            ArrayLengthField,
-            ArrayLengthEndMark,
-            VariantSignature
-        };
-    };
-
-    std::vector<ElementInfo> m_elements;
-};
-
 Arguments::Writer::Writer()
-   : d(new Private),
+   : d(new(allocCaches.writerPrivate.allocate()) Private),
      m_state(AnyData)
 {
 }
@@ -1516,26 +1555,22 @@ void Arguments::Writer::operator=(Writer &&other)
 Arguments::Writer::~Writer()
 {
     for (int i = 0; i < d->m_variantSignatures.size(); i++) {
-        free(d->m_variantSignatures[i].ptr);
-        if (d->m_variantSignatures[i].ptr == d->m_signature.ptr) {
-            d->m_signature = cstring(); // don't free it again
+        // don't free m_signature.ptr twice
+        if (d->m_variantSignatures[i].ptr != d->m_signature.ptr) {
+            allocCaches.writerSignatures.free(d->m_variantSignatures[i].ptr);
         }
     }
-    if (d->m_signature.ptr) {
-        free(d->m_signature.ptr);
+    if (d->m_signature.ptr && d->m_signature.ptr != d->m_mainSignatureStorage) {
+        allocCaches.writerSignatures.free(d->m_signature.ptr);
         d->m_signature = cstring();
     }
-    // free the original signature, which is the prevSignature lowest on the stack
-    for (int i = 0; i < d->m_aggregateStack.size(); i++) {
-        if (d->m_aggregateStack[i].aggregateType == BeginVariant) {
-            free(d->m_aggregateStack[i].var.prevSignature.ptr);
-            break;
-        }
-    }
 
-    free(d->m_data);
+    if (d->m_data != d->m_initialDataBuffer) {
+        free(d->m_data);
+    }
     d->m_data = nullptr;
-    delete d;
+    d->~Private();
+    allocCaches.writerPrivate.free(d);
     d = nullptr;
 }
 
@@ -1558,10 +1593,7 @@ void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
 {
     d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
     const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
-    if (unlikely(newDataPosition > d->m_dataCapacity)) {
-        d->m_dataCapacity *= 2;
-        d->m_data = reinterpret_cast<byte *>(realloc(d->m_data, d->m_dataCapacity));
-    }
+    d->reserveData(newDataPosition);
 
     switch(m_state) {
     case Boolean: {
@@ -1620,12 +1652,7 @@ void Arguments::Writer::doWriteString(int lengthPrefixSize)
 
     d->m_dataPosition = align(d->m_dataPosition, lengthPrefixSize);
     const uint32 newDataPosition = d->m_dataPosition + lengthPrefixSize + m_u.String.length + 1;
-    if (unlikely(newDataPosition > d->m_dataCapacity)) {
-        while (newDataPosition > d->m_dataCapacity) {
-            d->m_dataCapacity *= 2;
-        }
-        d->m_data = reinterpret_cast<byte *>(realloc(d->m_data, d->m_dataCapacity));
-    }
+    d->reserveData(newDataPosition);
 
     if (lengthPrefixSize == 1) {
         d->m_data[d->m_dataPosition] = m_u.String.length;
@@ -1749,6 +1776,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         aggregateInfo.aggregateType = BeginStruct;
         aggregateInfo.sct.containedTypeBegin = d->m_signaturePosition;
+        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
         d->m_elements.push_back(Private::ElementInfo(alignment, 0)); // align only
         break;
@@ -1772,11 +1800,15 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
         variantInfo.signatureIndex = d->m_variantSignatures.size();
 
+        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
         // arrange for finish() to take a signature from d->m_variantSignatures
         d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::VariantSignature));
-        cstring str(reinterpret_cast<byte *>(malloc(maxSignatureLength + 1)), 0);
+
+        cstring str(reinterpret_cast<byte *>(allocCaches.writerSignatures.allocate()), 0);
+
+        d->m_variantSignatures.reserve(8);
         d->m_variantSignatures.push_back(str);
         d->m_signature = str;
         d->m_signaturePosition = 0;
@@ -1815,6 +1847,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         aggregateInfo.aggregateType = m_state;
         aggregateInfo.arr.dataBegin = d->m_dataPosition;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
+        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
         d->m_elements.push_back(Private::ElementInfo(4, Private::ElementInfo::ArrayLengthField));
@@ -2000,12 +2033,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 
     // ensure that we have room for the data
     const uint32 newDataPosition = d->m_dataPosition + data.length;
-    if (unlikely(newDataPosition > d->m_dataCapacity)) {
-        while (newDataPosition > d->m_dataCapacity) {
-            d->m_dataCapacity *= 2;
-        }
-        d->m_data = reinterpret_cast<byte *>(realloc(d->m_data, d->m_dataCapacity));
-    }
+    d->reserveData(newDataPosition);
 
     // copy the data
     memcpy(d->m_data + d->m_dataPosition, data.ptr, data.length);
@@ -2068,6 +2096,7 @@ void Arguments::Writer::finishInternal()
 
     bool success = true;
     const uint32 count = d->m_elements.size();
+    const int dataSize = d->m_dataPosition;
     d->m_dataPosition = 0;
     if (count) {
         // Note: if one of signature or data is nonempty, the other must also be nonempty. think about it.
@@ -2081,7 +2110,7 @@ void Arguments::Writer::finishInternal()
         // Those estimates are very conservative (but easy!), so some space optimization is possible.
         const int alignedSigLength = align(d->m_signature.length + 1, 8);
         const int bufferSize = alignedSigLength +
-                               d->m_dataCapacity * 2 + d->m_nesting.parenCount * 7;
+                               dataSize * 2 + d->m_nesting.parenCount * 7;
         byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(Private::InitialDataCapacity), bufferSize)));
         memcpy(buffer, d->m_signature.ptr, d->m_signature.length + 1);
         int bufferPos = d->m_signature.length + 1;
@@ -2132,7 +2161,7 @@ void Arguments::Writer::finishInternal()
                     buffer[bufferPos++] = signature.length;
                     memcpy(buffer + bufferPos, signature.ptr, signature.length + 1);
                     bufferPos += signature.length + 1;
-                    free(signature.ptr);
+                    allocCaches.writerSignatures.free(signature.ptr);
                 }
             }
         }
@@ -2155,7 +2184,7 @@ void Arguments::Writer::finishInternal()
         } else {
             d->m_aggregateStack.clear();
             for (int i = 0; i < d->m_variantSignatures.size(); i++) {
-                free(d->m_variantSignatures[i].ptr);
+                allocCaches.writerSignatures.free(d->m_variantSignatures[i].ptr);
             }
         }
     } else {
