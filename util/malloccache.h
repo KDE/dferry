@@ -43,4 +43,4 @@ private:
     size_t m_blocksCached;
 };
 
-#endif MALLOCCACHE_H
+#endif // MALLOCCACHE_H
