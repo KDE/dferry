@@ -209,10 +209,10 @@ string ConnectionInfo::guid() const
 
 void ConnectionInfo::Private::fetchSessionBusInfo()
 {
-    ifstream infoFile(sessionInfoFile().c_str());
     string line;
 
     // TODO: on X, the spec requires a special way to find the session bus
+    //       (but nobody seems to use it?)
 
     // try the environment variable
     const char *envAddress = getenv("DBUS_SESSION_BUS_ADDRESS");
@@ -220,7 +220,8 @@ void ConnectionInfo::Private::fetchSessionBusInfo()
         line = envAddress;
     } else {
         // try it using a byzantine system involving files...
-        string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
+        ifstream infoFile(sessionInfoFile().c_str());
+        const string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
         while (getline(infoFile, line)) {
             // TODO do we need any of the other information in the file?
             if (line.find(busAddressPrefix) == 0 ) {
