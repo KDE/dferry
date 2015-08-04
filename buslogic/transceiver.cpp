@@ -78,14 +78,14 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
    : m_state(Unconnected),
      m_client(nullptr),
      m_receivingMessage(nullptr),
-     m_sendSerial(1),
-     m_defaultTimeout(25000),
      m_connection(nullptr),
-     m_mainThreadTransceiver(nullptr),
      m_helloReceiver(nullptr),
      m_clientConnectedHandler(nullptr),
      m_eventDispatcher(dispatcher),
-     m_authNegotiator(nullptr)
+     m_authNegotiator(nullptr),
+     m_defaultTimeout(25000),
+     m_sendSerial(1),
+     m_mainThreadTransceiver(nullptr)
 {
 }
 

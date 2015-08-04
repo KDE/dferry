@@ -254,8 +254,7 @@ void ConnectionInfo::Private::parseSessionBusInfo(string info)
         string abstractLiteral = "abstract=";
         // TODO what about "tmpdir=..."?
 
-        for (int i = 0; i < parts.size(); i++) {
-            const string &part = parts[i];
+        for (const string &part : parts) {
             if (part.find(pathLiteral) == 0) {
                 if (m_socketType != SocketType::None) {
                     goto invalid; // error - duplicate path specification
@@ -274,8 +273,7 @@ void ConnectionInfo::Private::parseSessionBusInfo(string info)
         // TODO
     }
 
-    for (int i = 0; i < parts.size(); i++) {
-        const string &part = parts[i];
+    for (const string &part : parts) {
         if (part.find(guidLiteral) == 0) {
             m_guid = part.substr(guidLiteral.length());
         }

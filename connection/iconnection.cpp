@@ -78,11 +78,11 @@ void IConnection::updateReadWriteInterest()
 {
     bool readInterest = false;
     bool writeInterest = false;
-    for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->readNotificationEnabled()) {
+    for (IConnectionClient *client : m_clients) {
+        if (client->readNotificationEnabled()) {
             readInterest = true;
         }
-        if (m_clients[i]->writeNotificationEnabled()) {
+        if (client->writeNotificationEnabled()) {
             writeInterest = true;
         }
     }
@@ -122,9 +122,9 @@ EventDispatcher *IConnection::eventDispatcher() const
 
 void IConnection::notifyRead()
 {
-    for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->readNotificationEnabled()) {
-            m_clients[i]->notifyConnectionReadyRead();
+    for (IConnectionClient *client : m_clients) {
+        if (client->readNotificationEnabled()) {
+            client->notifyConnectionReadyRead();
             break;
         }
     }
@@ -132,9 +132,9 @@ void IConnection::notifyRead()
 
 void IConnection::notifyWrite()
 {
-    for (int i = 0; i < m_clients.size(); i++) {
-        if (m_clients[i]->writeNotificationEnabled()) {
-            m_clients[i]->notifyConnectionReadyWrite();
+    for (IConnectionClient *client : m_clients) {
+        if (client->writeNotificationEnabled()) {
+            client->notifyConnectionReadyWrite();
             break;
         }
     }

@@ -111,7 +111,7 @@ public:
 
     Message *m_message;
     chunk m_buffer;
-    int m_bufferPos;
+    uint32 m_bufferPos;
 
     bool m_isByteSwapped;
     enum { // ### we don't have an error state, the need hasn't arisen yet. strange!

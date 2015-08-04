@@ -106,8 +106,8 @@ static void xmlizeMethod(tx2::XMLElement *el, const Method *method)
     bool isSignal = method->type == Message::SignalMessage;
     tx2::XMLElement *methodEl = addElement(el, isSignal ? "signal" : "method", method->name);
 
-    for (int i = 0; i < method->arguments.size(); i++) {
-        xmlizeArgument(methodEl, &method->arguments[i], isSignal);
+    for (const Argument &arg : method->arguments) {
+        xmlizeArgument(methodEl, &arg, isSignal);
     }
 }
 

@@ -32,7 +32,7 @@ static inline int align(uint32 index, uint32 alignment)
     return (index + maxStepUp) & ~maxStepUp;
 }
 
-static inline bool isPaddingZero(const chunk &buffer, int padStart, int padEnd)
+static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 padEnd)
 {
     padEnd = std::min(padEnd, buffer.length);
     for (; padStart < padEnd; padStart++) {

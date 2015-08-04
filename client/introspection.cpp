@@ -107,8 +107,9 @@ IntrospectionNode *IntrospectionTree::findOrCreateParent(const char *path, std::
     std::vector<std::string> elements = split(strPath, '/', false);
 
     IntrospectionNode *node = m_rootNode;
+
     // the leaf node is to be created later, hence we omit the last path element
-    for (int i = 0; i < elements.size() - 1; i++) {
+    for (size_t i = 0; i + 1 < elements.size(); i++) {
         std::map<std::string, IntrospectionNode *>::iterator it = node->children.find(elements[i]);
         if (it != node->children.end()) {
             node = it->second;
@@ -169,7 +170,7 @@ bool IntrospectionTree::addNode(IntrospectionNode *parent, const tx2::XMLElement
         return false;
     }
 
-    const bool isRootOfDocument = el == el->GetDocument()->RootElement();
+    // const bool isRootOfDocument = el == el->GetDocument()->RootElement();
 
     std::unique_ptr<IntrospectionNode> node(new IntrospectionNode);
     node->parent = parent;

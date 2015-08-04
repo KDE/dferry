@@ -286,6 +286,7 @@ bool EavesdropperModel::hasChildren (const QModelIndex &parent) const
 QModelIndex EavesdropperModel::parent(const QModelIndex &child) const
 {
     Q_ASSERT(!child.isValid() || child.model() == this); // ### why does it crash with &&?
+    Q_UNUSED(child);
     return QModelIndex();
 }
 
@@ -317,9 +318,9 @@ void EavesdropperModel::clearInternal()
     m_callsAwaitingResponse.clear();
     // This is easier than making MessageRecord clean up after itself - it would need refcounting in order
     // to avoid accidentally deleting the message in many common situations.
-    for (int i = 0; i < m_messages.size(); i++) {
-        delete m_messages[i].message;
-        m_messages[i].message = 0;
+    for (MessageRecord &msgRecord : m_messages) {
+        delete msgRecord.message;
+        msgRecord.message = nullptr;
     }
     m_messages.clear();
 }
@@ -332,15 +333,15 @@ void EavesdropperModel::saveToFile(const QString &path)
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
     file.write(fileHeader);
 
-    for (int i = 0; i < m_messages.size(); i++) {
-        std::vector<byte> msgData = m_messages[i].message->save();
+    for (MessageRecord &msgRecord : m_messages) {
+        std::vector<byte> msgData = msgRecord.message->save();
 
         // auxiliary data from MessageRecord, length prefix
         {
             QDataStream auxStream(&file);
             auxStream.setVersion(12);
-            auxStream << m_messages[i].otherMessageIndex;
-            auxStream << m_messages[i].timestamp;
+            auxStream << msgRecord.otherMessageIndex;
+            auxStream << msgRecord.timestamp;
             auxStream << quint32(msgData.size());
         }
 

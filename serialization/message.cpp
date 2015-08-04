@@ -801,7 +801,7 @@ std::vector<byte> Message::save()
         return ret;
     }
     ret.reserve(d->m_buffer.length);
-    for (int i = 0; i < d->m_buffer.length; i++) {
+    for (uint32 i = 0; i < d->m_buffer.length; i++) {
         ret.push_back(d->m_buffer.ptr[i]);
     }
     return ret;
@@ -980,7 +980,7 @@ bool MessagePrivate::deserializeVariableHeaders()
 
     // check that header->body padding is in fact zero filled
     base = m_buffer.ptr;
-    for (int i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
+    for (uint32 i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
         if (base[i] != '\0') {
             return false;
         }
@@ -1036,7 +1036,7 @@ bool MessagePrivate::serialize()
            headerArgs.data().ptr + 2 * sizeof(uint32),
            headerArgs.data().length - 2 * sizeof(uint32));
     // zero padding between variable headers and message body
-    for (int i = unalignedHeaderLength; i < m_headerLength; i++) {
+    for (uint32 i = unalignedHeaderLength; i < m_headerLength; i++) {
         m_buffer.ptr[i] = '\0';
     }
     // copy message body

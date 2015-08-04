@@ -34,7 +34,7 @@
 static void printChunk(chunk a)
 {
     std::cout << "Array: ";
-    for (int i = 0; i < a.length; i++) {
+    for (uint32 i = 0; i < a.length; i++) {
         std::cout << int(a.ptr[i]) << '|';
     }
     std::cout << '\n';
@@ -48,7 +48,7 @@ static bool chunksEqual(chunk a1, chunk a2)
         printChunk(a2);
         return false;
     }
-    for (int i = 0; i < a1.length; i++) {
+    for (uint32 i = 0; i < a1.length; i++) {
         if (a1.ptr[i] != a2.ptr[i]) {
             std::cout << "Different content.\n";
             printChunk(a1);
@@ -93,11 +93,11 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             chunk oldData = shortData;
             shortData.length = std::min(shortData.length + dataIncrement, data.length);
             shortData.ptr = reinterpret_cast<byte *>(malloc(shortData.length));
-            for (int i = 0; i < shortData.length; i++) {
+            for (uint32 i = 0; i < shortData.length; i++) {
                 shortData.ptr[i] = data.ptr[i];
             }
             // clobber it to provoke errors that only valgrind might find otherwise
-            for (int i = 0; i < oldData.length; i++) {
+            for (uint32 i = 0; i < oldData.length; i++) {
                 oldData.ptr[i] = '\xff';
             }
             if (oldData.ptr) {
@@ -927,11 +927,11 @@ void test_primitiveArray()
 
     static const uint32 testDataSize = 16384;
     byte testData[testDataSize];
-    for (int i = 0; i < testDataSize; i++) {
+    for (uint32 i = 0; i < testDataSize; i++) {
         testData[i] = i & 0xff;
     }
 
-    for (int i = 0; i < 4; i++) {
+    for (uint i = 0; i < 4; i++) {
 
         const bool writeAsPrimitive = i & 0x1;
         const bool readAsPrimitive = i & 0x2;
@@ -946,10 +946,10 @@ void test_primitiveArray()
             Arguments::Uint64
         };
 
-        for (int otherType = 0; otherType < arrayTypesCount; otherType++) {
+        for (uint otherType = 0; otherType < arrayTypesCount; otherType++) {
 
             // an array with no type in it is ill-formed, so we start with 1 (Byte)
-            for (int typeInArray = 1; typeInArray < arrayTypesCount; typeInArray++) {
+            for (uint typeInArray = 1; typeInArray < arrayTypesCount; typeInArray++) {
 
                 static const uint32 arraySizesCount = 12;
                 static const uint32 arraySizes[arraySizesCount] = {
@@ -967,7 +967,7 @@ void test_primitiveArray()
                     2048 // dataSize / sizeof(uint64) == 2048
                 };
 
-                for (int k = 0; k < arraySizesCount; k++) {
+                for (uint k = 0; k < arraySizesCount; k++) {
 
                     static const uint64_t otherValue = ~0ll;
                     const uint32 arraySize = arraySizes[k];
@@ -988,7 +988,7 @@ void test_primitiveArray()
                                                         : Arguments::Writer::WriteTypesOfEmptyArray);
                             byte *testDataPtr = testData;
                             if (arraySize) {
-                                for (int m = 0; m < arraySize; m++) {
+                                for (uint m = 0; m < arraySize; m++) {
                                     writer.nextArrayEntry();
                                     writeValue(&writer, typeInArray, testDataPtr);
                                     testDataPtr += 1 << (typeInArray - 1);
@@ -1026,7 +1026,7 @@ void test_primitiveArray()
                             byte *testDataPtr = testData;
 
                             if (arraySize) {
-                                for (int m = 0; m < arraySize; m++) {
+                                for (uint m = 0; m < arraySize; m++) {
                                     TEST(reader.state() != Arguments::InvalidData);
                                     TEST(reader.nextArrayEntry());
                                     TEST(checkValue(&reader, typeInArray, testDataPtr));

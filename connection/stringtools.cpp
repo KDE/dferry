@@ -43,7 +43,7 @@ vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
 string hexEncode(const string &s)
 {
     stringstream ss;
-    for (int i = 0; i < s.length(); i++) {
+    for (size_t i = 0; i < s.length(); i++) {
         const char c = s[i];
         ss << std::hex << int(c >> 4) << int(c & 0xf);
     }

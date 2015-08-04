@@ -218,12 +218,13 @@ chunk LocalSocket::read(byte *buffer, int maxSize)
 
     struct cmsghdr *c_msg = CMSG_FIRSTHDR(&recv_msg);
     if (c_msg && c_msg->cmsg_level == SOL_SOCKET && c_msg->cmsg_type == SCM_RIGHTS) {
+        /* TODO
         const int len = c_msg->cmsg_len / sizeof(int);
         int *data = reinterpret_cast<int *>(CMSG_DATA(c_msg));
         for (int i = 0; i < len; i++) {
-            // TODO
-            // message.appendFileDescriptor(data[i]);
+            message.appendFileDescriptor(data[i]);
         }
+        */
     }
 
     return ret;

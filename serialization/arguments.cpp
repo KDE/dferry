@@ -114,9 +114,9 @@ public:
     Nesting m_nesting;
     cstring m_signature;
     chunk m_data;
-    int m_signaturePosition;
-    int m_dataPosition;
-    int m_nilArrayNesting; // this keeps track of how many nil arrays we are in
+    uint32 m_signaturePosition;
+    uint32 m_dataPosition;
+    uint32 m_nilArrayNesting; // this keeps track of how many nil arrays we are in
     Error m_error;
 
     struct ArrayInfo
@@ -160,12 +160,12 @@ public:
         m_elements.reserve(16);
     }
 
-    void reserveData(int size)
+    void reserveData(uint32 size)
     {
         if (likely(size <= m_dataCapacity)) {
             return;
         }
-        int newCapacity = m_dataCapacity;
+        uint32 newCapacity = m_dataCapacity;
         do {
             newCapacity *= 2;
         } while (size > newCapacity);
@@ -187,11 +187,11 @@ public:
     Arguments m_argList;
     NestingWithParenCounter m_nesting;
     cstring m_signature;
-    int m_signaturePosition;
+    uint32 m_signaturePosition;
 
     byte *m_data;
-    int m_dataCapacity;
-    int m_dataPosition;
+    uint32 m_dataCapacity;
+    uint32 m_dataPosition;
 
     int m_nilArrayNesting;
     Error m_error;
@@ -678,7 +678,7 @@ bool Arguments::isObjectPathValid(cstring path)
     if (path.length == 1) {
         return true; // "/" special case
     }
-    for (int i = 1; i < path.length; i++) {
+    for (uint32 i = 1; i < path.length; i++) {
         byte currentLetter = path.ptr[i];
         if (prevLetter == '/') {
             if (!isObjectNameLetter(currentLetter)) {
@@ -700,7 +700,7 @@ bool Arguments::isObjectPathElementValid(cstring pathElement)
     if (!pathElement.length) {
         return false;
     }
-    for (int i = 0; i < pathElement.length; i++) {
+    for (uint32 i = 0; i < pathElement.length; i++) {
         if (!isObjectNameLetter(pathElement.ptr[i])) {
             return false;
         }
@@ -1053,7 +1053,7 @@ void Arguments::Reader::doReadPrimitiveType()
         break;
     case UnixFd: {
         uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
-        uint32 ret; // TODO use index to retrieve the actual file descriptor
+        uint32 ret = index; // ### highly bogus; TODO use index to retrieve the actual file descriptor
         m_u.Uint32 = ret;
         break; }
     default:
@@ -1320,9 +1320,6 @@ void Arguments::Reader::advanceStateFrom(IoState expectedState)
 void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
 {
     assert(!d->m_aggregateStack.empty());
-    Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
-    assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
-
     if (unlikely(d->m_nilArrayNesting)) {
         if (option == SkipIfEmpty) {
             // TODO this whole branch seems to be not covered by the tests
@@ -1554,10 +1551,10 @@ void Arguments::Writer::operator=(Writer &&other)
 
 Arguments::Writer::~Writer()
 {
-    for (int i = 0; i < d->m_variantSignatures.size(); i++) {
+    for (cstring &sig : d->m_variantSignatures) {
         // don't free m_signature.ptr twice
-        if (d->m_variantSignatures[i].ptr != d->m_signature.ptr) {
-            allocCaches.writerSignatures.free(d->m_variantSignatures[i].ptr);
+        if (sig.ptr != d->m_signature.ptr) {
+            allocCaches.writerSignatures.free(sig.ptr);
         }
     }
     if (d->m_signature.ptr && d->m_signature.ptr != d->m_mainSignatureStorage) {
@@ -1625,7 +1622,7 @@ void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
         basic::writeDouble(d->m_data + d->m_dataPosition, m_u.Double);
         break;
     case UnixFd: {
-        uint32 index; // TODO = index of the FD we actually want to send
+        uint32 index = 0; // TODO = index of the FD we actually want to send
         basic::writeUint32(d->m_data + d->m_dataPosition, index);
         break; }
     default:
@@ -1707,7 +1704,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         isStringType = ty.isString;
     }
 
-    bool isWritingSignature = d->m_signaturePosition == d->m_signature.length; // TODO correct?
+    bool isWritingSignature = d->m_signaturePosition == d->m_signature.length;
     if (isWritingSignature) {
         // signature additions must conform to syntax
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= maxSignatureLength,
@@ -1744,7 +1741,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
         }
 
         // finally, extend the signature
-        for (int i = 0; i < signatureFragment.length; i++) {
+        for (uint32 i = 0; i < signatureFragment.length; i++) {
             d->m_signature.ptr[d->m_signaturePosition++] = signatureFragment.ptr[i];
         }
         d->m_signature.length += signatureFragment.length;
@@ -1754,7 +1751,7 @@ void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
                  Error::TypeMismatchInSubsequentArrayIteration);
         // TODO need to apply special checks for state changes with no explicit signature char?
         // (end of array, end of variant)
-        for (int i = 0; i < signatureFragment.length; i++) {
+        for (uint32 i = 0; i < signatureFragment.length; i++) {
             VALID_IF(d->m_signature.ptr[d->m_signaturePosition++] == signatureFragment.ptr[i],
                      Error::TypeMismatchInSubsequentArrayIteration);
         }
@@ -2183,7 +2180,7 @@ void Arguments::Writer::finishInternal()
             d->m_argList.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
         } else {
             d->m_aggregateStack.clear();
-            for (int i = 0; i < d->m_variantSignatures.size(); i++) {
+            for (uint32 i = 0; i < d->m_variantSignatures.size(); i++) {
                 allocCaches.writerSignatures.free(d->m_variantSignatures[i].ptr);
             }
         }

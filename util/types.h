@@ -45,7 +45,7 @@ struct DFERRY_EXPORT chunk
     chunk(char *b, int l) : ptr(reinterpret_cast<byte *>(b)), length(l) {}
     chunk(const char *b, int l) : ptr(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
     byte *ptr;
-    int length;
+    uint32 length;
 };
 
 struct DFERRY_EXPORT cstring
@@ -58,7 +58,7 @@ struct DFERRY_EXPORT cstring
     char *ptr;
     // length does not include terminating null! (this is okay because cstring does not
     // own the memory, so the accounting usually doesn't get screwed up)
-    int length;
+    uint32 length;
 };
 
 

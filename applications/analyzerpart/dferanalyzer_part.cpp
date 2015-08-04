@@ -31,7 +31,7 @@
 K_PLUGIN_FACTORY(DferAnalyzerPartFactory, registerPlugin<DferAnalyzerPart>();)  // produce a factory
 K_EXPORT_PLUGIN(DferAnalyzerPartFactory("DferAnalyzer", "DferAnalyzer"))
 
-DferAnalyzerPart::DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &)
+DferAnalyzerPart::DferAnalyzerPart(QWidget * /* parentWidget */, QObject *parent, const QVariantList &)
    : KParts::ReadWritePart(parent)
 {
     KGlobal::locale()->insertCatalog("DferAnalyzer");

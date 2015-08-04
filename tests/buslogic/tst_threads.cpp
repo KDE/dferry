@@ -115,7 +115,8 @@ public:
 
         Arguments args = pong.arguments();
         Arguments::Reader reader(args);
-        cstring payload = reader.readString();
+        // cstring payload = reader.readString();
+        reader.readString();
         TEST(!reader.error().isError());
         TEST(reader.isFinished());
         // TEST(payload == pongPayload);

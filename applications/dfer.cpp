@@ -57,7 +57,7 @@ void ReplyPrinter::spontaneousMessageReceived(Message m)
     cout << '\n' << m.prettyPrint();
 }
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     EventDispatcher dispatcher;
     Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::System);
