@@ -473,7 +473,7 @@ chunk Arguments::data() const
 static void printMaybeNilProlog(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
                                 const char *typeName)
 {
-    *out << typeName << ": ";
+    *out << nestingPrefix << typeName << ": ";
     if (isNil) {
         *out << "<nil>\n";
     }
