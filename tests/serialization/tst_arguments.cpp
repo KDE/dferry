@@ -507,7 +507,7 @@ static void test_roundtrip()
         doRoundtrip(Arguments(nullptr, cstring("ty"), chunk(data, 9)));
     }
     {
-        LengthPrefixedData testArray = {0, 0};
+        LengthPrefixedData testArray = {0, {0}};
         for (int i = 0; i < 64; i++) {
             testArray.data[i] = i;
         }
