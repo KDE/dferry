@@ -404,43 +404,26 @@ Arguments::Arguments(Arguments &&other)
 
 Arguments &Arguments::operator=(Arguments &&other)
 {
-    if (this != &other) {
-        if (d) {
-            d->~Private();
-            allocCaches.argsPrivate.free(d);
-        }
-        d = other.d;
-        other.d = nullptr;
-    }
+    Arguments temp(std::move(other));
+    std::swap(d, temp.d);
     return *this;
 }
 
 Arguments::Arguments(const Arguments &other)
    : d(nullptr)
 {
-    *this = other;
+    if (other.d) {
+        d = new(allocCaches.argsPrivate.allocate()) Private(*other.d);
+    }
 }
 
 Arguments &Arguments::operator=(const Arguments &other)
 {
-    if (this == &other) {
-        return *this;
-    }
-    if (d) {
-        if (other.d) {
-            // normal case: two non-null pointers
-            *d = *other.d;
-        } else {
-            // other is a moved-from object
-            d->~Private();
-            allocCaches.argsPrivate.free(d);
-            d = nullptr;
-        }
+    if (d && other.d) {
+        *d = *other.d;
     } else {
-        // *this is a moved-from object
-        if (other.d) {
-            d = new(allocCaches.argsPrivate.allocate()) Private(*other.d);
-        }
+        Arguments temp(other);
+        std::swap(d, temp.d);
     }
     return *this;
 }
