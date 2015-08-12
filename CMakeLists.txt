@@ -87,6 +87,7 @@ set(DFER_PRIVATE_HEADERS
 set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
 add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
+target_compile_definitions(dfer PRIVATE -DBUILDING_LIBDFER)
 
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
 include_directories(${LIBTINYXML2_INCLUDE_DIRS})
@@ -104,6 +105,7 @@ set(DFERCLIENT_HEADERS
     client/introspection.cpp)
 
 add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
+target_compile_definitions(dferclient PRIVATE -DBUILDING_LIBDFERCLIENT)
 target_link_libraries(dferclient dfer ${LIBTINYXML2_LIBRARIES})
 
 install(TARGETS dfer dferclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})

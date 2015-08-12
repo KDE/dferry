@@ -21,4 +21,14 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifdef BUILDING_LIBDFER
+#define DFERRY_EXPORT __attribute__ ((visibility ("protected")))
+#else
 #define DFERRY_EXPORT __attribute__ ((visibility ("default")))
+#endif
+
+#ifdef BUILDING_LIBDFERCLIENT
+#define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("protected")))
+#else
+#define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("default")))
+#endif
