@@ -36,7 +36,7 @@
 #include <unordered_map>
 #include <vector>
 
-class Event;
+struct Event;
 class IioEventClient;
 class IEventPoller;
 class Message;
