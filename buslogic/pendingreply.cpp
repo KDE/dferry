@@ -172,6 +172,7 @@ Message PendingReply::takeReply()
 void PendingReplyPrivate::notifyCompletion(void *task)
 {
     assert(task == &m_replyTimeout);
+    (void) task;
     assert(!m_isFinished);
     // if a reply comes after the timout, it's too late and the reply is probably served as a spontaneous
     // message by Transceiver

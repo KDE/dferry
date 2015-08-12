@@ -134,7 +134,7 @@ void EpollEventPoller::setReadWriteInterest(IioEventClient *ioc, bool readEnable
         return;
     }
     struct epoll_event epevt;
-    epevt.events = (readEnabled ? EPOLLIN : 0) | (writeEnabled ? EPOLLOUT : 0);
+    epevt.events = (readEnabled ? uint32(EPOLLIN) : 0) | (writeEnabled ? uint32(EPOLLOUT) : 0);
     epevt.data.u64 = 0; // clear high bits in the union
     epevt.data.fd = fd;
     epoll_ctl(m_epollFd, EPOLL_CTL_MOD, fd, &epevt);

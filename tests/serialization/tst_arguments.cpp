@@ -65,7 +65,7 @@ static bool stringsEqual(cstring s1, cstring s2)
 }
 
 static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtArrayStart,
-                               int dataIncrement, bool debugPrint)
+                               uint32 dataIncrement, bool debugPrint)
 {
     Arguments::Reader reader(original);
     Arguments::Writer writer;
@@ -73,7 +73,7 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
     chunk data = original.data();
     chunk shortData;
     bool isDone = false;
-    int emptyNesting = 0;
+    uint32 emptyNesting = 0;
     bool isFirstEntry = false;
 
     while (!isDone) {
@@ -98,7 +98,7 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             }
             // clobber it to provoke errors that only valgrind might find otherwise
             for (uint32 i = 0; i < oldData.length; i++) {
-                oldData.ptr[i] = '\xff';
+                oldData.ptr[i] = 0xff;
             }
             if (oldData.ptr) {
                 free(oldData.ptr);
@@ -140,7 +140,7 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
         case Arguments::EndArray:
             reader.endArray();
             writer.endArray();
-            emptyNesting = std::max(emptyNesting - 1, 0);
+            emptyNesting = std::max(emptyNesting - 1, 0u);
             break;
         case Arguments::BeginDict: {
             isFirstEntry = true;
@@ -161,7 +161,7 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
         case Arguments::EndDict:
             reader.endDict();
             writer.endDict();
-            emptyNesting = std::max(emptyNesting - 1, 0);
+            emptyNesting = std::max(emptyNesting - 1, 0u);
             break;
         case Arguments::Byte:
             writer.writeByte(reader.readByte());
@@ -271,7 +271,7 @@ static void shallowAssign(Arguments *copy, const Arguments &original)
 }
 
 static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextEntryAtArrayStart,
-                                         int dataIncrement, bool debugPrint)
+                                         uint32 dataIncrement, bool debugPrint)
 {
     {
         // just pass through
@@ -326,8 +326,8 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextE
 
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
-    int maxIncrement = arg.data().length;
-    for (int i = 1; i <= maxIncrement; i++) {
+    uint32 maxIncrement = arg.data().length;
+    for (uint32 i = 1; i <= maxIncrement; i++) {
         doRoundtripWithCopyAssignEtc(arg, false, i, debugPrint);
         doRoundtripWithCopyAssignEtc(arg, true, i, debugPrint);
     }
@@ -507,7 +507,7 @@ static void test_roundtrip()
         doRoundtrip(Arguments(nullptr, cstring("ty"), chunk(data, 9)));
     }
     {
-        LengthPrefixedData testArray = {0};
+        LengthPrefixedData testArray = {0, 0};
         for (int i = 0; i < 64; i++) {
             testArray.data[i] = i;
         }
@@ -884,7 +884,7 @@ static void test_realMessage()
     doRoundtrip(arg);
 }
 
-static void writeValue(Arguments::Writer *writer, int typeIndex, const void *value)
+static void writeValue(Arguments::Writer *writer, uint32 typeIndex, const void *value)
 {
     switch (typeIndex) {
     case 0:
@@ -902,7 +902,7 @@ static void writeValue(Arguments::Writer *writer, int typeIndex, const void *val
     }
 }
 
-static bool checkValue(Arguments::Reader *reader, int typeIndex, const void *expected)
+static bool checkValue(Arguments::Reader *reader, uint32 typeIndex, const void *expected)
 {
     switch (typeIndex) {
     case 0:
@@ -969,7 +969,7 @@ void test_primitiveArray()
 
                 for (uint k = 0; k < arraySizesCount; k++) {
 
-                    static const uint64_t otherValue = ~0ll;
+                    static const uint64_t otherValue = ~0llu;
                     const uint32 arraySize = arraySizes[k];
                     const uint32 dataSize = arraySize << (typeInArray - 1);
                     TEST(dataSize <= testDataSize);
@@ -1063,7 +1063,7 @@ void test_primitiveArray()
 
 // TODO test empty dicts, too
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     test_stringValidation();
     test_nesting();

@@ -41,9 +41,9 @@ typedef unsigned long long int uint64;
 struct DFERRY_EXPORT chunk
 {
     chunk() : ptr(nullptr), length(0) {}
-    chunk(byte *b, int l) : ptr(b), length(l) {}
-    chunk(char *b, int l) : ptr(reinterpret_cast<byte *>(b)), length(l) {}
-    chunk(const char *b, int l) : ptr(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
+    chunk(byte *b, uint32 l) : ptr(b), length(l) {}
+    chunk(char *b, uint32 l) : ptr(reinterpret_cast<byte *>(b)), length(l) {}
+    chunk(const char *b, uint32 l) : ptr(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
     byte *ptr;
     uint32 length;
 };
@@ -51,9 +51,9 @@ struct DFERRY_EXPORT chunk
 struct DFERRY_EXPORT cstring
 {
     cstring() : ptr(nullptr), length(0) {}
-    cstring(byte *b, int l) : ptr(reinterpret_cast<char *>(b)), length(l) {}
-    cstring(char *b, int l) : ptr(b), length(l) {}
-    cstring(const char *b, int l) : ptr(const_cast<char *>(b)), length(l) {}
+    cstring(byte *b, uint32 l) : ptr(reinterpret_cast<char *>(b)), length(l) {}
+    cstring(char *b, uint32 l) : ptr(b), length(l) {}
+    cstring(const char *b, uint32 l) : ptr(const_cast<char *>(b)), length(l) {}
     cstring(const char *b);
     char *ptr;
     // length does not include terminating null! (this is okay because cstring does not

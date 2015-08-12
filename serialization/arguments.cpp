@@ -42,7 +42,7 @@ static const int s_specMaxArrayLength = 67108864; // 64 MiB
 // data length already in Arguments.
 static const int s_specMaxMessageLength = 134217728; // 128 MiB
 
-static byte alignmentLog2(uint alignment)
+static byte alignmentLog2(uint32 alignment)
 {
     static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
     assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
@@ -58,16 +58,16 @@ struct Nesting
     static const int totalMax = 64;
 
     bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
-    void endArray() { array--; assert(array >= 0); }
+    void endArray() { assert(array >= 1); array--; }
     bool beginParen() { paren++; return likely(paren <= parenMax && total() <= totalMax); }
-    void endParen() { paren--; assert(paren >= 0); }
+    void endParen() { assert(paren >= 1); paren--; }
     bool beginVariant() { variant++; return likely(total() <= totalMax); }
-    void endVariant() { variant--; assert(variant >= 0); }
-    int total() { return array + paren + variant; }
+    void endVariant() { assert(variant >= 1); variant--; }
+    uint32 total() { return array + paren + variant; }
 
-    int array;
-    int paren;
-    int variant;
+    uint32 array;
+    uint32 paren;
+    uint32 variant;
 };
 
 struct NestingWithParenCounter : public Nesting
@@ -77,7 +77,7 @@ struct NestingWithParenCounter : public Nesting
     // theoretically it's unnecessary to check the return value: when it is false, the Arguments is
     // already invalid so we could abandon all correctness.
     bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
-    int parenCount;
+    uint32 parenCount;
 };
 
 class Arguments::Private
@@ -105,7 +105,7 @@ class Arguments::Reader::Private
 public:
     Private()
        : m_argList(nullptr),
-         m_signaturePosition(-1),
+         m_signaturePosition(uint32(-1)),
          m_dataPosition(0),
          m_nilArrayNesting(0)
     {}
@@ -180,9 +180,9 @@ public:
         m_dataCapacity = newCapacity;
     }
 
-    int m_dataElementsCountBeforeNilArray;
-    int m_variantSignaturesCountBeforeNilArray;
-    int m_dataPositionBeforeNilArray;
+    uint32 m_dataElementsCountBeforeNilArray;
+    uint32 m_variantSignaturesCountBeforeNilArray;
+    uint32 m_dataPositionBeforeNilArray;
 
     Arguments m_argList;
     NestingWithParenCounter m_nesting;
@@ -303,8 +303,8 @@ void Arguments::Private::initFrom(const Private &other)
     m_signature.length = other.m_signature.length;
     m_data.length = other.m_data.length;
 
-    const int alignedSigLength = other.m_signature.length ? align(other.m_signature.length + 1, 8) : 0;
-    const int fullLength = alignedSigLength + other.m_data.length;
+    const uint32 alignedSigLength = other.m_signature.length ? align(other.m_signature.length + 1, 8) : 0;
+    const uint32 fullLength = alignedSigLength + other.m_data.length;
 
     if (fullLength != 0) {
         // deep copy if there is any data
@@ -312,7 +312,7 @@ void Arguments::Private::initFrom(const Private &other)
 
         m_signature.ptr = reinterpret_cast<char *>(m_memOwnership);
         memcpy(m_signature.ptr, other.m_signature.ptr, other.m_signature.length);
-        int bufferPos = other.m_signature.length;
+        uint32 bufferPos = other.m_signature.length;
         zeroPad(reinterpret_cast<byte *>(m_signature.ptr), 8, &bufferPos);
         assert(bufferPos == alignedSigLength);
 
@@ -660,9 +660,9 @@ bool Arguments::isStringValid(cstring string)
     return strlen(string.ptr) == string.length;
 }
 
-static inline bool isObjectNameLetter(byte b)
+static inline bool isObjectNameLetter(char c)
 {
-    return likely((b >= 'a' && b <= 'z') || b == '_' || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9'));
+    return likely((c >= 'a' && c <= 'z') || c == '_' || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'));
 }
 
 // static
@@ -671,7 +671,7 @@ bool Arguments::isObjectPathValid(cstring path)
     if (!path.ptr || path.length + 1 >= s_specMaxArrayLength || path.ptr[path.length] != 0) {
         return false;
     }
-    byte prevLetter = path.ptr[0];
+    char prevLetter = path.ptr[0];
     if (prevLetter != '/') {
         return false;
     }
@@ -679,7 +679,7 @@ bool Arguments::isObjectPathValid(cstring path)
         return true; // "/" special case
     }
     for (uint32 i = 1; i < path.length; i++) {
-        byte currentLetter = path.ptr[i];
+        char currentLetter = path.ptr[i];
         if (prevLetter == '/') {
             if (!isObjectNameLetter(currentLetter)) {
                 return false;
@@ -712,7 +712,7 @@ static bool parseBasicType(cstring *s)
 {
     // ### not checking if zero-terminated
     assert(s->ptr);
-    if (s->length < 0) {
+    if (s->length == 0) {
         return false;
     }
     switch (*s->ptr) {
@@ -924,13 +924,12 @@ void Arguments::Reader::replaceData(chunk data)
     // fix up variant signature addresses occurring on the aggregate stack pointing into m_data;
     // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
     bool isOriginalSignature = true;
-    const int size = d->m_aggregateStack.size();
-    for (int i = 0; i < size; i++) {
-        if (d->m_aggregateStack[i].aggregateType == BeginVariant) {
+    for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
+        if (aggregate.aggregateType == BeginVariant) {
             if (isOriginalSignature) {
                 isOriginalSignature = false;
             } else {
-                d->m_aggregateStack[i].var.prevSignature.ptr += offset;
+                aggregate.var.prevSignature.ptr += offset;
             }
         }
     }
@@ -953,7 +952,7 @@ struct TypeInfo
     bool isString : 1;
 };
 
-static const TypeInfo &typeInfo(byte letterCode)
+static const TypeInfo &typeInfo(char letterCode)
 {
     assert(letterCode >= '(');
     static const TypeInfo low[2] = {
@@ -1062,7 +1061,7 @@ void Arguments::Reader::doReadPrimitiveType()
     }
 }
 
-void Arguments::Reader::doReadString(int lengthPrefixSize)
+void Arguments::Reader::doReadString(uint32 lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
@@ -1107,12 +1106,12 @@ void Arguments::Reader::advanceState()
     // the spec: an array (one) containing dict entries (two)
     // assert(d->m_nesting.total() == d->m_aggregateStack.size());
     assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
-    assert(d->m_signaturePosition < d->m_signature.length);
 
-    const int savedSignaturePosition = d->m_signaturePosition;
-    const int savedDataPosition = d->m_dataPosition;
+    const uint32 savedSignaturePosition = d->m_signaturePosition;
+    const uint32 savedDataPosition = d->m_dataPosition;
 
     d->m_signaturePosition++;
+    assert(d->m_signaturePosition <= d->m_signature.length);
 
     // check if we are about to close any aggregate or even the whole argument list
     if (d->m_aggregateStack.empty()) {
@@ -1165,7 +1164,7 @@ void Arguments::Reader::advanceState()
     // if we're in a nil array, we are iterating only over the types without reading any data
 
     if (likely(!d->m_nilArrayNesting)) {
-        int padStart = d->m_dataPosition;
+        uint32 padStart = d->m_dataPosition;
         d->m_dataPosition = align(d->m_dataPosition, ty.alignment);
         if (unlikely(d->m_dataPosition > d->m_data.length)) {
             goto out_needMoreData;
@@ -1240,7 +1239,7 @@ void Arguments::Reader::advanceState()
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
         d->m_aggregateStack.push_back(aggregateInfo);
         d->m_signature = signature;
-        d->m_signaturePosition = -1; // because we increment d->m_signaturePosition before reading a char
+        d->m_signaturePosition = uint32(-1); // we increment d->m_signaturePosition before reading a char
         break; }
 
     case BeginArray: {
@@ -1265,7 +1264,7 @@ void Arguments::Reader::advanceState()
 
         // no alignment of d->m_dataPosition if the array is nil
         if (likely(arrayLength)) {
-            const int padStart = d->m_dataPosition;
+            const uint32 padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
             arrayInfo.dataEnd = d->m_dataPosition + arrayLength;
@@ -1421,8 +1420,8 @@ void Arguments::Reader::endArray()
 static bool isAligned(uint32 value, uint32 alignment)
 {
     assert(alignment <= 8); // so zeroBits <= 3
-    const uint zeroBits = alignmentLog2(alignment);
-    return (value & (0x7 >> (3 - zeroBits))) == 0;
+    const uint32 zeroBits = alignmentLog2(alignment);
+    return (value & (0x7u >> (3 - zeroBits))) == 0;
 }
 
 std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
@@ -1515,10 +1514,9 @@ void Arguments::Reader::endVariant()
 
 std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
 {
-    const int count = d->m_aggregateStack.size();
     std::vector<IoState> ret;
-    for (int i = 0; i < count; i++) {
-        ret.push_back(d->m_aggregateStack[i].aggregateType);
+    for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
+        ret.push_back(aggregate.aggregateType);
     }
     return ret;
 }
@@ -1634,7 +1632,7 @@ void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
     d->m_elements.push_back(Private::ElementInfo(alignAndSize, alignAndSize));
 }
 
-void Arguments::Writer::doWriteString(int lengthPrefixSize)
+void Arguments::Writer::doWriteString(uint32 lengthPrefixSize)
 {
     if (m_state == String) {
         VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length)),
@@ -1668,7 +1666,7 @@ void Arguments::Writer::doWriteString(int lengthPrefixSize)
     }
 }
 
-void Arguments::Writer::advanceState(chunk signatureFragment, IoState newState)
+void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState)
 {
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
@@ -1911,9 +1909,9 @@ void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
         }
     }
     if (isDict) {
-        advanceState(chunk("a{", strlen("a{")), BeginDict);
+        advanceState(cstring("a{", strlen("a{")), BeginDict);
     } else {
-        advanceState(chunk("a", strlen("a")), BeginArray);
+        advanceState(cstring("a", strlen("a")), BeginArray);
     }
 }
 
@@ -1960,7 +1958,7 @@ void Arguments::Writer::nextArrayEntry()
 
 void Arguments::Writer::endArray()
 {
-    advanceState(chunk(), EndArray);
+    advanceState(cstring(), EndArray);
 }
 
 void Arguments::Writer::beginDict(ArrayOption option)
@@ -1975,27 +1973,27 @@ void Arguments::Writer::nextDictEntry()
 
 void Arguments::Writer::endDict()
 {
-    advanceState(chunk("}", strlen("}")), EndDict);
+    advanceState(cstring("}", strlen("}")), EndDict);
 }
 
 void Arguments::Writer::beginStruct()
 {
-    advanceState(chunk("(", strlen("(")), BeginStruct);
+    advanceState(cstring("(", strlen("(")), BeginStruct);
 }
 
 void Arguments::Writer::endStruct()
 {
-    advanceState(chunk(")", strlen(")")), EndStruct);
+    advanceState(cstring(")", strlen(")")), EndStruct);
 }
 
 void Arguments::Writer::beginVariant()
 {
-    advanceState(chunk("v", strlen("v")), BeginVariant);
+    advanceState(cstring("v", strlen("v")), BeginVariant);
 }
 
 void Arguments::Writer::endVariant()
 {
-    advanceState(chunk(), EndVariant);
+    advanceState(cstring(), EndVariant);
 }
 
 void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
@@ -2016,7 +2014,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 
     // dummy write to write the signature...
     m_u.Uint64 = 0;
-    advanceState(chunk(&letterCode, /*length*/ 1), elementType.state());
+    advanceState(cstring(&letterCode, /*length*/ 1), elementType.state());
 
     if (!data.length) {
         // oh! a nil array.
@@ -2093,7 +2091,7 @@ void Arguments::Writer::finishInternal()
 
     bool success = true;
     const uint32 count = d->m_elements.size();
-    const int dataSize = d->m_dataPosition;
+    const uint32 dataSize = d->m_dataPosition;
     d->m_dataPosition = 0;
     if (count) {
         // Note: if one of signature or data is nonempty, the other must also be nonempty. think about it.
@@ -2105,14 +2103,14 @@ void Arguments::Writer::finishInternal()
         // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
         // each (when they contain a byte).
         // Those estimates are very conservative (but easy!), so some space optimization is possible.
-        const int alignedSigLength = align(d->m_signature.length + 1, 8);
-        const int bufferSize = alignedSigLength +
-                               dataSize * 2 + d->m_nesting.parenCount * 7;
-        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(int(Private::InitialDataCapacity), bufferSize)));
+        const uint32 alignedSigLength = align(d->m_signature.length + 1, 8);
+        const uint32 bufferSize = alignedSigLength +
+                                  dataSize * 2 + d->m_nesting.parenCount * 7;
+        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(uint32(Private::InitialDataCapacity), bufferSize)));
         memcpy(buffer, d->m_signature.ptr, d->m_signature.length + 1);
-        int bufferPos = d->m_signature.length + 1;
+        uint32 bufferPos = d->m_signature.length + 1;
         zeroPad(buffer, 8, &bufferPos);
-        int variantSignatureIndex = 0;
+        uint32 variantSignatureIndex = 0;
 
         std::vector<ArrayLengthField> lengthFieldStack;
 
@@ -2144,7 +2142,7 @@ void Arguments::Writer::finishInternal()
                 } else if (ei.size == Private::ElementInfo::ArrayLengthEndMark) {
                     // end of an array - just put the now known array length in front of the array
                     al = lengthFieldStack.back();
-                    const int arrayLength = bufferPos - al.dataStartPosition;
+                    const uint32 arrayLength = bufferPos - al.dataStartPosition;
                     if (arrayLength > s_specMaxArrayLength) {
                         d->m_error.setCode(Error::ArrayOrDictTooLong);
                         success = false;
@@ -2202,10 +2200,9 @@ void Arguments::Writer::finishInternal()
 
 std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
 {
-    const int count = d->m_aggregateStack.size();
     std::vector<IoState> ret;
-    for (int i = 0; i < count; i++) {
-        ret.push_back(d->m_aggregateStack[i].aggregateType);
+    for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
+        ret.push_back(aggregate.aggregateType);
     }
     return ret;
 }
@@ -2213,80 +2210,80 @@ std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
 void Arguments::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;
-    advanceState(chunk("b", strlen("b")), Boolean);
+    advanceState(cstring("b", strlen("b")), Boolean);
 }
 
 void Arguments::Writer::writeByte(byte b)
 {
     m_u.Byte = b;
-    advanceState(chunk("y", strlen("y")), Byte);
+    advanceState(cstring("y", strlen("y")), Byte);
 }
 
 void Arguments::Writer::writeInt16(int16 i)
 {
     m_u.Int16 = i;
-    advanceState(chunk("n", strlen("n")), Int16);
+    advanceState(cstring("n", strlen("n")), Int16);
 }
 
 void Arguments::Writer::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
-    advanceState(chunk("q", strlen("q")), Uint16);
+    advanceState(cstring("q", strlen("q")), Uint16);
 }
 
 void Arguments::Writer::writeInt32(int32 i)
 {
     m_u.Int32 = i;
-    advanceState(chunk("i", strlen("i")), Int32);
+    advanceState(cstring("i", strlen("i")), Int32);
 }
 
 void Arguments::Writer::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
-    advanceState(chunk("u", strlen("u")), Uint32);
+    advanceState(cstring("u", strlen("u")), Uint32);
 }
 
 void Arguments::Writer::writeInt64(int64 i)
 {
     m_u.Int64 = i;
-    advanceState(chunk("x", strlen("x")), Int64);
+    advanceState(cstring("x", strlen("x")), Int64);
 }
 
 void Arguments::Writer::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
-    advanceState(chunk("t", strlen("t")), Uint64);
+    advanceState(cstring("t", strlen("t")), Uint64);
 }
 
 void Arguments::Writer::writeDouble(double d)
 {
     m_u.Double = d;
-    advanceState(chunk("d", strlen("d")), Double);
+    advanceState(cstring("d", strlen("d")), Double);
 }
 
 void Arguments::Writer::writeString(cstring string)
 {
     m_u.String.ptr = string.ptr;
     m_u.String.length = string.length;
-    advanceState(chunk("s", strlen("s")), String);
+    advanceState(cstring("s", strlen("s")), String);
 }
 
 void Arguments::Writer::writeObjectPath(cstring objectPath)
 {
     m_u.String.ptr = objectPath.ptr;
     m_u.String.length = objectPath.length;
-    advanceState(chunk("o", strlen("o")), ObjectPath);
+    advanceState(cstring("o", strlen("o")), ObjectPath);
 }
 
 void Arguments::Writer::writeSignature(cstring signature)
 {
     m_u.String.ptr = signature.ptr;
     m_u.String.length = signature.length;
-    advanceState(chunk("g", strlen("g")), Signature);
+    advanceState(cstring("g", strlen("g")), Signature);
 }
 
 void Arguments::Writer::writeUnixFd(uint32 fd)
 {
     m_u.Uint32 = fd;
-    advanceState(chunk("h", strlen("h")), UnixFd);
+    advanceState(cstring("h", strlen("h")), UnixFd);
 }

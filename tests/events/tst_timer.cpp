@@ -150,7 +150,7 @@ public:
         m_ttl.setCompletionClient(this);
         m_ttl.setRunning(true);
     }
-    void notifyCompletion(void *task) override
+    void notifyCompletion(void * /*task*/) override
     {
         m_ttl.eventDispatcher()->interrupt();
         m_ttl.setRunning(false);
@@ -195,7 +195,7 @@ static void testAddInTrigger()
         int dispatchCounter = 0;
         int t2Counter = 0;
 
-        CompletionFunc iterChecker([&dispatchCounter, &t2Counter] (void *task)
+        CompletionFunc iterChecker([&dispatchCounter, &t2Counter] (void * /*task*/)
         {
             TEST(dispatchCounter > 0);
             t2Counter++;
@@ -203,7 +203,7 @@ static void testAddInTrigger()
 
         Timer t1(&dispatcher);
         Timer *t2 = nullptr;
-        CompletionFunc adder([&dispatcher, &t2, &iterChecker] (void *task)
+        CompletionFunc adder([&dispatcher, &t2, &iterChecker] (void * /*task*/)
         {
             if (!t2) {
                 t2 = new Timer(&dispatcher);
@@ -261,7 +261,7 @@ static void testTriggerOnlyOncePerDispatch()
     t3.setCompletionClient(&noWorkCounter);
 
 
-    CompletionFunc hardWorker([&hardWorkCounter, &dispatchCounter] (void *task)
+    CompletionFunc hardWorker([&hardWorkCounter, &dispatchCounter] (void * /*task*/)
     {
         TEST(hardWorkCounter == dispatchCounter);
         uint64 startTime = PlatformTime::monotonicMsecs();
@@ -323,7 +323,7 @@ static void testReEnableNonRepeatingInTrigger()
 
     // also make sure that setRepeating(false) has any effect at all...
     int noRepeatCounter = 0;
-    CompletionFunc noRepeatCheck([&noRepeatCounter] (void *task) {
+    CompletionFunc noRepeatCheck([&noRepeatCounter] (void * /*task*/) {
         noRepeatCounter++;
     });
     Timer noRepeat(&dispatcher);
@@ -343,7 +343,7 @@ static void testReEnableNonRepeatingInTrigger()
     TEST(fastCounter >= 200); // ### hopefully low enough even for really slow machines and / or valgrind
 }
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     testBasic();
     testAccuracy();

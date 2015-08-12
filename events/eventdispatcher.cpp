@@ -186,7 +186,7 @@ void EventDispatcherPrivate::addTimer(Timer *timer)
         timer->m_tag = nextTimerSerial();
     }
 
-    uint64 dueTime = PlatformTime::monotonicMsecs() + timer->m_interval;
+    uint64 dueTime = PlatformTime::monotonicMsecs() + uint64(timer->m_interval);
 
     // ### When a timer is added from a timer callback, make sure it only runs in the *next*
     //     iteration of the event loop. Otherwise, endless cascades of timers triggering, adding
@@ -271,7 +271,8 @@ void EventDispatcherPrivate::triggerDueTimers()
                 // iterator position. It's also good for performance. Win-win!
                 ++it;
             } else {
-                timer->m_tag = ((m_triggerTime + timer->m_interval) << 10) + (timer->m_tag & s_maxTimerSerial);
+                timer->m_tag = ((m_triggerTime + uint64(timer->m_interval)) << 10) +
+                               (timer->m_tag & s_maxTimerSerial);
                 m_timers.erase(it++);
                 m_timers.emplace(timer->m_tag, timer);
             }

@@ -50,6 +50,7 @@ public:
     void pendingReplyFinished(PendingReply *pr) override
     {
         assert(pr == &m_helloReply);
+        (void) pr;
         m_parent->handleHelloReply();
     }
 
@@ -288,7 +289,7 @@ int Transceiver::defaultReplyTimeout() const
     return d->m_defaultTimeout;
 }
 
-int TransceiverPrivate::takeNextSerial()
+uint32 TransceiverPrivate::takeNextSerial()
 {
     SpinLocker locker(&m_lock);
     return m_sendSerial++;

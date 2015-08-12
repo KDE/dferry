@@ -48,7 +48,7 @@ static void addDoctypeDecl(tx2::XMLDocument *doc)
 static string readFile(const char *filename)
 {
     // Dear STL, you must be kidding...
-    ifstream ifs(TEST_DATADIR "/introspect1.xml");
+    ifstream ifs(filename);
     return string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 }
 
@@ -111,7 +111,7 @@ static void xmlizeMethod(tx2::XMLElement *el, const Method *method)
     }
 }
 
-static void xmlizeArgument(tx2::XMLElement *el, const Argument *arg, bool isSignal)
+static void xmlizeArgument(tx2::XMLElement *el, const Argument *arg, bool /* TODO! isSignal */)
 {
     tx2::XMLElement *argEl = addElement(el, "arg", arg->name);
     if (!arg->name.empty()) {
@@ -159,7 +159,7 @@ static void testBasicRoundtrip()
     std::cout << printer.CStr() << '\n';
 }
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     testBasicRoundtrip();
     std::cout << "Passed!\n";

@@ -222,7 +222,7 @@ static void testThreadedTimeout()
 // - ping-pong with several messages queued - every message should arrive exactly once and messages
 //   should arrive in sending order (can use serials for that as simplificitaion)
 
-int main(int argc, char *argv[])
+int main(int, char *[])
 {
     testPingPong();
     testThreadedTimeout();

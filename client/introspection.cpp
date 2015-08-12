@@ -19,7 +19,7 @@ static bool strequal(const char *c1, const char *c2)
 
 // This function exists to avoid making the many copies that a naive recursive implementation would make.
 // That it makes it possible to reserve() is just a nice extra.
-static void introspectionNodePathHelper(const IntrospectionNode *node, int length,  std::string *out)
+static void introspectionNodePathHelper(const IntrospectionNode *node, uint32 length, std::string *out)
 {
     if (node->parent) {
         introspectionNodePathHelper(node->parent, length + 1 + node->name.length(), out);

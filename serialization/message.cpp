@@ -119,7 +119,7 @@ VarHeaderStorage::~VarHeaderStorage()
 
 bool VarHeaderStorage::hasHeader(Message::VariableHeader header) const
 {
-    return m_headerPresenceBitmap & (1 << header);
+    return m_headerPresenceBitmap & (1u << header);
 }
 
 bool VarHeaderStorage::hasStringHeader(Message::VariableHeader header) const
@@ -146,7 +146,7 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
     if (hasHeader(header)) {
         stringHeaders()[idx] = value;
     } else {
-        m_headerPresenceBitmap |= 1 << header;
+        m_headerPresenceBitmap |= 1u << header;
         new(stringHeaders() + idx) string(value);
     }
 }
@@ -156,7 +156,7 @@ bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, cst
     if (hasHeader(header)) {
         return false;
     }
-    m_headerPresenceBitmap |= 1 << header;
+    m_headerPresenceBitmap |= 1u << header;
     new(stringHeaders() + indexOfHeader(header)) string(value.ptr, value.length);
     return true;
 }
@@ -166,7 +166,7 @@ void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
     if (!isStringHeader(header)) {
         return;
     }
-    m_headerPresenceBitmap &= ~(1 << header);
+    m_headerPresenceBitmap &= ~(1u << header);
     stringHeaders()[indexOfHeader(header)].~string();
 }
 
@@ -180,7 +180,7 @@ void VarHeaderStorage::setIntHeader(Message::VariableHeader header, uint32 value
     if (isStringHeader(header)) {
         return;
     }
-    m_headerPresenceBitmap |= 1 << header;
+    m_headerPresenceBitmap |= 1u << header;
     m_intHeaders[indexOfHeader(header)] = value;
 }
 
@@ -189,7 +189,7 @@ bool VarHeaderStorage::setIntHeader_deser(Message::VariableHeader header, uint32
     if (hasHeader(header)) {
         return false;
     }
-    m_headerPresenceBitmap |= 1 << header;
+    m_headerPresenceBitmap |= 1u << header;
     m_intHeaders[indexOfHeader(header)] = value;
     return true;
 }
@@ -199,7 +199,7 @@ void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
     if (isStringHeader(header)) {
         return;
     }
-    m_headerPresenceBitmap &= ~(1 << header);
+    m_headerPresenceBitmap &= ~(1u << header);
 }
 
 // TODO think of copying signature from and to output!
@@ -679,9 +679,9 @@ const Arguments &Message::arguments() const
     return d->m_mainArguments;
 }
 
-static const int s_properFixedHeaderLength = 12;
-static const int s_extendedFixedHeaderLength = 16;
-static const int s_maxMessageLength = 134217728;
+static const uint32 s_properFixedHeaderLength = 12;
+static const uint32 s_extendedFixedHeaderLength = 16;
+static const uint32 s_maxMessageLength = 134217728;
 
 // This does not return bool because full validation of the main arguments would take quite
 // a few cycles. Validating only the header of the message doesn't seem to be worth it.
@@ -726,7 +726,7 @@ void MessagePrivate::notifyConnectionReadyRead()
     bool isError = false;
     chunk in;
     do {
-        int readMax = 0;
+        uint32 readMax = 0;
         if (!m_headerLength) {
             // the message might only consist of the header, so we must be careful to avoid reading
             // data meant for the next message
@@ -814,7 +814,7 @@ void MessagePrivate::notifyConnectionReadyWrite()
     }
     while (true) {
         assert(m_buffer.length >= m_bufferPos);
-        const int toWrite = m_buffer.length - m_bufferPos;
+        const uint32 toWrite = m_buffer.length - m_bufferPos;
         if (!toWrite) {
             setWriteNotificationEnabled(false);
             m_state = Serialized;
@@ -824,7 +824,7 @@ void MessagePrivate::notifyConnectionReadyWrite()
             notifyCompletionClient();
             break;
         }
-        int written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+        uint32 written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         if (written <= 0) {
             // TODO error handling
             break;
@@ -908,7 +908,7 @@ bool MessagePrivate::deserializeFixedHeaders()
     // peek into the var-length header and use knowledge about array serialization to infer the
     // number of bytes still required for the header
     uint32 varArrayLength = basic::readUint32(p + 2 * sizeof(uint32), m_isByteSwapped);
-    int unpaddedHeaderLength = s_extendedFixedHeaderLength + varArrayLength;
+    uint32 unpaddedHeaderLength = s_extendedFixedHeaderLength + varArrayLength;
     m_headerLength = align(unpaddedHeaderLength, 8);
     m_headerPadding = m_headerLength - unpaddedHeaderLength;
 
@@ -1016,10 +1016,10 @@ bool MessagePrivate::serialize()
 
     assert(headerArgs.data().length > 0); // if this fails the headerLength hack will break down
 
-    const int unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
+    const uint32 unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
     m_headerLength = align(unalignedHeaderLength, 8);
     m_bodyLength = m_mainArguments.data().length;
-    const int messageLength = m_headerLength + m_bodyLength;
+    const uint32 messageLength = m_headerLength + m_bodyLength;
 
     if (messageLength > s_maxMessageLength) {
         return false;
@@ -1146,7 +1146,7 @@ void MessagePrivate::clearBuffer()
     }
 }
 
-static int nextPowerOf2(int x)
+static uint32 nextPowerOf2(uint32 x)
 {
     --x;
     x |= x >> 1;
@@ -1157,9 +1157,9 @@ static int nextPowerOf2(int x)
     return ++x;
 }
 
-void MessagePrivate::reserveBuffer(int newLen)
+void MessagePrivate::reserveBuffer(uint32 newLen)
 {
-    const int oldLen = m_buffer.length;
+    const uint32 oldLen = m_buffer.length;
     if (newLen <= oldLen) {
         return;
     }

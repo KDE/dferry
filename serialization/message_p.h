@@ -105,7 +105,7 @@ public:
     Arguments serializeVariableHeaders();
 
     void clearBuffer();
-    void reserveBuffer(int newSize);
+    void reserveBuffer(uint32 newSize);
 
     void notifyCompletionClient();
 

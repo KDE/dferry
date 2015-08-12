@@ -86,7 +86,7 @@ public:
     void handleHelloReply();
     void handleClientConnected();
 
-    int takeNextSerial();
+    uint32 takeNextSerial();
 
     Error prepareSend(Message *msg);
     void sendPreparedMessage(Message msg);
@@ -153,7 +153,7 @@ public:
 
     // here we break the grouping by topic area to group together the variables protected by m_lock
     // BEGIN variables protected by m_lock
-    int m_sendSerial; // TODO handle recycling of serials
+    uint32 m_sendSerial; // TODO handle recycling of serials
     // END variables protected by m_lock
 
     std::unordered_map<TransceiverPrivate *, CommutexPeer> m_secondaryThreadLinks;

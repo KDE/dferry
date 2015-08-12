@@ -233,7 +233,7 @@ public:
         friend class Private;
         void beginRead();
         void doReadPrimitiveType();
-        void doReadString(int lengthPrefixSize);
+        void doReadString(uint32 lengthPrefixSize);
         void advanceState();
         void advanceStateFrom(IoState expectedState);
         void beginArrayOrDict(bool isDict, EmptyArrayOption option);
@@ -315,8 +315,8 @@ public:
 
     private:
         void doWritePrimitiveType(uint32 alignAndSize);
-        void doWriteString(int lengthPrefixSize);
-        void advanceState(chunk signatureFragment, IoState newState);
+        void doWriteString(uint32 lengthPrefixSize);
+        void advanceState(cstring signatureFragment, IoState newState);
         void beginArrayOrDict(bool isDict, bool isEmpty);
         void nextArrayOrDictEntry(bool isDict);
         void finishInternal();

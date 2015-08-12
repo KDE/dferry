@@ -86,7 +86,7 @@ void LocalSocket::close()
     m_fd = -1;
 }
 
-int LocalSocket::write(chunk a)
+uint32 LocalSocket::write(chunk a)
 {
     if (m_fd < 0) {
         return 0; // TODO -1?
@@ -134,7 +134,7 @@ int LocalSocket::write(chunk a)
     }
 
     while (iov.iov_len > 0) {
-        int nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT);
+        ssize_t nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
@@ -148,22 +148,22 @@ int LocalSocket::write(chunk a)
         }
 
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
-        iov.iov_len -= nbytes;
+        iov.iov_len -= size_t(nbytes);
     }
 
     return a.length - iov.iov_len;
 }
 
-int LocalSocket::availableBytesForReading()
+uint32 LocalSocket::availableBytesForReading()
 {
-    int available = 0;
+    uint32 available = 0;
     if (ioctl(m_fd, FIONREAD, &available) < 0) {
         available = 0;
     }
     return available;
 }
 
-chunk LocalSocket::read(byte *buffer, int maxSize)
+chunk LocalSocket::read(byte *buffer, uint32 maxSize)
 {
     chunk ret;
     if (maxSize <= 0) {
@@ -192,7 +192,7 @@ chunk LocalSocket::read(byte *buffer, int maxSize)
     iov.iov_base = ret.ptr;
     iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
-        int nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
+        ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
@@ -209,9 +209,9 @@ chunk LocalSocket::read(byte *buffer, int maxSize)
             close();
             return ret;
         }
-        ret.length += nbytes;
+        ret.length += size_t(nbytes);
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
-        iov.iov_len -= nbytes;
+        iov.iov_len -= size_t(nbytes);
     }
 
     // done reading "regular data", now read any file descriptors passed via control messages

@@ -214,7 +214,7 @@ void EavesdropperModel::addMessage(Message *message, qint64 timestamp)
 QVariant EavesdropperModel::data(const QModelIndex &index, int role) const
 {
     if (role == Qt::DisplayRole) {
-        Q_ASSERT(index.row() < m_messages.size());
+        Q_ASSERT(size_t(index.row()) < m_messages.size());
         const MessageRecord &mr = m_messages[index.row()];
         switch (index.column()) {
         case TypeColumn:

@@ -90,7 +90,7 @@ bool AuthNegotiator::readLine()
         byte readBuf[1];
         chunk in = connection()->read(readBuf, 1);
         assert(in.length == 1);
-        m_line += in.ptr[0];
+        m_line += char(in.ptr[0]);
 
         if (isEndOfLine()) {
             return true;

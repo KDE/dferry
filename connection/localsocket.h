@@ -43,9 +43,9 @@ public:
     ~LocalSocket();
 
     // pure virtuals from IConnection
-    int write(chunk data) override;
-    int availableBytesForReading() override;
-    chunk read(byte *buffer, int maxSize) override;
+    uint32 write(chunk data) override;
+    uint32 availableBytesForReading() override;
+    chunk read(byte *buffer, uint32 maxSize) override;
     void close() override;
     bool isOpen() override;
     int fileDescriptor() const override;

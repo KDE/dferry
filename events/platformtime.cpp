@@ -35,7 +35,7 @@ uint64 monotonicMsecs()
     // performance note: at least on Linux AMD64, clock_gettime(CLOCK_MONOTONIC) does not (usually?)
     // make a syscall, so it's surprisingly cheap; presumably it uses some built-in CPU timer feature
     clock_gettime(CLOCK_MONOTONIC, &tspec);
-    return uint64(tspec.tv_sec) * 1000 + tspec.tv_nsec / 1000000;
+    return uint64(tspec.tv_sec) * 1000 + uint64(tspec.tv_nsec) / 1000000;
 }
 
 }

@@ -47,9 +47,9 @@ public:
     void addClient(IConnectionClient *client);
     void removeClient(IConnectionClient *client);
 
-    virtual int availableBytesForReading() = 0;
-    virtual chunk read(byte *buffer, int maxSize) = 0;
-    virtual int write(chunk data) = 0;
+    virtual uint32 availableBytesForReading() = 0;
+    virtual chunk read(byte *buffer, uint32 maxSize) = 0;
+    virtual uint32 write(chunk data) = 0;
     virtual void close() = 0;
 
     virtual bool isOpen() = 0;

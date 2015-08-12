@@ -26,9 +26,9 @@
 
 #include "types.h"
 
-static inline int align(uint32 index, uint32 alignment)
+static inline uint32 align(uint32 index, uint32 alignment)
 {
-    const int maxStepUp = alignment - 1;
+    const uint32 maxStepUp = alignment - 1;
     return (index + maxStepUp) & ~maxStepUp;
 }
 
@@ -43,10 +43,10 @@ static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 pa
     return true;
 }
 
-static inline void zeroPad(byte *buffer, uint32 alignment, int *bufferPos)
+static inline void zeroPad(byte *buffer, uint32 alignment, uint32 *bufferPos)
 {
-    int i = *bufferPos;
-    const int padEnd = align(i, alignment);
+    uint32 i = *bufferPos;
+    const uint32 padEnd = align(i, alignment);
     for (; i < padEnd; i++) {
         buffer[i] = '\0';
     }
