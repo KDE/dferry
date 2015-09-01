@@ -87,6 +87,7 @@ set(DFER_PRIVATE_HEADERS
 set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
 add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
+target_include_directories(dfer INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
 target_compile_definitions(dfer PRIVATE -DBUILDING_LIBDFER)
 
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
@@ -105,12 +106,22 @@ set(DFERCLIENT_HEADERS
     client/introspection.cpp)
 
 add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
+target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
 target_compile_definitions(dferclient PRIVATE -DBUILDING_LIBDFERCLIENT)
-target_link_libraries(dferclient dfer ${LIBTINYXML2_LIBRARIES})
+target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
 
-install(TARGETS dfer dferclient LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
-install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/dferry)
+install(TARGETS dfer dferclient EXPORT dferryExports LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
+install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION include/dferry)
 
 enable_testing() # need this here to get the "test" target in the toplevel build dir
 add_subdirectory(tests)
 add_subdirectory(applications)
+
+set(configModuleLocation "lib/cmake/dferry")
+
+install(EXPORT dferryExports DESTINATION "${configModuleLocation}" FILE dferryTargets.cmake)
+
+file(WRITE ${PROJECT_BINARY_DIR}/dferryConfig.cmake
+     "include(\"\${CMAKE_CURRENT_LIST_DIR}/dferryTargets.cmake\")")
+install(FILES "${PROJECT_BINARY_DIR}/dferryConfig.cmake"
+        DESTINATION "${configModuleLocation}")
