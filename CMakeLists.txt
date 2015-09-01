@@ -110,7 +110,7 @@ target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dfe
 target_compile_definitions(dferclient PRIVATE -DBUILDING_LIBDFERCLIENT)
 target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
 
-install(TARGETS dfer dferclient EXPORT dferryExports LIBRARY DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
+install(TARGETS dfer dferclient EXPORT dferryExports LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION include/dferry)
 
 enable_testing() # need this here to get the "test" target in the toplevel build dir
