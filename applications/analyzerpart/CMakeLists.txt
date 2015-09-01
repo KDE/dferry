@@ -13,5 +13,5 @@ kde4_add_ui_files(dferanalyzerpart_SOURCES mainwidget.ui)
 kde4_add_plugin(dferanalyzerpart ${dferanalyzerpart_SOURCES})
 target_link_libraries(dferanalyzerpart ${KDE4_KPARTS_LIBS} dfer)
 
-install(TARGETS dferanalyzerpart LIBRARY DESTINATION ${PLUGIN_INSTALL_DIR})
+install(TARGETS dferanalyzerpart DESTINATION ${PLUGIN_INSTALL_DIR})
 install(FILES dferanalyzer_part.desktop DESTINATION ${SERVICES_INSTALL_DIR})
