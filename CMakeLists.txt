@@ -1,11 +1,11 @@
 project(dferry)
 
-cmake_minimum_required(VERSION 2.6.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.1.0 FATAL_ERROR)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Werror -Wno-error=unused-result")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
-add_definitions(-std=c++11)
+set(CMAKE_CXX_STANDARD 11)
 
 include(TestBigEndian)
 if(${BIGENDIAN})
