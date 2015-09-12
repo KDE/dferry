@@ -60,7 +60,7 @@ void ReplyPrinter::spontaneousMessageReceived(Message m)
 int main(int, char *[])
 {
     EventDispatcher dispatcher;
-    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::System);
+    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::System); // ## TODO: command-line option for Session here
     ReplyPrinter receiver;
     transceiver.setSpontaneousMessageReceiver(&receiver);
     {
