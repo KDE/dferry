@@ -32,7 +32,6 @@
 class ConnectionInfo;
 class Error;
 class EventDispatcher;
-class IConnection;
 class IMessageReceiver;
 class Message;
 class PendingReply;
@@ -83,10 +82,9 @@ public:
     Error sendNoReply(Message m);
 
     ConnectionInfo connectionInfo() const;
-
     std::string uniqueName() const;
+    bool isConnected() const;
 
-    IConnection *connection() const; // probably only needed for debugging
     EventDispatcher *eventDispatcher() const;
 
     // TODO matching patterns for subscription; note that a signal requires path, interface and

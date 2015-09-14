@@ -412,9 +412,9 @@ std::string Transceiver::uniqueName() const
     return d->m_uniqueName;
 }
 
-IConnection *Transceiver::connection() const
+bool Transceiver::isConnected() const
 {
-    return d->m_connection;
+    return d->m_connection && d->m_connection->isOpen();
 }
 
 EventDispatcher *Transceiver::eventDispatcher() const
