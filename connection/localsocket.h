@@ -26,11 +26,9 @@
 
 #include "iconnection.h"
 
-#include <map>
 #include <string>
 
 class IConnectionListener;
-struct SessionBusInfo;
 
 class LocalSocket : public IConnection
 {
@@ -52,13 +50,13 @@ public:
     void notifyRead() override;
     // end IConnection
 
+    LocalSocket() = delete;
+    LocalSocket(const LocalSocket &) = delete;
+    LocalSocket &operator=(const LocalSocket &) = delete;
+
 private:
     friend class IEventLoop;
     friend class IConnectionListener;
-
-    LocalSocket(); // not implemented
-    LocalSocket(const LocalSocket &); // not implemented, disable copying
-    LocalSocket &operator=(const LocalSocket &); // dito
 
     int m_fd;
 };
