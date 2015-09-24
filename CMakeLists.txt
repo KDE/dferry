@@ -35,6 +35,8 @@ set(DFER_SOURCES
     connection/authnegotiator.cpp
     connection/iconnection.cpp
     connection/iconnectionclient.cpp
+    connection/ipserver.cpp
+    connection/ipsocket.cpp
     connection/iserver.cpp
     connection/localserver.cpp
     connection/localsocket.cpp
@@ -74,6 +76,8 @@ set(DFER_PRIVATE_HEADERS
     connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
+    connection/ipserver.h
+    connection/ipsocket.h
     connection/iserver.h
     connection/localserver.h
     connection/localsocket.h

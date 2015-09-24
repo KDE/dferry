@@ -26,6 +26,7 @@
 #include "connectioninfo.h"
 #include "eventdispatcher_p.h"
 #include "iconnection.h"
+#include "ipserver.h"
 #include "localserver.h"
 
 #include <string>
@@ -55,6 +56,8 @@ IServer *IServer::create(const ConnectionInfo &ci)
         return new LocalServer(ci.path());
     case ConnectionInfo::SocketType::AbstractUnix:
         return new LocalServer(std::string(1, '\0') + ci.path());
+    case ConnectionInfo::SocketType::Ip:
+        return new IpServer(ci);
     default:
         return nullptr;
     }

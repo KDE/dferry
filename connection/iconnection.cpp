@@ -26,6 +26,7 @@
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
 #include "iconnectionclient.h"
+#include "ipsocket.h"
 #include "localsocket.h"
 #include "connectioninfo.h"
 
@@ -148,6 +149,8 @@ IConnection *IConnection::create(const ConnectionInfo &ci)
         return new LocalSocket(ci.path());
     case ConnectionInfo::SocketType::AbstractUnix:
         return new LocalSocket(string(1, '\0') + ci.path());
+    case ConnectionInfo::SocketType::Ip:
+        return new IpSocket(ci);
     default:
         assert(false);
         return nullptr;

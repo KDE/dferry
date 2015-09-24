@@ -58,14 +58,9 @@ public:
 };
 
 // used during implementation, is supposed to not crash and be valgrind-clean afterwards
-void testBasic()
+void testBasic(const ConnectionInfo &clientConnection)
 {
     EventDispatcher dispatcher;
-
-    ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
-    clientConnection.setSocketType(ConnectionInfo::SocketType::AbstractUnix);
-    clientConnection.setRole(ConnectionInfo::Role::Client);
-    clientConnection.setPath("dferry.Test.Message");
 
     ConnectionInfo serverConnection = clientConnection;
     serverConnection.setRole(ConnectionInfo::Role::Server);
@@ -96,7 +91,21 @@ void testBasic()
 
 int main(int, char *[])
 {
-    testBasic();
+    {
+        ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
+        clientConnection.setSocketType(ConnectionInfo::SocketType::AbstractUnix);
+        clientConnection.setRole(ConnectionInfo::Role::Client);
+        clientConnection.setPath("dferry.Test.Message");
+        testBasic(clientConnection);
+    }
+    {
+        ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
+        clientConnection.setSocketType(ConnectionInfo::SocketType::Ip);
+        clientConnection.setPort(6800);
+        clientConnection.setRole(ConnectionInfo::Role::Client);
+        testBasic(clientConnection);
+    }
+
     // TODO testSaveLoad();
     // TODO testDeepCopy();
     std::cout << "\nNote that the hammock error is part of the test.\nPassed!\n";

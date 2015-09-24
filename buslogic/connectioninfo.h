@@ -47,7 +47,7 @@ public:
         None = 0,
         Unix,
         AbstractUnix,
-        Tcp
+        Ip
     };
 
     enum class Role : unsigned char
