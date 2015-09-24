@@ -167,7 +167,7 @@ chunk IpSocket::read(byte *buffer, uint32 maxSize)
         return ret;
     }
 
-    const uint32 bufSize = maxSize;
+    ret.ptr = buffer;
 
     while (maxSize > 0) {
         ssize_t nbytes = recv(m_fd, reinterpret_cast<char *>(buffer), maxSize, 0);
