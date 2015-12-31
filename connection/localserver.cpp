@@ -31,6 +31,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cassert>
 #include <cstring>
 
 LocalServer::LocalServer(const std::string &socketFilePath)
@@ -82,6 +83,12 @@ void LocalServer::notifyRead()
     if (m_newConnectionClient) {
         m_newConnectionClient->notifyCompletion(this);
     }
+}
+
+void LocalServer::notifyWrite()
+{
+    // We never registered this to be called, so...
+    assert(false);
 }
 
 bool LocalServer::isListening() const

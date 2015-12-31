@@ -24,7 +24,14 @@
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
 
+#ifdef __linux__
 #include "epolleventpoller.h"
+#elif _WIN32
+#include "selecteventpoller_win32.h"
+#else
+#include "selecteventpoller_unix.h"
+#endif
+
 #include "event.h"
 #include "ieventpoller.h"
 #include "iioeventclient.h"
@@ -44,8 +51,12 @@ using namespace std;
 EventDispatcher::EventDispatcher()
    : d(new EventDispatcherPrivate)
 {
-    // TODO other backend on other platforms
+#ifdef __linux__
     d->m_poller = new EpollEventPoller(this);
+#else
+    // TODO high performance IO multiplexers for non-Linux platforms
+    d->m_poller = new SelectEventPoller(this);
+#endif
 }
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
@@ -55,7 +66,7 @@ EventDispatcherPrivate::~EventDispatcherPrivate()
     }
 
     for (const pair<uint64 /* due */, Timer*> &dt : m_timers) {
-        dt.second->m_eventDispatcher = 0;
+        dt.second->m_eventDispatcher = nullptr;
         dt.second->m_isRunning = false;
     }
 
@@ -65,7 +76,7 @@ EventDispatcherPrivate::~EventDispatcherPrivate()
 EventDispatcher::~EventDispatcher()
 {
     delete d;
-    d = 0;
+    d = nullptr;
 }
 
 bool EventDispatcher::poll(int timeout)
@@ -74,7 +85,7 @@ bool EventDispatcher::poll(int timeout)
     if (timeout < 0) {
         timeout = nextDue;
     } else if (nextDue >= 0) {
-        timeout = std::min(timeout, nextDue);
+        timeout = min(timeout, nextDue);
     }
 
 #ifdef EVENTDISPATCHER_DEBUG
@@ -128,28 +139,31 @@ void EventDispatcherPrivate::setReadWriteInterest(IioEventClient *ioc, bool read
 
 void EventDispatcherPrivate::notifyClientForReading(FileDescriptor fd)
 {
-    unordered_map<int, IioEventClient *>::iterator it = m_ioClients.find(fd);
+    unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
     if (it != m_ioClients.end()) {
         it->second->notifyRead();
     } else {
+
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its notifyRead() or notifyWrite() implementation
-        printf("EventDispatcher::notifyRead(): unhandled file descriptor %d.\n", fd);
+        std::cerr << "EventDispatcherPrivate::notifyClientForReading(): unhandled file descriptor "
+                  <<  fd << ".\n";
 #endif
     }
 }
 
 void EventDispatcherPrivate::notifyClientForWriting(FileDescriptor fd)
 {
-    unordered_map<int, IioEventClient *>::iterator it = m_ioClients.find(fd);
+    unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
     if (it != m_ioClients.end()) {
         it->second->notifyWrite();
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its notifyRead() or notifyWrite() implementation
-        printf("EventDispatcher::notifyWrite(): unhandled file descriptor %d.\n", fd);
+        std::cerr << "EventDispatcherPrivate::notifyClientForWriting(): unhandled file descriptor "
+                  <<  fd << ".\n";
 #endif
     }
 }

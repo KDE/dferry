@@ -30,25 +30,49 @@
 #include <cassert>
 #include <iostream>
 #include <sstream>
+
+#ifdef __unix__
 #include <sys/types.h>
 #include <unistd.h>
+#endif
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <sddl.h>
+#include "winutil.h"
+#endif
 
 using namespace std;
 
 AuthNegotiator::AuthNegotiator(IConnection *connection)
    : m_state(InitialState),
-     m_completionClient(0)
+     m_completionClient(nullptr)
 {
+    cerr << "AuthNegotiator constructing\n";
     connection->addClient(this);
     setReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
     connection->write(chunk(nullBuf, 1));
 
-    // no idea why the uid is first encoded to ascii and the ascii to hex...
-    uid_t uid = geteuid();
-    stringstream uidDecimal;
-    uidDecimal << uid;
-    string extLine = "AUTH EXTERNAL " + hexEncode(uidDecimal.str()) + "\r\n";
+    stringstream uidEncoded;
+#ifdef _WIN32
+    // Most common (or rather... actually used) authentication method on Windows:
+    // - Server publishes address of a nonce file; the file name is in a shared memory segment
+    // - Client reads nonce file
+    // - Client connects and sends the nonce data, TODO: before or after the null byte / is there a null byte?
+    // - Client uses EXTERNAL auth and says which Windows security ID (SID) it intends to have
+    uidEncoded << fetchWindowsSid();
+#else
+    // Most common (or rather... actually used) authentication method on Unix derivatives:
+    // - Client sends a null byte so the server has something to receive with recvmsg()
+    // - Server checks UID using SCM_CREDENTIALS, a mechanism of Unix local sockets
+    // - Client uses EXTERNAL auth and says which Unix user ID it intends to have
+
+    // The numeric UID is first encoded to ASCII ("1000") and the ASCII to hex... because.
+    uidEncoded << geteuid();
+#endif
+    string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
     cout << extLine;
     connection->write(chunk(extLine.c_str(), extLine.length()));
     m_state = ExpectOkState;
@@ -107,7 +131,8 @@ bool AuthNegotiator::isEndOfLine() const
 
 void AuthNegotiator::advanceState()
 {
-    // TODO authentication ping-pong
+    // TODO authentication ping-pong done *properly* (grammar / some simple state machine),
+    //      but hey, this works for now!
     // some findings:
     // - the string after the server OK is its UUID that also appears in the address string
 
@@ -116,12 +141,14 @@ void AuthNegotiator::advanceState()
     switch (m_state) {
     case ExpectOkState: {
         // TODO check the OK
+#ifdef __unix__
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
         cout << negotiateLine.ptr;
         connection()->write(chunk(negotiateLine.ptr, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
+#endif
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
         cout << beginLine.ptr;

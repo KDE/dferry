@@ -18,7 +18,7 @@ struct Event
         SpontaneousMessageReceived,
         PendingReplySuccess,
         PendingReplyFailure,
-        PendingReplyCancel,
+        PendingReplyCancel, // 5
         MainTransceiverDisconnect,
         SecondaryTransceiverConnect,
         SecondaryTransceiverDisconnect,

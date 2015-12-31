@@ -43,9 +43,10 @@ public:
     FileDescriptor fileDescriptor() const override;
 
     void notifyRead() override;
+    void notifyWrite() override;
 
 private:
-    int m_listenFd;
+    FileDescriptor m_listenFd;
 };
 
 #endif // IPSERVER_H

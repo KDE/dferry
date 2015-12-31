@@ -45,9 +45,13 @@ public:
     enum SocketType : unsigned char
     {
         None = 0,
+#ifdef __unix__
         Unix,
+#ifdef __linux__
         AbstractUnix,
-        Ip
+#endif
+#endif
+        Ip = 3
     };
 
     enum class Role : unsigned char

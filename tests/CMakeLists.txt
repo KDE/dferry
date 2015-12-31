@@ -7,6 +7,7 @@ set(TESTUTIL_HEADERS
     testutil.h)
 
 add_library(testutil SHARED ${TESTUTIL_SOURCES} ${TESTUTIL_HEADERS})
+target_compile_definitions(testutil PRIVATE -DBUILDING_TESTUTIL)
 
 add_subdirectory(buslogic)
 add_subdirectory(client)

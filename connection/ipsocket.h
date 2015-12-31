@@ -37,7 +37,7 @@ public:
     // Connect to local socket at socketFilePath
     IpSocket(const ConnectionInfo &ci);
     // Use an already open file descriptor
-    IpSocket(int fd);
+    IpSocket(FileDescriptor fd);
 
     ~IpSocket();
 
@@ -47,7 +47,7 @@ public:
     chunk read(byte *buffer, uint32 maxSize) override;
     void close() override;
     bool isOpen() override;
-    int fileDescriptor() const override;
+    FileDescriptor fileDescriptor() const override;
     void notifyRead() override;
     // end IConnection
 
@@ -59,7 +59,7 @@ private:
     friend class IEventLoop;
     friend class IConnectionListener;
 
-    int m_fd;
+    FileDescriptor m_fd;
 };
 
 #endif // IPSOCKET_H

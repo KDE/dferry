@@ -27,8 +27,11 @@
 #include "eventdispatcher_p.h"
 #include "iconnectionclient.h"
 #include "ipsocket.h"
-#include "localsocket.h"
 #include "connectioninfo.h"
+
+#ifdef __unix__
+#include "localsocket.h"
+#endif
 
 #include <algorithm>
 #include <cassert>
@@ -145,10 +148,12 @@ void IConnection::notifyWrite()
 IConnection *IConnection::create(const ConnectionInfo &ci)
 {
     switch (ci.socketType()) {
+#ifdef __unix__
         case ConnectionInfo::SocketType::Unix:
         return new LocalSocket(ci.path());
     case ConnectionInfo::SocketType::AbstractUnix:
         return new LocalSocket(string(1, '\0') + ci.path());
+#endif
     case ConnectionInfo::SocketType::Ip:
         return new IpSocket(ci);
     default:

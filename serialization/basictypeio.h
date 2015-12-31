@@ -26,6 +26,8 @@
 
 #include "types.h"
 
+#include <algorithm> // for std::min on Windows...
+
 static inline uint32 align(uint32 index, uint32 alignment)
 {
     const uint32 maxStepUp = alignment - 1;

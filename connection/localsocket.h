@@ -46,7 +46,7 @@ public:
     chunk read(byte *buffer, uint32 maxSize) override;
     void close() override;
     bool isOpen() override;
-    int fileDescriptor() const override;
+    FileDescriptor fileDescriptor() const override;
     void notifyRead() override;
     // end IConnection
 

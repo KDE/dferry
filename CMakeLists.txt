@@ -5,20 +5,33 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 if (CMAKE_COMPILER_IS_GNUCXX)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Werror -Wno-error=unused-result")
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
 endif()
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
 set(CMAKE_CXX_STANDARD 11)
 
+if (WIN32 AND CMAKE_SYSTEM_VERSION VERSION_LESS 6.0)
+    message(FATAL_ERROR "Windows Vista or later is required.")
+endif()
+
 include(TestBigEndian)
-if(${BIGENDIAN})
+if (BIGENDIAN)
     add_definitions(-DBIGENDIAN)
+endif()
+if (UNIX)
+    add_definitions(-D__unix__) # help for platforms that don't define this standard macro
 endif()
 
 option(DFERRY_BUILD_ANALYZER "Build the dfer-analyzer bus analyzer GUI" TRUE)
 
 include(GNUInstallDirs)
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+if (WIN32)
+    # Windows doesn't have an RPATH equivalent, so just make sure that all .dll and .exe files
+    # are located together, so that the .exes find the .dlls at runtime
+    set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+else()
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/client
@@ -38,10 +51,7 @@ set(DFER_SOURCES
     connection/ipserver.cpp
     connection/ipsocket.cpp
     connection/iserver.cpp
-    connection/localserver.cpp
-    connection/localsocket.cpp
     connection/stringtools.cpp
-    events/epolleventpoller.cpp
     events/event.cpp
     events/eventdispatcher.cpp
     events/ieventpoller.cpp
@@ -53,6 +63,11 @@ set(DFER_SOURCES
     util/error.cpp
     util/icompletionclient.cpp
     util/types.cpp)
+if (UNIX)
+    set(DFER_SOURCES ${DFER_SOURCES}
+        connection/localserver.cpp
+        connection/localsocket.cpp)
+endif()
 
 set(DFER_PUBLIC_HEADERS
     buslogic/connectioninfo.h
@@ -79,22 +94,39 @@ set(DFER_PRIVATE_HEADERS
     connection/ipserver.h
     connection/ipsocket.h
     connection/iserver.h
-    connection/localserver.h
-    connection/localsocket.h
     connection/platform.h
     connection/stringtools.h
     events/event.h
-    events/epolleventpoller.h
     events/ieventpoller.h
     events/iioeventclient.h
     events/platformtime.h
     serialization/basictypeio.h)
+if (UNIX)
+    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS}
+        connection/localserver.h
+        connection/localsocket.h)
+endif()
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(DFER_SOURCES ${DFER_SOURCES} events/epolleventpoller.cpp)
+    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/epolleventpoller.h)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/selecteventpoller_win32.h util/winutil.h)
+    set(DFER_SOURCES ${DFER_SOURCES} events/selecteventpoller_win32.cpp util/winutil.cpp)
+elseif(UNIX)
+    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/selecteventpoller_unix.h)
+    set(DFER_SOURCES ${DFER_SOURCES} events/selecteventpoller_unix.cpp)
+else()
+    message(FATAL_ERROR "This operating system is not supported.")
+endif()
 
 set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
 add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 target_include_directories(dfer INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
 target_compile_definitions(dfer PRIVATE -DBUILDING_LIBDFER)
+if (WIN32)
+    target_link_libraries(dfer PRIVATE ws2_32)
+endif()
 
 find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
 include_directories(${LIBTINYXML2_INCLUDE_DIRS})

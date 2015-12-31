@@ -91,6 +91,7 @@ void testBasic(const ConnectionInfo &clientConnection)
 
 int main(int, char *[])
 {
+#ifdef __linux__
     {
         ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
         clientConnection.setSocketType(ConnectionInfo::SocketType::AbstractUnix);
@@ -98,6 +99,8 @@ int main(int, char *[])
         clientConnection.setPath("dferry.Test.Message");
         testBasic(clientConnection);
     }
+#endif
+    // TODO: SocketType::Unix works on any Unix-compatible OS, but we'll need to construct a path
     {
         ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
         clientConnection.setSocketType(ConnectionInfo::SocketType::Ip);

@@ -148,7 +148,7 @@ public:
 
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
-    class Reader
+    class DFERRY_EXPORT Reader
     {
     public:
         explicit Reader(const Arguments &al);
@@ -258,7 +258,7 @@ public:
         DataUnion m_u;
     };
 
-    class Writer
+    class DFERRY_EXPORT Writer
     {
     public:
         explicit Writer();

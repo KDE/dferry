@@ -25,6 +25,8 @@
 
 #include <sstream>
 
+#include "sha1.c"
+
 using namespace std;
 
 vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
@@ -44,8 +46,18 @@ string hexEncode(const string &s)
 {
     stringstream ss;
     for (size_t i = 0; i < s.length(); i++) {
-        const char c = s[i];
-        ss << std::hex << int(c >> 4) << int(c & 0xf);
+        const byte b = static_cast<byte>(s[i]);
+        ss << std::hex << uint(b >> 4) << uint(b & 0xf);
     }
     return ss.str();
+}
+
+string sha1Hex(const string &s)
+{
+    sha1nfo sha;
+    sha1_init(&sha);
+    sha1_write(&sha, s.c_str(), s.length());
+    // SHA-1 produces a 160 bits result, which is 20 bytes
+    string shaResult(reinterpret_cast<char *>(sha1_result(&sha)), 20);
+    return hexEncode(shaResult);
 }

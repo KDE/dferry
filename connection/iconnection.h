@@ -33,6 +33,7 @@
 class ConnectionInfo;
 class EventDispatcher;
 class IConnectionClient;
+class SelectEventPoller;
 
 class IConnection : public IioEventClient
 {
@@ -68,6 +69,7 @@ protected:
 
 private:
     friend class IConnectionClient;
+    friend class SelectEventPoller;
     void updateReadWriteInterest(); // called internally and from IConnectionClient
 
     EventDispatcher *m_eventDispatcher;

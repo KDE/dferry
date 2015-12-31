@@ -27,7 +27,9 @@
 #include "eventdispatcher_p.h"
 #include "iconnection.h"
 #include "ipserver.h"
+#ifdef __unix__
 #include "localserver.h"
+#endif
 
 #include <string>
 
@@ -52,10 +54,12 @@ IServer *IServer::create(const ConnectionInfo &ci)
     }
 
     switch (ci.socketType()) {
+#ifdef __unix__
     case ConnectionInfo::SocketType::Unix:
         return new LocalServer(ci.path());
     case ConnectionInfo::SocketType::AbstractUnix:
         return new LocalServer(std::string(1, '\0') + ci.path());
+#endif
     case ConnectionInfo::SocketType::Ip:
         return new IpServer(ci);
     default:
@@ -98,12 +102,4 @@ void IServer::setEventDispatcher(EventDispatcher *ed)
 EventDispatcher *IServer::eventDispatcher() const
 {
     return m_eventDispatcher;
-}
-
-void IServer::notifyRead()
-{
-}
-
-void IServer::notifyWrite()
-{
 }

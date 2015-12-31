@@ -21,6 +21,22 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifdef _WIN32
+
+#ifdef BUILDING_LIBDFER
+#define DFERRY_EXPORT __declspec(dllexport)
+#else
+#define DFERRY_EXPORT __declspec(dllimport)
+#endif
+
+#ifdef BUILDING_LIBDFERCLIENT
+#define DFERRYCLIENT_EXPORT __declspec(dllexport)
+#else
+#define DFERRYCLIENT_EXPORT __declspec(dllimport)
+#endif
+
+#else
+
 #ifdef BUILDING_LIBDFER
 #define DFERRY_EXPORT __attribute__ ((visibility ("protected")))
 #else
@@ -32,3 +48,5 @@
 #else
 #define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("default")))
 #endif
+
+#endif // _WIN32

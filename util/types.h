@@ -27,13 +27,20 @@
 #include "export.h"
 
 // ### this belongs into a different header
+#ifdef __GNUC__
 #define likely(x)    __builtin_expect(!!(x), 1)
 #define unlikely(x)  __builtin_expect(!!(x), 0)
+#else
+// !!() for maximum compatibility with the non-no-op versions
+#define likely(x)    !!(x)
+#define unlikely(x)  !!(x)
+#endif
 
 typedef unsigned char byte;
 typedef short int int16;
 typedef unsigned short int uint16;
 typedef int int32;
+typedef unsigned int uint; // Windows doesn't define uint by default
 typedef unsigned int uint32;
 typedef long long int int64;
 typedef unsigned long long int uint64;

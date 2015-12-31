@@ -26,28 +26,37 @@
 #include "connectioninfo.h"
 
 #include "icompletionclient.h"
-#include "localsocket.h"
+#include "ipsocket.h"
 
-#include <fcntl.h>
-#include <sys/socket.h>
+#ifdef __unix__
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <fcntl.h>
 #include <unistd.h>
+#endif
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
 
 #include <cassert>
 #include <cstring>
+
+#include <iostream>
 
 IpServer::IpServer(const ConnectionInfo &ci)
    : m_listenFd(-1)
 {
     assert(ci.socketType() == ConnectionInfo::SocketType::Ip);
 
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
+    const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (!isValidFileDescriptor(fd)) {
+        std::cerr << "IpServer contruction failed A.\n";
         return;
     }
+#ifdef __unix__
     // don't let forks inherit the file descriptor - just in case
     fcntl(fd, F_SETFD, FD_CLOEXEC);
-
+#endif
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(ci.port());
@@ -59,7 +68,8 @@ IpServer::IpServer(const ConnectionInfo &ci)
     if (ok) {
         m_listenFd = fd;
     } else {
-#ifdef WINDOWS
+        std::cerr << "IpServer contruction failed B.\n";
+#ifdef _WIN32
         closesocket(fd);
 #else
         ::close(fd);
@@ -75,32 +85,40 @@ IpServer::~IpServer()
 void IpServer::notifyRead()
 {
     setEventDispatcher(nullptr);
-    int connFd = accept(m_listenFd, nullptr, nullptr);
-    if (connFd < 0) {
+    FileDescriptor connFd = accept(m_listenFd, nullptr, nullptr);
+    if (!isValidFileDescriptor(connFd)) {
+        std::cerr << "\nIpServer::notifyRead(): accept() failed.\n\n";
         return;
     }
+#ifdef __unix__
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
-
-    m_incomingConnections.push_back(new LocalSocket(connFd));
+#endif
+    m_incomingConnections.push_back(new IpSocket(connFd));
     if (m_newConnectionClient) {
         m_newConnectionClient->notifyCompletion(this);
     }
 }
 
+void IpServer::notifyWrite()
+{
+    // We never registered this to be called, so...
+    assert(false);
+}
+
 bool IpServer::isListening() const
 {
-    return m_listenFd >= 0;
+    return isValidFileDescriptor(m_listenFd);
 }
 
 void IpServer::close()
 {
-    if (m_listenFd >= 0) {
-#ifdef WINDOWS
+    if (isValidFileDescriptor(m_listenFd)) {
+#ifdef _WIN32
         closesocket(m_listenFd);
 #else
         ::close(m_listenFd);
 #endif
-        m_listenFd = -1;
+        m_listenFd = InvalidFileDescriptor;
     }
 }
 

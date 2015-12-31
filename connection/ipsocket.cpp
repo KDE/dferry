@@ -25,17 +25,26 @@
 
 #include "connectioninfo.h"
 
-#include <errno.h>
-#include <fcntl.h>
+#ifdef __unix__
+#include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <fcntl.h>
 #include <unistd.h>
+#endif
+#ifdef _WIN32
+#include <winsock2.h>
+typedef SSIZE_T ssize_t;
+#endif
+
+#include <errno.h>
 
 #include <cassert>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+
+#include <iostream>
 
 // HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
 static const int maxFds = 12;
@@ -46,37 +55,19 @@ IpSocket::IpSocket(const ConnectionInfo &ci)
    : m_fd(-1)
 {
     assert(ci.socketType() == ConnectionInfo::SocketType::Ip);
-#ifdef WINDOWS
+#ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
     if (WSAStartup(MAKEWORD(2, 0), &wsadata) != 0) {
+        std::cerr << "IpSocket contruction failed A.\n";
         return;
     }
 #endif
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
+    const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (!isValidFileDescriptor(fd)) {
+        std::cerr << "IpSocket contruction failed B.\n";
         return;
     }
-    // don't let forks inherit the file descriptor - that can cause confusion...
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-
-#ifdef WINDOWS
-    unsigned long value = 1; // 0 blocking, != 0 non-blocking
-    if (ioctlsocket(fd, FIONBIO, &value) != NO_ERROR) {
-        // something along the lines of... WS_ERROR_DEBUG(WSAGetLastError());
-        closesocket(fd);
-        return;
-    }
-#else
-    // To be able to use the same send() and recv() calls as Windows, also set the non-blocking
-    // property on the socket descriptor here instead of passing MSG_DONTWAIT to send() and recv().
-    const int oldFlags = fcntl(fd, F_GETFL);
-    if (oldFlags == -1) {
-        ::close(fd);
-        return;
-    }
-    fcntl(fd, F_SETFL, oldFlags & O_NONBLOCK);
-#endif
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -85,18 +76,46 @@ IpSocket::IpSocket(const ConnectionInfo &ci)
 
     bool ok = connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;
 
+    // only make it non-blocking after connect() because Winsock returns
+    // WSAEWOULDBLOCK when connecting a non-blocking socket
+#ifdef _WIN32
+    unsigned long value = 1; // 0 blocking, != 0 non-blocking
+    if (ioctlsocket(fd, FIONBIO, &value) != NO_ERROR) {
+        // something along the lines of... WS_ERROR_DEBUG(WSAGetLastError());
+        std::cerr << "IpSocket contruction failed C.\n";
+        closesocket(fd);
+        return;
+    }
+#else
+    // don't let forks inherit the file descriptor - that can cause confusion...
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+    // To be able to use the same send() and recv() calls as Windows, also set the non-blocking
+    // property on the socket descriptor here instead of passing MSG_DONTWAIT to send() and recv().
+    const int oldFlags = fcntl(fd, F_GETFL);
+    if (oldFlags == -1) {
+        ::close(fd);
+        std::cerr << "IpSocket contruction failed D.\n";
+        return;
+    }
+    fcntl(fd, F_SETFL, oldFlags & O_NONBLOCK);
+#endif
+
+
     if (ok) {
         m_fd = fd;
     } else {
-#ifdef WINDOWS
+#ifdef _WIN32
+        std::cerr << "IpSocket contruction failed E. Error is " << WSAGetLastError() << ".\n";
         closesocket(fd);
 #else
+        std::cerr << "IpSocket contruction failed E. Error is " << errno << ".\n";
         ::close(fd);
 #endif
     }
 }
 
-IpSocket::IpSocket(int fd)
+IpSocket::IpSocket(FileDescriptor fd)
    : m_fd(fd)
 {
 }
@@ -104,7 +123,7 @@ IpSocket::IpSocket(int fd)
 IpSocket::~IpSocket()
 {
     close();
-#ifdef WINDOWS
+#ifdef _WIN32
     WSACleanup();
 #endif
 }
@@ -112,20 +131,21 @@ IpSocket::~IpSocket()
 void IpSocket::close()
 {
     setEventDispatcher(nullptr);
-    if (m_fd >= 0) {
-#ifdef WINDOWS
+    if (isValidFileDescriptor(m_fd)) {
+#ifdef _WIN32
         closesocket(m_fd);
 #else
         ::close(m_fd);
 #endif
+        m_fd = InvalidFileDescriptor;
     }
-    m_fd = -1;
 }
 
 uint32 IpSocket::write(chunk a)
 {
-    if (m_fd < 0) {
-        return 0; // TODO -1?
+    if (!isValidFileDescriptor(m_fd)) {
+        std::cerr << "\nIpSocket::write() failed A.\n\n";
+        return 0; // TODO -1 and return int32?
     }
 
     const uint32 initialLength = a.length;
@@ -153,17 +173,23 @@ uint32 IpSocket::write(chunk a)
 
 uint32 IpSocket::availableBytesForReading()
 {
+#ifdef _WIN32
+    u_long available = 0;
+    if (ioctlsocket(m_fd, FIONREAD, &available) != NO_ERROR) {
+#else
     uint32 available = 0;
     if (ioctl(m_fd, FIONREAD, &available) < 0) {
+#endif
         available = 0;
     }
-    return available;
+    return uint32(available);
 }
 
 chunk IpSocket::read(byte *buffer, uint32 maxSize)
 {
     chunk ret;
     if (maxSize <= 0) {
+        std::cerr << "\nIpSocket::read() failed A.\n\n";
         return ret;
     }
 
@@ -192,10 +218,10 @@ chunk IpSocket::read(byte *buffer, uint32 maxSize)
 
 bool IpSocket::isOpen()
 {
-    return m_fd != -1;
+    return isValidFileDescriptor(m_fd);
 }
 
-int IpSocket::fileDescriptor() const
+FileDescriptor IpSocket::fileDescriptor() const
 {
     return m_fd;
 }

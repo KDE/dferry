@@ -77,7 +77,7 @@ public:
     void queueEvent(std::unique_ptr<Event> evt); // safe to call from any thread
     void processAuxEvents();
 
-    IEventPoller *m_poller;
+    IEventPoller *m_poller = nullptr;
     std::unordered_map<FileDescriptor, IioEventClient*> m_ioClients;
 
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set

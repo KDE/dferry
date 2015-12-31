@@ -99,6 +99,7 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
 
     if (ci.bus() == ConnectionInfo::Bus::None || ci.socketType() == ConnectionInfo::SocketType::None ||
         ci.role() == ConnectionInfo::Role::None) {
+        cerr << "\nTransceiver: connection constructor Exit A\n\n";
         return;
     }
 
@@ -136,9 +137,11 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef
 
     d->m_mainThreadLink = std::move(mainTransceiverRef.commutex);
     CommutexLocker locker(&d->m_mainThreadLink);
+    assert(locker.hasLock());
     Commutex *const id = d->m_mainThreadLink.id();
     if (!id) {
         assert(false);
+        cerr << "\nTransceiver: slave constructor Exit A\n\n";
         return; // stay in Unconnected state
     }
 

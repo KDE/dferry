@@ -55,9 +55,7 @@ public:
 
 protected:
     friend class EventDispatcher;
-    // IioEventClient; default implementations supplied because subclasses may only need one of them
-    virtual void notifyRead() override;
-    virtual void notifyWrite() override;
+    // notifyRead() and notifyWrite() from IioEventClient stay pure virtual
 
     std::deque<IConnection *> m_incomingConnections;
     ICompletionClient *m_newConnectionClient;

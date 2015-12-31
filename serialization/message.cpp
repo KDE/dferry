@@ -35,6 +35,8 @@
 #include <sstream>
 #include <thread>
 
+#include <iostream>
+
 using namespace std;
 
 #ifdef BIGENDIAN
@@ -625,6 +627,7 @@ void Message::setExpectsReply(bool expectsReply)
 void MessagePrivate::receive(IConnection *conn)
 {
     if (m_state > LastSteadyState) {
+        std::cerr << "MessagePrivate::receive() Error A.\n";
         return;
     }
     conn->addClient(this);
@@ -642,13 +645,14 @@ bool Message::isReceiving() const
 void MessagePrivate::send(IConnection *conn)
 {
     if (!m_buffer.length && !serialize()) {
-
+        std::cerr << "MessagePrivate::send() Error A.\n";
         // m_error.setCode();
         // notifyCompletionClient(); would call into Transceiver, but it's easer for Transceiver to handle
         //                           the error from non-callback code, directly in the caller of send().
         return;
     }
     if (m_state > MessagePrivate::LastSteadyState) {
+        std::cerr << "MessagePrivate::send() Error B.\n";
         // TODO error feedback
         return;
     }

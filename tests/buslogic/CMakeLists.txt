@@ -10,4 +10,6 @@ ENDMACRO(BUSLOGICTESTS)
 
 BUSLOGICTESTS(pendingreply threads)
 
-target_link_libraries(tst_threads pthread)
+if (UNIX)
+    target_link_libraries(tst_threads pthread)
+endif()

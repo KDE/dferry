@@ -32,6 +32,7 @@
 // export is for dferryclient library...
 std::vector<std::string> DFERRY_EXPORT split(const std::string &s, char delimiter, bool keepEmptyParts = true);
 std::string hexEncode(const std::string &s);
+std::string sha1Hex(const std::string &s);
 
 inline std::string toStdString(cstring cstr)
 {

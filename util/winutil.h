@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2015 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,28 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#include <cstdio>
-#include <cstdlib>
+#ifndef WINDO_H
+#define WINDO_H
 
-#ifdef _WIN32
+#include <string>
 
-#ifdef BUILDING_TESTUTIL
-#define TESTUTIL_EXPORT __declspec(dllexport)
-#else
-#define TESTUTIL_EXPORT __declspec(dllimport)
-#endif
+std::string fetchWindowsSid();
 
-#else
-
-#ifdef BUILDING_TESTUTIL
-#define TESTUTIL_EXPORT __attribute__ ((visibility ("protected")))
-#else
-#define TESTUTIL_EXPORT __attribute__ ((visibility ("default")))
-#endif
-
-#endif // _WIN32
-
-static inline void test_no_op() {}
-void TESTUTIL_EXPORT test_fail(const char *cond, const char *file, int line);
-
-#define TEST(cond) (!(cond) ? test_fail(#cond, __FILE__, __LINE__) : test_no_op())
+#endif // WINDO_H
