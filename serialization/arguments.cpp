@@ -536,12 +536,24 @@ std::string Arguments::prettyPrint() const
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end variant\n";
             break;
-        case Arguments::BeginArray: {
-            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            emptyNesting += hasData ? 0 : 1;
-            ret << nestingPrefix << "begin array\n";
-            nestingPrefix += "[ ";
-            break; }
+        case Arguments::BeginArray:
+            if (reader.peekPrimitiveArray() == Arguments::Byte) {
+                // print byte arrays in a more space-efficient format
+                const std::pair<Arguments::IoState, chunk> bytes = reader.readPrimitiveArray();
+                assert(bytes.first == Arguments::Byte);
+                assert(bytes.second.length > 0);
+                ret << nestingPrefix << "array [ " << uint(bytes.second.ptr[0]);
+                for (uint32 i = 1; i < bytes.second.length; i++) {
+                    ret << ", " << uint(bytes.second.ptr[i]);
+                }
+                ret << " ]\n";
+            } else {
+                const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+                emptyNesting += hasData ? 0 : 1;
+                ret << nestingPrefix << "begin array\n";
+                nestingPrefix += "[ ";
+            }
+            break;
         case Arguments::NextArrayEntry:
             reader.nextArrayEntry();
             break;
@@ -1446,6 +1458,25 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     endArray();
 
     return ret;
+}
+
+Arguments::IoState Arguments::Reader::peekPrimitiveArray(EmptyArrayOption option) const
+{
+    // almost duplicated from readPrimitiveArray(), so keep it in sync
+    if (m_state != BeginArray) {
+        return InvalidData;
+    }
+    if (option == SkipIfEmpty && d->m_nilArrayNesting) {
+        return BeginArray;
+    }
+    const TypeInfo elementType = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
+    if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
+        return BeginArray;
+    }
+    if (d->m_argList->d->m_isByteSwapped && elementType.state() != Byte) {
+        return BeginArray;
+    }
+    return elementType.state();
 }
 
 bool Arguments::Reader::beginDict(EmptyArrayOption option)

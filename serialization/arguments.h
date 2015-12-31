@@ -225,8 +225,17 @@ public:
         // Returns primitive type and the raw array data if in BeginArray state of an array containing only a
         // primitive type. You must copy the data before destroying the Reader or changing its backing store
         // with replaceData().
+        // If the array is empty, that does not constitute a special case with this function: It will return
+        // the type in the first return value as usual and an empty chunk in the second return value.
         // (### it might be possible to extend this feature to all fixed-length types including structs)
         std::pair<Arguments::IoState, chunk> readPrimitiveArray();
+        // In state BeginArray, check if the array is a primitive array, in order to check whether to use
+        // readPrimitiveArray(). Returns a primitive type if readPrimitiveArray() will succeed, BeginArray
+        // if the array is not primitive, InvalidData if state is not BeginArray. The latter will not put
+        // the reader in InvalidData state.
+        // If option is SkipIfEmpty, an empty array of primitives will result in a return value of BeginArray
+        // instead of the type of primitive.
+        Arguments::IoState peekPrimitiveArray(EmptyArrayOption option = SkipIfEmpty) const;
 
     private:
         class Private;
