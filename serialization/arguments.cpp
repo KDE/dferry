@@ -542,7 +542,7 @@ std::string Arguments::prettyPrint() const
                 const std::pair<Arguments::IoState, chunk> bytes = reader.readPrimitiveArray();
                 assert(bytes.first == Arguments::Byte);
                 assert(bytes.second.length > 0);
-                ret << nestingPrefix << "array [ " << uint(bytes.second.ptr[0]);
+                ret << nestingPrefix << "array of bytes [ " << uint(bytes.second.ptr[0]);
                 for (uint32 i = 1; i < bytes.second.length; i++) {
                     ret << ", " << uint(bytes.second.ptr[i]);
                 }
