@@ -57,10 +57,36 @@ void ReplyPrinter::spontaneousMessageReceived(Message m)
     cout << '\n' << m.prettyPrint();
 }
 
-int main(int, char *[])
+static void printHelp()
+{
+    std::cout << "dfer options:\n"
+                 "  --session-bus  Monitor the session bus [the default]\n"
+                 "  --system-bus   Monitor the system bus\n"
+                 "  --help         Show this help and exit\n";
+}
+
+int main(int argc, char *argv[])
 {
     EventDispatcher dispatcher;
-    Transceiver transceiver(&dispatcher, ConnectionInfo::Bus::System); // ## TODO: command-line option for Session here
+
+    ConnectionInfo::Bus bus = ConnectionInfo::Bus::Session;
+    for (int i = 1; i < argc; i++) {
+        string s = argv[i];
+        if (s == "--help") {
+            printHelp();
+            exit(0);
+        } else if (s == "--system-bus") {
+            bus = ConnectionInfo::Bus::System;
+        } else if (s == "--session-bus") {
+            bus = ConnectionInfo::Bus::Session;
+        } else {
+            std::cerr << "Unknown option \"" << s << "\".\n";
+            printHelp();
+            exit(1);
+        }
+    }
+
+    Transceiver transceiver(&dispatcher, bus);
     ReplyPrinter receiver;
     transceiver.setSpontaneousMessageReceiver(&receiver);
     {
