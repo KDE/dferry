@@ -104,13 +104,13 @@ class Arguments::Reader::Private
 {
 public:
     Private()
-       : m_argList(nullptr),
+       : m_args(nullptr),
          m_signaturePosition(uint32(-1)),
          m_dataPosition(0),
          m_nilArrayNesting(0)
     {}
 
-    const Arguments *m_argList;
+    const Arguments *m_args;
     Nesting m_nesting;
     cstring m_signature;
     chunk m_data;
@@ -184,7 +184,7 @@ public:
     uint32 m_variantSignaturesCountBeforeNilArray;
     uint32 m_dataPositionBeforeNilArray;
 
-    Arguments m_argList;
+    Arguments m_args;
     NestingWithParenCounter m_nesting;
     cstring m_signature;
     uint32 m_signaturePosition;
@@ -844,7 +844,7 @@ Arguments::Reader::Reader(const Arguments &al)
    : d(new Private),
      m_state(NotStarted)
 {
-    d->m_argList = &al;
+    d->m_args = &al;
     beginRead();
 }
 
@@ -852,15 +852,15 @@ Arguments::Reader::Reader(const Message &msg)
    : d(new Private),
      m_state(NotStarted)
 {
-    d->m_argList = &msg.arguments();
+    d->m_args = &msg.arguments();
     beginRead();
 }
 
 void Arguments::Reader::beginRead()
 {
-    VALID_IF(d->m_argList, Error::NotAttachedToArguments);
-    d->m_signature = d->m_argList->d->m_signature;
-    d->m_data = d->m_argList->d->m_data;
+    VALID_IF(d->m_args, Error::NotAttachedToArguments);
+    d->m_signature = d->m_args->d->m_signature;
+    d->m_data = d->m_args->d->m_data;
     // as a slightly hacky optimizaton, we allow empty Argumentss to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
         VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
@@ -897,7 +897,7 @@ Arguments::Reader::~Reader()
 
 bool Arguments::Reader::isValid() const
 {
-    return d->m_argList;
+    return d->m_args;
 }
 
 Error Arguments::Reader::error() const
@@ -1017,7 +1017,7 @@ void Arguments::Reader::doReadPrimitiveType()
 {
     switch(m_state) {
     case Boolean: {
-        uint32 num = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        uint32 num = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         m_u.Boolean = num == 1;
         VALID_IF(num <= 1, Error::MalformedMessageData);
         break; }
@@ -1025,28 +1025,28 @@ void Arguments::Reader::doReadPrimitiveType()
         m_u.Byte = d->m_data.ptr[d->m_dataPosition];
         break;
     case Int16:
-        m_u.Int16 = basic::readInt16(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int16 = basic::readInt16(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Uint16:
-        m_u.Uint16 = basic::readUint16(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint16 = basic::readUint16(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Int32:
-        m_u.Int32 = basic::readInt32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int32 = basic::readInt32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Uint32:
-        m_u.Uint32 = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint32 = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Int64:
-        m_u.Int64 = basic::readInt64(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Int64 = basic::readInt64(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Uint64:
-        m_u.Uint64 = basic::readUint64(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Uint64 = basic::readUint64(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case Double:
-        m_u.Double = basic::readDouble(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        m_u.Double = basic::readDouble(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         break;
     case UnixFd: {
-        uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+        uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
         uint32 ret = index; // ### highly bogus; TODO use index to retrieve the actual file descriptor
         m_u.Uint32 = ret;
         break; }
@@ -1063,7 +1063,7 @@ void Arguments::Reader::doReadString(uint32 lengthPrefixSize)
         stringLength += d->m_data.ptr[d->m_dataPosition];
     } else {
         stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
-                                          d->m_argList->d->m_isByteSwapped);
+                                          d->m_args->d->m_isByteSwapped);
         VALID_IF(stringLength + 1 < s_specMaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
@@ -1243,7 +1243,7 @@ void Arguments::Reader::advanceState()
             if (unlikely(d->m_dataPosition + sizeof(uint32) > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argList->d->m_isByteSwapped);
+            arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
             VALID_IF(arrayLength <= s_specMaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
         }
@@ -1434,7 +1434,7 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
         return ret;
     }
-    if (d->m_argList->d->m_isByteSwapped && elementType.state() != Byte) {
+    if (d->m_args->d->m_isByteSwapped && elementType.state() != Byte) {
         return ret;
     }
 
@@ -1473,7 +1473,7 @@ Arguments::IoState Arguments::Reader::peekPrimitiveArray(EmptyArrayOption option
     if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
         return BeginArray;
     }
-    if (d->m_argList->d->m_isByteSwapped && elementType.state() != Byte) {
+    if (d->m_args->d->m_isByteSwapped && elementType.state() != Byte) {
         return BeginArray;
     }
     return elementType.state();
@@ -1585,7 +1585,7 @@ Arguments::Writer::~Writer()
 
 bool Arguments::Writer::isValid() const
 {
-    return !d->m_argList.error().isError();
+    return !d->m_args.error().isError();
 }
 
 Error Arguments::Writer::error() const
@@ -2067,15 +2067,15 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 
 Arguments Arguments::Writer::finish()
 {
-    if (!d->m_argList.d) {
+    if (!d->m_args.d) {
         // TODO proper error - what must have happened is that finish() was called > 1 times
         return Arguments();
     }
     finishInternal();
 
-    d->m_argList.d->m_error = d->m_error;
+    d->m_args.d->m_error = d->m_error;
 
-    return std::move(d->m_argList);
+    return std::move(d->m_args);
 }
 
 struct ArrayLengthField
@@ -2099,8 +2099,8 @@ void Arguments::Writer::finishInternal()
     d->m_signature.ptr[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
-    if (d->m_argList.d->m_memOwnership) {
-        free(d->m_argList.d->m_memOwnership);
+    if (d->m_args.d->m_memOwnership) {
+        free(d->m_args.d->m_memOwnership);
     }
 
     bool success = true;
@@ -2187,9 +2187,9 @@ void Arguments::Writer::finishInternal()
             d->m_aggregateStack.clear();
             d->m_variantSignatures.clear();
 
-            d->m_argList.d->m_memOwnership = buffer;
-            d->m_argList.d->m_signature = cstring(buffer, d->m_signature.length);
-            d->m_argList.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+            d->m_args.d->m_memOwnership = buffer;
+            d->m_args.d->m_signature = cstring(buffer, d->m_signature.length);
+            d->m_args.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
         } else {
             d->m_aggregateStack.clear();
             for (uint32 i = 0; i < d->m_variantSignatures.size(); i++) {
@@ -2202,9 +2202,9 @@ void Arguments::Writer::finishInternal()
 
     if (!count || !success) {
         d->m_variantSignatures.clear();
-        d->m_argList.d->m_memOwnership = nullptr;
-        d->m_argList.d->m_signature = cstring();
-        d->m_argList.d->m_data = chunk();
+        d->m_args.d->m_memOwnership = nullptr;
+        d->m_args.d->m_signature = cstring();
+        d->m_args.d->m_data = chunk();
     }
 
     d->m_elements.clear();
