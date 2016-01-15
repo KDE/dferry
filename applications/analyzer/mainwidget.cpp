@@ -46,7 +46,7 @@ MainWidget::MainWidget()
     m_ui.messageList->setAlternatingRowColors(true);
     m_ui.messageList->setUniformRowHeights(true);
 
-    m_ui.arguments->setModel(createArgumentsModel(0));
+    m_ui.arguments->setModel(createArgumentsModel(nullptr));
     m_ui.arguments->resizeColumnToContents(0);
 
     // TODO: when a new item appears (what to do if it comes from filter changes?), and the list view scroll

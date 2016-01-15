@@ -21,26 +21,16 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ANALYZERMAINWINDOW_H
-#define ANALYZERMAINWINDOW_H
- 
-#include <kparts/mainwindow.h>  
- 
-class AnalyzerMainWindow : public KParts::MainWindow
+#include <QApplication>
+
+#include "analyzermainwindow.h"
+
+int main (int argc, char *argv[])
 {
-    Q_OBJECT
-public:
-    AnalyzerMainWindow();
-    virtual ~AnalyzerMainWindow();
- 
-public slots:
-    void load();
-    void saveAs();
- 
-private:
-    void setupActions();
- 
-    KParts::ReadWritePart *m_part;
-};
- 
-#endif // ANALYZERMAINWINDOW_H
+    QApplication app(argc, argv);
+
+    AnalyzerMainWindow *mw = new AnalyzerMainWindow();
+    mw->show();
+
+    return app.exec();
+}

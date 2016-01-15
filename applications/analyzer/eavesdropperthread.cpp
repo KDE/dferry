@@ -36,7 +36,6 @@ EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
 {
     // do not parent this to the model; it doesn't work across threads
     moveToThread(&m_thread);
-    // ### verify that the connection is a QueuedConnection
     connect(this, SIGNAL(messageReceived(Message *, qint64)),
             model, SLOT(addMessage(Message *, qint64)), Qt::QueuedConnection);
     connect(&m_thread, SIGNAL(started()), SLOT(run()));
@@ -83,8 +82,11 @@ void EavesdropperThread::run()
         }
     }
 
+    Q_ASSERT(m_transceiver->isConnected());
+
     while (m_dispatcher->poll()) {
     }
+
     m_thread.quit();
 }
 

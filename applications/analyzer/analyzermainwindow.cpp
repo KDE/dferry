@@ -21,23 +21,39 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef DFERANALYZER_PART_H
-#define DFERANALYZER_PART_H
+#include "analyzermainwindow.h"
 
-#include <kparts/part.h>
-#include <kparts/factory.h>
+#include "mainwidget.h"
 
-class DferAnalyzerPart : public KParts::ReadWritePart
+#include <QFileDialog>
+#include <QMenuBar>
+
+AnalyzerMainWindow::AnalyzerMainWindow()
+   : QMainWindow()
 {
-    Q_OBJECT
-public:
-    DferAnalyzerPart(QWidget *parentWidget, QObject *parent, const QVariantList &);
-    ~DferAnalyzerPart();
+    m_mainWidget = new MainWidget();
+    setCentralWidget(m_mainWidget);
+    setupActions();
+}
+ 
+AnalyzerMainWindow::~AnalyzerMainWindow()
+{
+}
+ 
+void AnalyzerMainWindow::setupActions()
+{
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(tr("&Open..."), this, SLOT(load()), QKeySequence::Open);
+    fileMenu->addAction(tr("&Save As..."), this, SLOT(saveAs()), QKeySequence::SaveAs);
+    fileMenu->addAction(tr("&Quit"), qApp, SLOT(closeAllWindows()), QKeySequence::Quit);
+}
+ 
+void AnalyzerMainWindow::load()
+{
+    m_mainWidget->load(QFileDialog::getOpenFileName());
+}
 
-protected:
-    // reimplementations from KParts::ReadWritePart
-    bool openFile();
-    bool saveFile();
-};
-
-#endif // DFERANALYZER_PART_H
+void AnalyzerMainWindow::saveAs()
+{
+    m_mainWidget->save(QFileDialog::getSaveFileName());
+}

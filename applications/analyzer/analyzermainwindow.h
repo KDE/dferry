@@ -21,38 +21,28 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "dferanalyzer_part.h"
+#ifndef ANALYZERMAINWINDOW_H
+#define ANALYZERMAINWINDOW_H
+ 
+#include <QMainWindow>
+ 
+class MainWidget;
 
-#include "mainwidget.h"
-
-#include <kdemacros.h>
-#include <kparts/genericfactory.h>
-
-K_PLUGIN_FACTORY(DferAnalyzerPartFactory, registerPlugin<DferAnalyzerPart>();)  // produce a factory
-K_EXPORT_PLUGIN(DferAnalyzerPartFactory("DferAnalyzer", "DferAnalyzer"))
-
-DferAnalyzerPart::DferAnalyzerPart(QWidget * /* parentWidget */, QObject *parent, const QVariantList &)
-   : KParts::ReadWritePart(parent)
+class AnalyzerMainWindow : public QMainWindow
 {
-    KGlobal::locale()->insertCatalog("DferAnalyzer");
-    setComponentData(DferAnalyzerPartFactory::componentData());
-
-    QWidget *mainWidget = new MainWidget();
-    setWidget(mainWidget);
-}
-
-DferAnalyzerPart::~DferAnalyzerPart()
-{
-}
-
-bool DferAnalyzerPart::openFile()
-{
-    qobject_cast<MainWidget*>(widget())->load(localFilePath());
-    return true; // ### does a correct return value do anything useful?
-}
-
-bool DferAnalyzerPart::saveFile()
-{
-    qobject_cast<MainWidget*>(widget())->save(localFilePath());
-    return true;
-}
+    Q_OBJECT
+public:
+    AnalyzerMainWindow();
+    virtual ~AnalyzerMainWindow();
+ 
+public slots:
+    void load();
+    void saveAs();
+ 
+private:
+    void setupActions();
+ 
+    MainWidget *m_mainWidget;
+};
+ 
+#endif // ANALYZERMAINWINDOW_H
