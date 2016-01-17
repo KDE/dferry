@@ -1054,8 +1054,10 @@ bool MessagePrivate::serialize()
     for (uint32 i = unalignedHeaderLength; i < m_headerLength; i++) {
         m_buffer.ptr[i] = '\0';
     }
-    // copy message body
-    memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_mainArguments.data().length);
+    // copy message body (if any - arguments are not mandatory)
+    if (m_mainArguments.data().length) {
+        memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_mainArguments.data().length);
+    }
     m_bufferPos = m_headerLength + m_mainArguments.data().length;
     assert(m_bufferPos <= m_buffer.length);
 
