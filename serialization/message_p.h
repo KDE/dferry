@@ -42,6 +42,7 @@ public:
 
     bool hasStringHeader(Message::VariableHeader header) const;
     std::string stringHeader(Message::VariableHeader header) const;
+    cstring stringHeaderRaw(Message::VariableHeader header);
     void setStringHeader(Message::VariableHeader header, const std::string &value);
     void clearStringHeader(Message::VariableHeader header);
 

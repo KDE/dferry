@@ -43,6 +43,9 @@ public:
     // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
     // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
     // you need to make sure that the memory lives as long as the Arguments.
+    // (A notable user of this is Message - you can only get a const ref to its internal Arguments
+    //  so you need to copy to take the Arguments away from the Message, which copies out of the
+    //  borrowed memory into heap memory so the copy is safe)
     // The copy contructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
     Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);

@@ -139,6 +139,20 @@ string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
     return hasStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : string();
 }
 
+cstring VarHeaderStorage::stringHeaderRaw(Message::VariableHeader header)
+{
+    // this one is supposed to be a const method in the intended use, but it is dangerous so
+    // outwardly non-const is kind of okay as a warning
+    cstring ret;
+    assert(isStringHeader(header));
+    if (hasHeader(header)) {
+        string &str = stringHeaders()[indexOfHeader(header)];
+        ret.ptr = const_cast<char *>(str.c_str());
+        ret.length = str.length();
+    }
+    return ret;
+}
+
 void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
 {
     if (!isStringHeader(header)) {
@@ -717,10 +731,9 @@ void Message::load(const std::vector<byte> &data)
         return;
     }
 
-    std::string sig = signature();
     chunk bodyData(d->m_buffer.ptr + d->m_headerLength, d->m_bodyLength);
-    d->m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
-                                      bodyData, d->m_isByteSwapped);
+    d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
+                                   bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Deserialized;
 }
 
@@ -768,13 +781,9 @@ void MessagePrivate::notifyConnectionReadyRead()
             assert(m_bufferPos == m_headerLength + m_bodyLength);
             setReadNotificationEnabled(false);
             m_state = Deserialized;
-            std::string sig;
-            if (m_varHeaders.hasStringHeader(Message::SignatureHeader)) {
-                sig = m_varHeaders.stringHeader(Message::SignatureHeader);
-            }
             chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
-            m_mainArguments = Arguments(nullptr, cstring(sig.c_str(), sig.length()),
-                                           bodyData, m_isByteSwapped);
+            m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
+                                        bodyData, m_isByteSwapped);
             assert(!isError);
             connection()->removeClient(this);
             notifyCompletionClient(); // do not access members after this because it might delete us!
