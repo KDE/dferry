@@ -454,7 +454,7 @@ void TransceiverPrivate::notifyCompletion(void *task)
     case Connected: {
         assert(!m_authNegotiator);
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
-            // cout << "Sent message.\n";
+            //cout << "Sent message.\n";
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
                 MessagePrivate::get(&m_sendQueue.front())->send(m_connection);

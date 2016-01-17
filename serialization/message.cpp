@@ -1141,7 +1141,7 @@ Arguments MessagePrivate::serializeVariableHeaders()
 void MessagePrivate::clearBuffer()
 {
     if (m_buffer.ptr) {
-        free (m_buffer.ptr);
+        free(m_buffer.ptr);
         m_buffer = chunk();
         m_bufferPos = 0;
     } else {
