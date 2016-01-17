@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef WINDO_H
-#define WINDO_H
+#ifndef WINUTIL_H
+#define WINUTIL_H
 
 #include <string>
 
 std::string fetchWindowsSid();
 
-#endif // WINDO_H
+#endif // WINUTIL_H
