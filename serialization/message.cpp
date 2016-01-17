@@ -136,7 +136,7 @@ bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
 
 string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
 {
-    return isStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : string();
+    return hasStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : string();
 }
 
 void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
@@ -155,6 +155,7 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
 
 bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, cstring value)
 {
+    assert(isStringHeader(header));
     if (hasHeader(header)) {
         return false;
     }
@@ -188,6 +189,7 @@ void VarHeaderStorage::setIntHeader(Message::VariableHeader header, uint32 value
 
 bool VarHeaderStorage::setIntHeader_deser(Message::VariableHeader header, uint32 value)
 {
+    assert(!isStringHeader(header));
     if (hasHeader(header)) {
         return false;
     }
