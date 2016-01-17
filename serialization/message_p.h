@@ -86,6 +86,7 @@ public:
 
     MessagePrivate(Message *parent);
     MessagePrivate(const MessagePrivate &other, Message *parent);
+    ~MessagePrivate();
 
     void notifyConnectionReadyRead() override;
     void notifyConnectionReadyWrite() override;

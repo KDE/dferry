@@ -271,6 +271,11 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
     //     we should never do such a thing.
 }
 
+MessagePrivate::~MessagePrivate()
+{
+    clearBuffer();
+}
+
 Message::Message()
    : d(new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(this))
 {
@@ -285,12 +290,16 @@ Message::Message(Message &&other)
 
 Message &Message::operator=(Message &&other)
 {
-    if (&other != this) {
-        d->~MessagePrivate();
-        msgAllocCaches.msgPrivate.free(d);
+    if (this != &other) {
+        if (d) {
+            d->~MessagePrivate();
+            msgAllocCaches.msgPrivate.free(d);
+        }
         d = other.d;
-        other.d = nullptr;
-        d->m_message = this;
+        if (other.d) {
+            other.d = nullptr;
+            d->m_message = this;
+        }
     }
     return *this;
 }
@@ -306,21 +315,16 @@ Message::Message(const Message &other)
 
 Message &Message::operator=(const Message &other)
 {
-    if (this == &other) {
-        return *this;
-    }
-    if (d) {
-        d->~MessagePrivate();
-        msgAllocCaches.msgPrivate.free(d);
+    if (this != &other) {
+        if (d) {
+            d->~MessagePrivate();
+            msgAllocCaches.msgPrivate.free(d);
+        }
         if (other.d) {
             // ### can be optimized by implementing and using assignment of MessagePrivate
             d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
         } else {
             d = nullptr;
-        }
-    } else {
-        if (other.d) {
-            d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
         }
     }
     return *this;
@@ -330,7 +334,6 @@ Message &Message::operator=(const Message &other)
 Message::~Message()
 {
     if (d) {
-        d->clearBuffer();
         d->~MessagePrivate();
         msgAllocCaches.msgPrivate.free(d);
         d = nullptr;
