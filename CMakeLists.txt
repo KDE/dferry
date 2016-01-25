@@ -1,7 +1,7 @@
 project(dferry)
 
 cmake_minimum_required(VERSION 3.1.0 FATAL_ERROR)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 if (CMAKE_COMPILER_IS_GNUCXX)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wpedantic -Wextra -Werror -Wno-error=unused-result")
@@ -64,7 +64,7 @@ set(DFER_SOURCES
     util/icompletionclient.cpp
     util/types.cpp)
 if (UNIX)
-    set(DFER_SOURCES ${DFER_SOURCES}
+    list(APPEND DFER_SOURCES
         connection/localserver.cpp
         connection/localsocket.cpp)
 endif()
@@ -102,19 +102,19 @@ set(DFER_PRIVATE_HEADERS
     events/platformtime.h
     serialization/basictypeio.h)
 if (UNIX)
-    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS}
-        connection/localserver.h
-        connection/localsocket.h)
+    list(APPEND DFER_PRIVATE_HEADERS
+         connection/localserver.h
+         connection/localsocket.h)
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set(DFER_SOURCES ${DFER_SOURCES} events/epolleventpoller.cpp)
-    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/epolleventpoller.h)
+    list(APPEND DFER_SOURCES events/epolleventpoller.cpp)
+    list(APPEND DFER_PRIVATE_HEADERS events/epolleventpoller.h)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/selecteventpoller_win32.h util/winutil.h)
-    set(DFER_SOURCES ${DFER_SOURCES} events/selecteventpoller_win32.cpp util/winutil.cpp)
+    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_win32.h util/winutil.h)
+    list(APPEND DFER_SOURCES events/selecteventpoller_win32.cpp util/winutil.cpp)
 elseif(UNIX)
-    set(DFER_PRIVATE_HEADERS ${DFER_PRIVATE_HEADERS} events/selecteventpoller_unix.h)
-    set(DFER_SOURCES ${DFER_SOURCES} events/selecteventpoller_unix.cpp)
+    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_unix.h)
+    list(APPEND DFER_SOURCES events/selecteventpoller_unix.cpp)
 else()
     message(FATAL_ERROR "This operating system is not supported.")
 endif()
