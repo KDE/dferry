@@ -311,8 +311,8 @@ void Arguments::Private::initFrom(const Private &other)
         m_memOwnership = reinterpret_cast<byte *>(malloc(fullLength));
 
         m_signature.ptr = reinterpret_cast<char *>(m_memOwnership);
-        memcpy(m_signature.ptr, other.m_signature.ptr, other.m_signature.length);
-        uint32 bufferPos = other.m_signature.length;
+        memcpy(m_signature.ptr, other.m_signature.ptr, other.m_signature.length + 1);
+        uint32 bufferPos = other.m_signature.length + 1;
         zeroPad(reinterpret_cast<byte *>(m_signature.ptr), 8, &bufferPos);
         assert(bufferPos == alignedSigLength);
 

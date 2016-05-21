@@ -1057,6 +1057,29 @@ void test_primitiveArray()
     }
 }
 
+void test_signatureLengths()
+{
+    for (int i = 0; i <= 256; i++) {
+        Arguments::Writer writer;
+        for (int j = 0; j < i; j++) {
+            writer.writeByte(255);
+        }
+        if (i == 256) {
+            TEST(writer.state() == Arguments::InvalidData);
+            break;
+        }
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+
+        // The full doRoundtrip() just here makes this whole file take several seconds to execute
+        // instead of a fraction of a second. This way is much quicker.
+        doRoundtripForReal(arg, false, 2048, false);
+        Arguments argCopy = arg;
+        doRoundtripForReal(argCopy, false, 2048, false);
+    }
+}
+
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
 //       length and long/short type signature, to make sure that the signature is written but not
 //       any data if the array is zero-length.
@@ -1078,6 +1101,7 @@ int main(int, char *[])
     test_arrayOfVariant();
     test_realMessage();
     test_primitiveArray();
+    test_signatureLengths();
     // TODO many more misuse tests for Writer and maybe some for Reader
     std::cout << "Passed!\n";
 }
