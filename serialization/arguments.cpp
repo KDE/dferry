@@ -93,11 +93,11 @@ public:
     void initFrom(const Private &other);
     ~Private();
 
+    chunk m_data;
     bool m_isByteSwapped;
-    Error m_error;
     byte *m_memOwnership;
     cstring m_signature;
-    chunk m_data;
+    Error m_error;
 };
 
 class Arguments::Reader::Private
@@ -111,13 +111,13 @@ public:
     {}
 
     const Arguments *m_args;
-    Nesting m_nesting;
     cstring m_signature;
-    chunk m_data;
     uint32 m_signaturePosition;
+    chunk m_data;
     uint32 m_dataPosition;
     uint32 m_nilArrayNesting; // this keeps track of how many nil arrays we are in
     Error m_error;
+    Nesting m_nesting;
 
     struct ArrayInfo
     {
