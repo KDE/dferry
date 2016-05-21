@@ -2108,10 +2108,12 @@ void Arguments::Writer::finishInternal()
     const uint32 dataSize = d->m_dataPosition;
     d->m_dataPosition = 0;
     if (count) {
-        // Note: if one of signature or data is nonempty, the other must also be nonempty. think about it.
+        // Note: if one of signature or data is nonempty, the other must also be nonempty.
+        // Even "empty" things like empty arrays or null strings have a size field, in that case
+        // (for all(?) types) of value zero.
 
-        // Copy the signature and main data into one block to avoid one allocation; the signature's usually
-        // small size makes it cheap enough to copy.
+        // Copy the signature and main data (thus the whole contents) into one allocated block,
+        // which is good to have for performance and simplicity reasons.
 
         // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
         // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
@@ -2129,33 +2131,44 @@ void Arguments::Writer::finishInternal()
         std::vector<ArrayLengthField> lengthFieldStack;
 
         for (uint32 i = 0; i < count; i++) {
-            Private::ElementInfo ei = d->m_elements[i];
-            if (ei.size <= Private::ElementInfo::LargestSize) {
-                // copy data chunks while applying the proper alignment
-                zeroPad(buffer, ei.alignment(), &bufferPos);
-                // if !ei.size, it's alignment padding which does not apply to source data
-                if (ei.size) {
+            const Private::ElementInfo ei = d->m_elements[i];
+            switch (ei.size) {
+            case 0: {
+                    // if !ei.size, the current element is alignment padding which does not apply
+                    // to source data, so only add padding and only advance the output stream (not input)
+                    zeroPad(buffer, ei.alignment(), &bufferPos);
+                }
+                break;
+            default: {
+                    assert(ei.size && ei.size <= Private::ElementInfo::LargestSize);
+                    // apply alignment padding in output and input
+                    zeroPad(buffer, ei.alignment(), &bufferPos);
                     d->m_dataPosition = align(d->m_dataPosition, ei.alignment());
+                    // copy data chunk
                     memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, ei.size);
                     bufferPos += ei.size;
                     d->m_dataPosition += ei.size;
                 }
-            } else {
-                // the value of ei.size has special meaning
-                ArrayLengthField al;
-                if (ei.size == Private::ElementInfo::ArrayLengthField) {
-                    // start of an array
-                    // reserve space for the array length prefix
+                break;
+            case Private::ElementInfo::ArrayLengthField: {
+                    //   start of an array
+                    // alignment padding before length field in output
                     zeroPad(buffer, ei.alignment(), &bufferPos);
+                    // reserve length field
+                    ArrayLengthField al;
                     al.lengthFieldPosition = bufferPos;
                     bufferPos += sizeof(uint32);
-                    // array data starts aligned to the first array element
+                    // alignment padding before first array element in output
                     zeroPad(buffer, d->m_elements[i + 1].alignment(), &bufferPos);
+                    // array data starts at the first array element position
                     al.dataStartPosition = bufferPos;
                     lengthFieldStack.push_back(al);
-                } else if (ei.size == Private::ElementInfo::ArrayLengthEndMark) {
-                    // end of an array - just put the now known array length in front of the array
-                    al = lengthFieldStack.back();
+                }
+                break;
+            case Private::ElementInfo::ArrayLengthEndMark: {
+                    //   end of an array
+                    // just put the now known array length in front of the array
+                    const ArrayLengthField al = lengthFieldStack.back();
                     const uint32 arrayLength = bufferPos - al.dataStartPosition;
                     if (arrayLength > s_specMaxArrayLength) {
                         d->m_error.setCode(Error::ArrayOrDictTooLong);
@@ -2164,7 +2177,9 @@ void Arguments::Writer::finishInternal()
                     }
                     basic::writeUint32(buffer + al.lengthFieldPosition, arrayLength);
                     lengthFieldStack.pop_back();
-                } else { // ei.size == Private::ElementInfo::VariantSignature
+                }
+                break;
+            case Private::ElementInfo::VariantSignature: {
                     // fill in signature (should already include trailing null)
                     cstring signature = d->m_variantSignatures[variantSignatureIndex++];
                     buffer[bufferPos++] = signature.length;
@@ -2172,6 +2187,7 @@ void Arguments::Writer::finishInternal()
                     bufferPos += signature.length + 1;
                     allocCaches.writerSignatures.free(signature.ptr);
                 }
+                break;
             }
         }
 
@@ -2183,7 +2199,7 @@ void Arguments::Writer::finishInternal()
         if (success) {
             assert(variantSignatureIndex == d->m_variantSignatures.size());
             assert(lengthFieldStack.empty());
-            // prevent double delete of signatures
+            // prevent double deletionn of signatures by the destructor
             d->m_aggregateStack.clear();
             d->m_variantSignatures.clear();
 
