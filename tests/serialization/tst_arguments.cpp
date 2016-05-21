@@ -64,6 +64,254 @@ static bool stringsEqual(cstring s1, cstring s2)
     return chunksEqual(chunk(s1.ptr, s1.length), chunk(s2.ptr, s2.length));
 }
 
+// This class does:
+// 1) iterates over the full Arguments with m_reader
+// 2) skips whole aggregates at and below nesting level m_skipAggregatesFromLevel with m_skippingReader
+// 3) skips nil arrays at and below nil array nesting level m_skipNilArraysFromLevel with m_skippingReader
+// It even skips aggregates inside nil arrays as 2) + 3) imply.
+// It checks:
+// a) where nothing is skipped that the aggregate structure and data read is the same
+class SkipChecker
+{
+public:
+    SkipChecker(Arguments::Reader *reader, Arguments::Reader *skippingReader,
+                int skipAggregatesFromLevel, int skipNilArraysFromLevel)
+       : m_nestingLevel(0),
+         m_nilArrayNesting(0),
+         m_calledNextOnCurrentNilArray(true), // intentionally "wrong" value to tease out errors
+         m_skipAggregatesFromLevel(skipAggregatesFromLevel),
+         m_skipNilArraysFromLevel(skipNilArraysFromLevel),
+         m_reader(reader),
+         m_skippingReader(skippingReader)
+    {}
+
+    template<typename F>
+    void readAndCompare(F readFunc)
+    {
+        Arguments::IoState rState = m_reader->state();
+        auto rval = (*m_reader.*readFunc)();
+        if (m_nestingLevel < m_skipAggregatesFromLevel && m_nilArrayNesting < m_skipNilArraysFromLevel) {
+            Arguments::IoState sState = m_skippingReader->state();
+            TEST(rState == sState);
+            auto sval = (*m_skippingReader.*readFunc)();
+            if (!m_nilArrayNesting) {
+                TEST(myEqual(rval, sval));
+            }
+        }
+    }
+
+    template<typename F, typename G>
+    void beginAggregate(F beginFunc, G skipFunc)
+    {
+        (*m_reader.*beginFunc)();
+        m_nestingLevel++;
+
+        if (m_nilArrayNesting < m_skipNilArraysFromLevel) {
+            if (m_nestingLevel < m_skipAggregatesFromLevel) {
+                (*m_skippingReader.*beginFunc)();
+            } else if (m_nestingLevel == m_skipAggregatesFromLevel) {
+                (*m_skippingReader.*skipFunc)();
+            }
+        }
+    }
+
+    template<typename F, typename G>
+    void beginArrayAggregate(F beginFunc, G skipFunc)
+    {
+        const bool hasData = (*m_reader.*beginFunc)(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        m_nestingLevel++;
+        m_nilArrayNesting += hasData ? 0 : 1;
+
+        if (m_nestingLevel > m_skipAggregatesFromLevel || m_nilArrayNesting > m_skipNilArraysFromLevel) {
+            // we're already skipping, do nothing
+        } else if (m_nestingLevel == m_skipAggregatesFromLevel) {
+            (*m_skippingReader.*skipFunc)();
+        } else if (m_nilArrayNesting == m_skipNilArraysFromLevel) {
+            (*m_skippingReader.*beginFunc)(Arguments::Reader::SkipIfEmpty);
+            // it's not necessary to track nesting levels for this because next must be called only
+            // exactly once and directly after begin, for which a simple bool is sufficient
+            m_calledNextOnCurrentNilArray = false;
+        } else {
+            (*m_skippingReader.*beginFunc)(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        }
+    }
+
+    template<typename F>
+    void nextArrayEntry(F nextFunc)
+    {
+        (*m_reader.*nextFunc)();
+        // when skipping a nil array, the sequence is beginArray(), nexArrayEntry(), endArray(),
+        // so still call next*Entry() once when skipping the current nil array
+
+        if (m_nestingLevel < m_skipAggregatesFromLevel) {
+            if (m_nilArrayNesting < m_skipNilArraysFromLevel) {
+                (*m_skippingReader.*nextFunc)();
+            } else if (m_nilArrayNesting == m_skipNilArraysFromLevel && !m_calledNextOnCurrentNilArray) {
+                // when skipping a nil array, the sequence is beginArray(), nexArrayEntry(), endArray(),
+                // so still call next*Entry() once when skipping the current nil array
+                m_calledNextOnCurrentNilArray = true;
+                (*m_skippingReader.*nextFunc)();
+            }
+        }
+    }
+
+    template<typename F>
+    void endAggregate(F endFunc, bool isArrayType)
+    {
+        (*m_reader.*endFunc)();
+
+        // when skipping a nil array: do the last part of the beginArray(), nextArrayEntry(), endArray() sequence
+        // when using skip*(): do not call end() on that level, skip*() moves right past the aggregate
+        if (m_nestingLevel < m_skipAggregatesFromLevel &&
+            (m_nilArrayNesting < m_skipNilArraysFromLevel ||
+             (isArrayType && m_nilArrayNesting == m_skipNilArraysFromLevel))) {
+            (*m_skippingReader.*endFunc)();
+        } else {
+            // we've already skipped the current aggregate
+        }
+
+        m_nestingLevel--;
+        if (isArrayType && m_nilArrayNesting) {
+            m_nilArrayNesting--;
+        }
+    }
+
+    int m_nestingLevel;
+    int m_nilArrayNesting;
+    bool m_calledNextOnCurrentNilArray;
+    const int m_skipAggregatesFromLevel;
+    const int m_skipNilArraysFromLevel;
+
+private:
+    template<typename T> bool myEqual(const T &a, const T &b) { return a == b; }
+    bool myEqua(const chunk &a, const chunk &b) { return chunksEqual(a, b); }
+    bool myEqual(const cstring &a, const cstring &b) { return stringsEqual(a, b); }
+
+    Arguments::Reader *m_reader;
+    Arguments::Reader *m_skippingReader;
+};
+
+static void testReadWithSkip(const Arguments &arg, bool debugPrint)
+{
+    // it would be even better to decide when to skip more "randomly", but given that it doesn't make
+    // much difference in the implementation, this should do.
+    // loop over when to skip aggregates voluntarily (on "skipper")
+    for (int aggregateSkipLevel = 1 /* 1 orig, 15 = H4X disabled*/; aggregateSkipLevel < 16;
+         aggregateSkipLevel++) {
+        // loop over when to skip empty aka nil arrays  - on "reader", which:
+        // - cross checks aggregate skipping vs. skipping nil arrays
+        // - is also the primary test for nil arrays
+        for (int nilArraySkipLevel = 1; nilArraySkipLevel < 8; nilArraySkipLevel++) {
+            // loop over *how* to skip empty aka nil arrays,
+            // beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty) or skipArray()
+
+            Arguments::Reader reader(arg);
+            Arguments::Reader skippingReader(arg);
+            SkipChecker checker(&reader, &skippingReader, aggregateSkipLevel, nilArraySkipLevel);
+
+            bool isDone = false;
+
+            while (!isDone) {
+                TEST(reader.state() != Arguments::InvalidData);
+                TEST(skippingReader.state() != Arguments::InvalidData);
+
+                if (debugPrint) {
+                    std::cerr << "Reader state: " << reader.stateString().ptr << '\n';
+                    std::cerr << "Skipping reader state: " << skippingReader.stateString().ptr << '\n';
+                }
+
+                switch(reader.state()) {
+                case Arguments::Finished:
+                    TEST(checker.m_nestingLevel == 0);
+                    TEST(checker.m_nilArrayNesting == 0);
+                    isDone = true;
+                    break;
+                case Arguments::BeginStruct:
+                    //std::cerr << "Beginning struct\n";
+                    checker.beginAggregate(&Arguments::Reader::beginStruct, &Arguments::Reader::skipStruct);
+                    break;
+                case Arguments::EndStruct:
+                    checker.endAggregate(&Arguments::Reader::endStruct, false);
+                    break;
+                case Arguments::BeginVariant:
+                    //std::cerr << "Beginning variant\n";
+                    checker.beginAggregate(&Arguments::Reader::beginVariant, &Arguments::Reader::skipVariant);
+                    break;
+                case Arguments::EndVariant:
+                    checker.endAggregate(&Arguments::Reader::endVariant, false);
+                    break;
+                case Arguments::BeginArray:
+                    checker.beginArrayAggregate(&Arguments::Reader::beginArray, &Arguments::Reader::skipArray);
+                    break;
+                case Arguments::NextArrayEntry:
+                    checker.nextArrayEntry(&Arguments::Reader::nextArrayEntry);
+                    break;
+                case Arguments::EndArray:
+                    checker.endAggregate(&Arguments::Reader::endArray, true);
+                    break;
+                case Arguments::BeginDict:
+                    checker.beginArrayAggregate(&Arguments::Reader::beginDict, &Arguments::Reader::skipDict);
+                    break;
+                case Arguments::NextDictEntry:
+                    checker.nextArrayEntry(&Arguments::Reader::nextDictEntry);
+                    break;
+                case Arguments::EndDict:
+                    checker.endAggregate(&Arguments::Reader::endDict, true);
+                    break;
+                case Arguments::Byte:
+                    checker.readAndCompare(&Arguments::Reader::readByte);
+                    break;
+                case Arguments::Boolean:
+                    checker.readAndCompare(&Arguments::Reader::readBoolean);
+                    break;
+                case Arguments::Int16:
+                    checker.readAndCompare(&Arguments::Reader::readInt16);
+                    break;
+                case Arguments::Uint16:
+                    checker.readAndCompare(&Arguments::Reader::readUint16);
+                    break;
+                case Arguments::Int32:
+                    checker.readAndCompare(&Arguments::Reader::readInt32);
+                    break;
+                case Arguments::Uint32:
+                    checker.readAndCompare(&Arguments::Reader::readUint32);
+                    break;
+                case Arguments::Int64:
+                    checker.readAndCompare(&Arguments::Reader::readInt64);
+                    break;
+                case Arguments::Uint64:
+                    checker.readAndCompare(&Arguments::Reader::readUint64);
+                    break;
+                case Arguments::Double:
+                    checker.readAndCompare(&Arguments::Reader::readDouble);
+                    break;
+                case Arguments::String:
+                    checker.readAndCompare(&Arguments::Reader::readString);
+                    break;
+                case Arguments::ObjectPath:
+                    checker.readAndCompare(&Arguments::Reader::readObjectPath);
+                    break;
+                case Arguments::Signature:
+                    checker.readAndCompare(&Arguments::Reader::readSignature);
+                    break;
+                case Arguments::UnixFd:
+                    checker.readAndCompare(&Arguments::Reader::readUnixFd);
+                    break;
+
+                case Arguments::NeedMoreData:
+                    // ### would be nice to test this as well
+                default:
+                    TEST(false);
+                    break;
+                }
+            }
+
+            TEST(reader.state() == Arguments::Finished);
+            TEST(skippingReader.state() == Arguments::Finished);
+        }
+    }
+}
+
 static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtArrayStart,
                                uint32 dataIncrement, bool debugPrint)
 {
@@ -326,11 +574,13 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextE
 
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
-    uint32 maxIncrement = arg.data().length;
+    const uint32 maxIncrement = arg.data().length;
     for (uint32 i = 1; i <= maxIncrement; i++) {
         doRoundtripWithCopyAssignEtc(arg, false, i, debugPrint);
         doRoundtripWithCopyAssignEtc(arg, true, i, debugPrint);
     }
+
+    testReadWithSkip(arg, debugPrint);
 }
 
 
@@ -1051,6 +1301,11 @@ void test_primitiveArray()
                         TEST(checkValue(&reader, otherType, &otherValue));
                         TEST(reader.state() == Arguments::Finished);
                     }
+
+                    // the data generated here nicely stresses the empty array skipping code
+                    if (i == 0 && arraySize < 100) {
+                        testReadWithSkip(arg, false);
+                    }
                 }
             }
         }
@@ -1080,6 +1335,222 @@ void test_signatureLengths()
     }
 }
 
+void test_emptyArrayAndDict()
+{
+    // Arrays
+
+    {
+        Arguments::Writer writer;
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(0);
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(0);
+        writer.endArray();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        testReadWithSkip(arg, false); //  doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.beginStruct();
+        writer.writeByte(0);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(0);
+        writer.endArray();
+        writer.endStruct();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.writeUint32(987654321);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.beginStruct();
+        writer.writeDouble(0);
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(0);
+        writer.endArray();
+        writer.endStruct();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.writeString(cstring("xy"));
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.beginStruct();
+        writer.writeUint32(12345678);
+        //It is implicitly clear that an array inside a nil array is also nil
+        //writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        //TODO add a test for writing >1 element in nested empty array - I've tried that and it fails
+        //     like it should, but it needs a proper standalone test
+        writer.beginArray();
+        writer.writeByte(0);
+        writer.endArray();
+        writer.writeByte(12);
+        writer.endStruct();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.writeString(cstring("xy"));
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.beginStruct();
+        writer.writeByte(123);
+        writer.beginVariant();
+        writer.endVariant();
+        writer.endStruct();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        for (int i = 0; i < 8; i++) {
+            Arguments::Writer writer;
+            writer.beginStruct();
+                writer.writeByte(123);
+                writer.beginArray(i ? Arguments::Writer::NonEmptyArray
+                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+                for (int j = 0; j < std::max(i, 1); j++) {
+                    writer.nextArrayEntry();
+                    writer.writeUint16(52345);
+                }
+                writer.endArray();
+                writer.writeByte(123);
+            writer.endStruct();
+            TEST(writer.state() != Arguments::InvalidData);
+            Arguments arg = writer.finish();
+            TEST(writer.state() == Arguments::Finished);
+            doRoundtrip(arg, false);
+        }
+    }
+    {
+        for (int i = 0; i <= 32; i++) {
+            Arguments::Writer writer;
+            for (int j = 0; j <= i; j++) {
+                writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+                if (j == 32) {
+                    TEST(writer.state() == Arguments::InvalidData);
+                }
+                writer.nextArrayEntry();
+            }
+            if (i == 32) {
+                TEST(writer.state() == Arguments::InvalidData);
+                break;
+            }
+            writer.writeUint16(52345);
+            for (int j = 0; j <= i; j++) {
+                writer.endArray();
+            }
+            TEST(writer.state() != Arguments::InvalidData);
+            Arguments arg = writer.finish();
+            TEST(writer.state() == Arguments::Finished);
+            doRoundtrip(arg, false);
+        }
+    }
+
+    // Dicts
+
+    {
+        Arguments::Writer writer;
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(0);
+        writer.writeString(cstring("a"));
+        writer.endDict();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeString(cstring("a"));
+        writer.beginVariant();
+        writer.endVariant();
+        writer.endDict();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeString(cstring("a"));
+        writer.beginVariant();
+        writer.endVariant();
+        TEST(writer.state() != Arguments::InvalidData);
+        writer.nextDictEntry();
+        TEST(writer.state() == Arguments::InvalidData);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeString(cstring("a"));
+        writer.beginVariant();
+        TEST(writer.state() != Arguments::InvalidData);
+        writer.writeByte(0);
+        // variants in nil arrays may contain data but it will be discarded, i.e. there will only be an
+        // empty variant in the output
+        writer.endVariant();
+        writer.endDict();
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        for (int i = 0; i <= 32; i++) {
+            Arguments::Writer writer;
+            for (int j = 0; j <= i; j++) {
+                writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+                if (j == 32) {
+                    TEST(writer.state() == Arguments::InvalidData);
+                }
+                writer.nextDictEntry();
+                writer.writeUint16(12345);
+            }
+            if (i == 32) {
+                TEST(writer.state() == Arguments::InvalidData);
+                break;
+            }
+            writer.writeUint16(52345);
+            for (int j = 0; j <= i; j++) {
+                writer.endDict();
+            }
+            TEST(writer.state() != Arguments::InvalidData);
+            Arguments arg = writer.finish();
+            TEST(writer.state() == Arguments::Finished);
+            doRoundtrip(arg, false);
+        }
+    }
+
+}
+
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
 //       length and long/short type signature, to make sure that the signature is written but not
 //       any data if the array is zero-length.
@@ -1102,6 +1573,8 @@ int main(int, char *[])
     test_realMessage();
     test_primitiveArray();
     test_signatureLengths();
+    test_emptyArrayAndDict();
+
     // TODO many more misuse tests for Writer and maybe some for Reader
     std::cout << "Passed!\n";
 }

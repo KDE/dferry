@@ -1316,26 +1316,11 @@ void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
     assert(!d->m_aggregateStack.empty());
     if (unlikely(d->m_nilArrayNesting)) {
         if (option == SkipIfEmpty) {
-            // TODO this whole branch seems to be not covered by the tests
-            // need to move d->m_signaturePosition to the end of the array signature *here* or it won't happen
-
-            // fix up nesting and parse position before parsing the array signature
-            if (isDict) {
-                d->m_nesting.endParen();
-                d->m_signaturePosition--; // it was moved ahead by one to skip the '{'
+            skipArrayOrDictSignature(isDict);
+            if (m_state == InvalidData) {
+                return;
             }
-            d->m_nesting.endArray();
-
-            // parse the array signature in order to skip it
-            // barring bugs, must have been too deep nesting inside variants if parsing fails
-            cstring sigTail(d->m_signature.ptr + d->m_signaturePosition,
-                            d->m_signature.length - d->m_signaturePosition);
-            VALID_IF(parseSingleCompleteType(&sigTail, &d->m_nesting), Error::MalformedMessageData);
-            // TODO tests don't seem to cover the next line - is it really correct and is
-            // d->m_signaturePosition not overwritten (to the correct value) ?
-            d->m_signaturePosition = d->m_signature.length - sigTail.length - 1;
-
-            // un-fix up nesting
+            // open them again so the end-of-array handling code can close them again...
             d->m_nesting.beginArray();
             if (isDict) {
                 d->m_nesting.beginParen();
@@ -1343,6 +1328,34 @@ void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
         }
     }
     m_state = isDict ? NextDictEntry : NextArrayEntry;
+}
+
+void Arguments::Reader::skipArrayOrDictSignature(bool isDict)
+{
+    // TODO this whole branch seems to be not covered by the tests
+    // need to move d->m_signaturePosition to the end of the array signature *here* or it won't happen
+
+    // fix up nesting and parse position before parsing the array signature
+    if (isDict) {
+        d->m_nesting.endParen();
+        // the Reader ad-hoc parsing code moved at ahead by one to skip the '{', but parseSingleCompleteType()
+        // needs to see the full dict signature, so fix it up
+        d->m_signaturePosition--;
+    }
+    d->m_nesting.endArray();
+
+    // parse the full (i.e. starting with the 'a') array (or dict) signature in order to skip it -
+    // barring bugs, must have been too deep nesting inside variants if parsing fails
+    cstring remainingSig(d->m_signature.ptr + d->m_signaturePosition,
+                         d->m_signature.length - d->m_signaturePosition);
+    VALID_IF(parseSingleCompleteType(&remainingSig, &d->m_nesting), Error::MalformedMessageData);
+    d->m_signaturePosition = d->m_signature.length - remainingSig.length;
+
+    // fix up signature position again - parseSingleCompleteType() and the ad-hoc parsing code in Reader
+    // have different conventions about where they expect and where they leave m_signaturePosition
+    if (isDict) {
+        d->m_signaturePosition--;
+    }
 }
 
 bool Arguments::Reader::beginArray(EmptyArrayOption option)
@@ -1397,13 +1410,45 @@ bool Arguments::Reader::nextArrayOrDictEntry(bool isDict)
     return false;
 }
 
+void Arguments::Reader::skipArrayOrDict(bool isDict)
+{
+    assert(isDict ? (m_state == BeginDict) : (m_state == BeginArray));
+
+    // fast-forward the signature position
+    skipArrayOrDictSignature(isDict);
+    if (!isDict) {
+        d->m_signaturePosition--;
+    }
+
+    // fast-forward the data position
+    assert(!d->m_aggregateStack.empty());
+    Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+    assert(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray));
+    d->m_dataPosition = aggregateInfo.arr.dataEnd;
+
+    // end the dict / array and proceed with next element
+    d->m_aggregateStack.pop_back();
+    advanceState();
+}
+
 bool Arguments::Reader::nextArrayEntry()
 {
     if (m_state == NextArrayEntry) {
         return nextArrayOrDictEntry(false);
     } else {
         m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
         return false;
+    }
+}
+
+void Arguments::Reader::skipArray()
+{
+    if (unlikely(m_state != BeginArray)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+    } else {
+        skipArrayOrDict(false);
     }
 }
 
@@ -1501,6 +1546,16 @@ bool Arguments::Reader::nextDictEntry()
     }
 }
 
+void Arguments::Reader::skipDict()
+{
+    if (unlikely(m_state != BeginDict)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+    } else {
+        skipArrayOrDict(true);
+    }
+}
+
 void Arguments::Reader::endDict()
 {
     advanceStateFrom(EndDict);
@@ -1509,6 +1564,16 @@ void Arguments::Reader::endDict()
 void Arguments::Reader::beginStruct()
 {
     advanceStateFrom(BeginStruct);
+}
+
+void Arguments::Reader::skipStruct()
+{
+    if (unlikely(m_state != BeginStruct)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+    } else {
+        skipCurrentAggregate();
+    }
 }
 
 void Arguments::Reader::endStruct()
@@ -1521,9 +1586,133 @@ void Arguments::Reader::beginVariant()
     advanceStateFrom(BeginVariant);
 }
 
+void Arguments::Reader::skipVariant()
+{
+    if (unlikely(m_state != BeginVariant)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+    } else {
+        skipCurrentAggregate();
+    }
+}
+
 void Arguments::Reader::endVariant()
 {
     advanceStateFrom(EndVariant);
+}
+
+void Arguments::Reader::skipCurrentAggregate()
+{
+    // ### the serialized format has no quick way to do this and it makes little sense to implement
+    //     a "fast path" just to do this slow thing a little faster, so just use public API!
+
+    assert(m_state == BeginStruct || m_state == BeginVariant);
+#ifndef NDEBUG
+    Arguments::IoState stateOnEntry = m_state;
+#endif
+    int nestingLevel = 0;
+    bool isDone = false;
+
+    while (!isDone) {
+        switch(state()) {
+        case Arguments::Finished:
+            // We should never get here because we should have already quit when leaving the main aggregate
+            // that this was called on, i.e. in state EndStruct / EndVariant, which come before Finished
+            assert(false);
+            isDone = true;
+            break;
+        case Arguments::BeginStruct:
+            beginStruct();
+            nestingLevel++;
+            break;
+        case Arguments::EndStruct:
+            endStruct();
+            nestingLevel--;
+            if (!nestingLevel) {
+                assert(stateOnEntry == BeginStruct);
+                isDone = true;
+            }
+            break;
+        case Arguments::BeginVariant:
+            beginVariant();
+            nestingLevel++;
+            break;
+        case Arguments::EndVariant:
+            endVariant();
+            nestingLevel--;
+            if (!nestingLevel) {
+                assert(stateOnEntry == BeginVariant);
+                isDone = true;
+            }
+            break;
+        case Arguments::BeginArray:
+            skipArray();
+            break;
+        case Arguments::NextArrayEntry:
+            assert(false); // can't happen because we skip all arrays
+            break;
+        case Arguments::EndArray:
+            assert(false); // can't happen because we skip all arrays
+            break;
+        case Arguments::BeginDict:
+            skipDict();
+            break;
+        case Arguments::NextDictEntry:
+            assert(false); // can't happen because we skip all dicts
+            break;
+        case Arguments::EndDict:
+            assert(false); // can't happen because we skip all dicts
+            break;
+        case Arguments::Boolean:
+            readBoolean();
+            break;
+        case Arguments::Byte:
+            readByte();
+            break;
+        case Arguments::Int16:
+            readInt16();
+            break;
+        case Arguments::Uint16:
+            readUint16();
+            break;
+        case Arguments::Int32:
+            readInt32();
+            break;
+        case Arguments::Uint32:
+            readUint32();
+            break;
+        case Arguments::Int64:
+            readInt64();
+            break;
+        case Arguments::Uint64:
+            readUint64();
+            break;
+        case Arguments::Double:
+            readDouble();
+            break;
+        case Arguments::String:
+            readString();
+            break;
+        case Arguments::ObjectPath:
+            readObjectPath();
+            break;
+        case Arguments::Signature:
+            readSignature();
+            break;
+        case Arguments::UnixFd:
+            // TODO
+            break;
+        case Arguments::NeedMoreData:
+            // TODO handle this properly: rewind the state to before the aggregate - or get fancy and support
+            // resuming, but that is going to get really ugly
+        default:
+            m_state = InvalidData;
+            // TODO m_error =
+            break;
+        case Arguments::InvalidData:
+            break;
+        }
+    }
 }
 
 std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
