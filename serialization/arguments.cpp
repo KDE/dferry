@@ -1332,9 +1332,6 @@ void Arguments::Reader::beginArrayOrDict(bool isDict, EmptyArrayOption option)
 
 void Arguments::Reader::skipArrayOrDictSignature(bool isDict)
 {
-    // TODO this whole branch seems to be not covered by the tests
-    // need to move d->m_signaturePosition to the end of the array signature *here* or it won't happen
-
     // fix up nesting and parse position before parsing the array signature
     if (isDict) {
         d->m_nesting.endParen();
