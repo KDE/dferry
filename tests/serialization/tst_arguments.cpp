@@ -1359,7 +1359,7 @@ void test_emptyArrayAndDict()
         TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
-        testReadWithSkip(arg, false); //  doRoundtrip(arg, false);
+        doRoundtrip(arg, false);
     }
     {
         Arguments::Writer writer;
