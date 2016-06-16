@@ -30,6 +30,8 @@
 #include "error.h"
 #include "iconnectionclient.h"
 
+#include <type_traits>
+
 class ICompletionClient;
 
 class VarHeaderStorage {
@@ -69,12 +71,7 @@ public:
     static const int s_intHeaderCount = 2;
 
     // Uninitialized storage for strings, to avoid con/destructing strings we'd never touch otherwise.
-    // Since unsigned char * is incompatible with char *, it gives better compiler messages than char if
-    // there is a problem; std::string deals with char * a lot.
-
-    // the awkward position of alignas() is the only one that works with both g++ and clang++...
-    unsigned char m_stringStorage alignas(std::string)
-        [sizeof(std::string[VarHeaderStorage::s_stringHeaderCount])];
+    std::aligned_storage<sizeof(std::string)>::type m_stringStorage[VarHeaderStorage::s_stringHeaderCount];
     uint32 m_intHeaders[s_intHeaderCount];
     uint32 m_headerPresenceBitmap = 0;
 };
