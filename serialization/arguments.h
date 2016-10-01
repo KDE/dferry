@@ -216,6 +216,7 @@ public:
         void endVariant(); // like endArray()
 
         std::vector<IoState> aggregateStack() const; // the aggregates the reader is currently in
+        IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
         // least return garbage.
@@ -316,6 +317,7 @@ public:
         Arguments finish();
 
         std::vector<IoState> aggregateStack() const; // the aggregates the writer is currently in
+        IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
 
         void writeByte(byte b);
         void writeBoolean(bool b);

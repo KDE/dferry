@@ -1746,6 +1746,14 @@ std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
     return ret;
 }
 
+Arguments::IoState Arguments::Reader::currentAggregate() const
+{
+    if (d->m_aggregateStack.empty()) {
+        return NotStarted;
+    }
+    return d->m_aggregateStack.back().aggregateType;
+}
+
 Arguments::Writer::Writer()
    : d(new(allocCaches.writerPrivate.allocate()) Private),
      m_state(AnyData)
@@ -2446,6 +2454,14 @@ std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
         ret.push_back(aggregate.aggregateType);
     }
     return ret;
+}
+
+Arguments::IoState Arguments::Writer::currentAggregate() const
+{
+    if (d->m_aggregateStack.empty()) {
+        return NotStarted;
+    }
+    return d->m_aggregateStack.back().aggregateType;
 }
 
 void Arguments::Writer::writeBoolean(bool b)
