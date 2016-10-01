@@ -32,7 +32,6 @@
 
 class Arguments;
 class Error;
-class IConnection;
 class MessagePrivate;
 
 class DFERRY_EXPORT Message
@@ -144,8 +143,10 @@ public:
     void setSerial(uint32 serial);
     uint32 serial() const;
 
+#ifndef DFERRY_SERDES_ONLY
     bool isReceiving() const;
     bool isSending() const;
+#endif
 
 private:
     friend class MessagePrivate;

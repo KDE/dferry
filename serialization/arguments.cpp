@@ -856,18 +856,6 @@ Arguments::Reader::Reader(const Message &msg)
     beginRead();
 }
 
-void Arguments::Reader::beginRead()
-{
-    VALID_IF(d->m_args, Error::NotAttachedToArguments);
-    d->m_signature = d->m_args->d->m_signature;
-    d->m_data = d->m_args->d->m_data;
-    // as a slightly hacky optimizaton, we allow empty Argumentss to allocate no space for d->m_buffer.
-    if (d->m_signature.length) {
-        VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
-    }
-    advanceState();
-}
-
 Arguments::Reader::Reader(Reader &&other)
    : d(other.d),
      m_state(other.m_state),
@@ -918,6 +906,18 @@ Arguments::Reader::~Reader()
 {
     delete d;
     d = 0;
+}
+
+void Arguments::Reader::beginRead()
+{
+    VALID_IF(d->m_args, Error::NotAttachedToArguments);
+    d->m_signature = d->m_args->d->m_signature;
+    d->m_data = d->m_args->d->m_data;
+    // as a slightly hacky optimizaton, we allow empty Argumentss to allocate no space for d->m_buffer.
+    if (d->m_signature.length) {
+        VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
+    }
+    advanceState();
 }
 
 bool Arguments::Reader::isValid() const

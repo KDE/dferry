@@ -37,6 +37,7 @@
 
 class AuthNegotiator;
 class HelloReceiver;
+class IConnection;
 class IMessageReceiver;
 class ClientConnectedHandler;
 

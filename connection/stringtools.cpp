@@ -25,8 +25,6 @@
 
 #include <sstream>
 
-#include "sha1.c"
-
 using namespace std;
 
 vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
@@ -41,6 +39,9 @@ vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
     }
     return ret;
 }
+
+#ifndef DFERRY_SERDES_ONLY
+#include "sha1.c"
 
 string hexEncode(const string &s)
 {
@@ -61,3 +62,4 @@ string sha1Hex(const string &s)
     string shaResult(reinterpret_cast<char *>(sha1_result(&sha)), 20);
     return hexEncode(shaResult);
 }
+#endif

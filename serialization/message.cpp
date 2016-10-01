@@ -25,10 +25,13 @@
 #include "message_p.h"
 
 #include "basictypeio.h"
-#include "icompletionclient.h"
-#include "iconnection.h"
 #include "malloccache.h"
 #include "stringtools.h"
+
+#ifndef DFERRY_SERDES_ONLY
+#include "icompletionclient.h"
+#include "iconnection.h"
+#endif
 
 #include <cassert>
 #include <cstring>
@@ -234,8 +237,7 @@ MessagePrivate::MessagePrivate(Message *parent)
      m_headerLength(0),
      m_headerPadding(0),
      m_bodyLength(0),
-     m_serial(0),
-     m_completionClient(nullptr)
+     m_serial(0)
 {}
 
 MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
@@ -253,8 +255,7 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
      m_serial(other.m_serial),
      m_error(other.m_error),
      m_mainArguments(other.m_mainArguments),
-     m_varHeaders(other.m_varHeaders),
-     m_completionClient(nullptr)
+     m_varHeaders(other.m_varHeaders)
 {
     if (other.m_buffer.ptr) {
         // we don't keep pointers into the buffer (only indexes), right? right?
@@ -643,6 +644,23 @@ void Message::setExpectsReply(bool expectsReply)
     }
 }
 
+void Message::setArguments(Arguments arguments)
+{
+    d->m_dirty = true;
+    d->m_error = arguments.error();
+    d->m_mainArguments = std::move(arguments);
+}
+
+const Arguments &Message::arguments() const
+{
+    return d->m_mainArguments;
+}
+
+static const uint32 s_properFixedHeaderLength = 12;
+static const uint32 s_extendedFixedHeaderLength = 16;
+static const uint32 s_maxMessageLength = 134217728;
+
+#ifndef DFERRY_SERDES_ONLY
 void MessagePrivate::receive(IConnection *conn)
 {
     if (m_state > LastSteadyState) {
@@ -666,7 +684,7 @@ void MessagePrivate::send(IConnection *conn)
     if (!m_buffer.length && !serialize()) {
         std::cerr << "MessagePrivate::send() Error A.\n";
         // m_error.setCode();
-        // notifyCompletionClient(); would call into Transceiver, but it's easer for Transceiver to handle
+        // notifyCompletionClient(); would call into Transceiver, but it's easier for Transceiver to handle
         //                           the error from non-callback code, directly in the caller of send().
         return;
     }
@@ -690,54 +708,11 @@ void MessagePrivate::setCompletionClient(ICompletionClient *client)
     m_completionClient = client;
 }
 
-void Message::setArguments(Arguments arguments)
+void MessagePrivate::notifyCompletionClient()
 {
-    d->m_dirty = true;
-    d->m_error = arguments.error();
-    d->m_mainArguments = std::move(arguments);
-}
-
-const Arguments &Message::arguments() const
-{
-    return d->m_mainArguments;
-}
-
-static const uint32 s_properFixedHeaderLength = 12;
-static const uint32 s_extendedFixedHeaderLength = 16;
-static const uint32 s_maxMessageLength = 134217728;
-
-// This does not return bool because full validation of the main arguments would take quite
-// a few cycles. Validating only the header of the message doesn't seem to be worth it.
-void Message::load(const std::vector<byte> &data)
-{
-    if (d->m_state > MessagePrivate::LastSteadyState) {
-        return;
+    if (m_completionClient) {
+        m_completionClient->notifyCompletion(m_message);
     }
-    d->m_headerLength = 0;
-    d->m_bodyLength = 0;
-
-    d->clearBuffer();
-    d->m_buffer.length = data.size();
-    d->m_bufferPos = d->m_buffer.length;
-    d->m_buffer.ptr = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
-    memcpy(d->m_buffer.ptr, &data[0], d->m_buffer.length);
-
-    bool ok = d->m_buffer.length >= s_extendedFixedHeaderLength;
-    ok = ok && d->deserializeFixedHeaders();
-    ok = ok && d->m_buffer.length >= d->m_headerLength;
-    ok = ok && d->deserializeVariableHeaders();
-    ok = ok && d->m_buffer.length == d->m_headerLength + d->m_bodyLength;
-
-    if (!ok) {
-        d->m_state = MessagePrivate::Empty;
-        d->clearBuffer();
-        return;
-    }
-
-    chunk bodyData(d->m_buffer.ptr + d->m_headerLength, d->m_bodyLength);
-    d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
-                                   bodyData, d->m_isByteSwapped);
-    d->m_state = MessagePrivate::Deserialized;
 }
 
 void MessagePrivate::notifyConnectionReadyRead()
@@ -808,23 +783,6 @@ void MessagePrivate::notifyConnectionReadyRead()
     }
 }
 
-std::vector<byte> Message::save()
-{
-    vector<byte> ret;
-    if (d->m_state > MessagePrivate::LastSteadyState) {
-        return ret;
-    }
-    if (!d->m_buffer.length && !d->serialize()) {
-        // TODO report error?
-        return ret;
-    }
-    ret.reserve(d->m_buffer.length);
-    for (uint32 i = 0; i < d->m_buffer.length; i++) {
-        ret.push_back(d->m_buffer.ptr[i]);
-    }
-    return ret;
-}
-
 void MessagePrivate::notifyConnectionReadyWrite()
 {
     if (m_state != Serializing) {
@@ -849,6 +807,58 @@ void MessagePrivate::notifyConnectionReadyWrite()
         }
         m_bufferPos += written;
     }
+}
+#endif // !DFERRY_SERDES_ONLY
+
+std::vector<byte> Message::save()
+{
+    vector<byte> ret;
+    if (d->m_state > MessagePrivate::LastSteadyState) {
+        return ret;
+    }
+    if (!d->m_buffer.length && !d->serialize()) {
+        // TODO report error?
+        return ret;
+    }
+    ret.reserve(d->m_buffer.length);
+    for (uint32 i = 0; i < d->m_buffer.length; i++) {
+        ret.push_back(d->m_buffer.ptr[i]);
+    }
+    return ret;
+}
+
+// This does not return bool because full validation of the main arguments would take quite
+// a few cycles. Validating only the header of the message doesn't seem to be worth it.
+void Message::load(const std::vector<byte> &data)
+{
+    if (d->m_state > MessagePrivate::LastSteadyState) {
+        return;
+    }
+    d->m_headerLength = 0;
+    d->m_bodyLength = 0;
+
+    d->clearBuffer();
+    d->m_buffer.length = data.size();
+    d->m_bufferPos = d->m_buffer.length;
+    d->m_buffer.ptr = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
+    memcpy(d->m_buffer.ptr, &data[0], d->m_buffer.length);
+
+    bool ok = d->m_buffer.length >= s_extendedFixedHeaderLength;
+    ok = ok && d->deserializeFixedHeaders();
+    ok = ok && d->m_buffer.length >= d->m_headerLength;
+    ok = ok && d->deserializeVariableHeaders();
+    ok = ok && d->m_buffer.length == d->m_headerLength + d->m_bodyLength;
+
+    if (!ok) {
+        d->m_state = MessagePrivate::Empty;
+        d->clearBuffer();
+        return;
+    }
+
+    chunk bodyData(d->m_buffer.ptr + d->m_headerLength, d->m_bodyLength);
+    d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
+                                   bodyData, d->m_isByteSwapped);
+    d->m_state = MessagePrivate::Deserialized;
 }
 
 bool MessagePrivate::requiredHeadersPresent()
@@ -1201,11 +1211,4 @@ void MessagePrivate::reserveBuffer(uint32 newLen)
     }
 
     m_buffer.length = newLen;
-}
-
-void MessagePrivate::notifyCompletionClient()
-{
-    if (m_completionClient) {
-        m_completionClient->notifyCompletion(m_message);
-    }
 }
