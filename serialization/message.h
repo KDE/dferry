@@ -124,9 +124,9 @@ public:
     // These are validated during serialization, not now; the message cannot expected to be in a
     // completely valid state before that anyway. Yes, we could validate some things, but let's just
     // do it all at once.
-    std::string stringHeader(VariableHeader header, bool *isPresent = 0) const;
+    std::string stringHeader(VariableHeader header, bool *isPresent = nullptr) const;
     void setStringHeader(VariableHeader header, const std::string &value);
-    uint32 intHeader(VariableHeader header, bool *isPresent = 0) const;
+    uint32 intHeader(VariableHeader header, bool *isPresent = nullptr) const;
     void setIntHeader(VariableHeader header, uint32 value);
 
     // TODO a method that returns if the message is valid in its current state (flags have valid
