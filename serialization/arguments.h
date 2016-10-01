@@ -158,8 +158,9 @@ public:
         explicit Reader(const Message &msg);
         Reader(Reader &&other);
         void operator=(Reader &&other);
-        Reader(const Reader &other) = delete;
-        void operator=(const Reader &other) = delete;
+        // TODO unit-test copy and assignment
+        Reader(const Reader &other);
+        void operator=(const Reader &other);
 
         ~Reader();
 
@@ -168,7 +169,8 @@ public:
 
         IoState state() const { return m_state; }
         cstring stateString() const;
-         // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
+        // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
+        // WARNING: calling replaceData() invalidates copies (if any) of this Reader
         void replaceData(chunk data);
 
         bool isFinished() const { return m_state == Finished; }

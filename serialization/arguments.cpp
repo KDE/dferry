@@ -889,6 +889,31 @@ void Arguments::Reader::operator=(Reader &&other)
     other.d = 0;
 }
 
+Arguments::Reader::Reader(const Reader &other)
+   : d(nullptr),
+     m_state(other.m_state),
+     m_u(other.m_u)
+{
+    if (other.d) {
+        d = new Private(*other.d);
+    }
+}
+
+void Arguments::Reader::operator=(const Reader &other)
+{
+    if (&other == this) {
+        return;
+    }
+    m_state = other.m_state;
+    m_u = other.m_u;
+    if (d && other.d) {
+        *d = *other.d;
+    } else {
+        Reader temp(other);
+        std::swap(d, temp.d);
+    }
+}
+
 Arguments::Reader::~Reader()
 {
     delete d;
