@@ -964,7 +964,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     }
     reader.beginArray();
 
-    while (reader.nextArrayEntry()) {
+    while (reader.state() == Arguments::BeginStruct) {
         reader.beginStruct();
         const byte headerField = reader.readByte();
         if (headerField < Message::PathHeader || headerField > Message::UnixFdsHeader) {
@@ -1099,7 +1099,6 @@ void MessagePrivate::serializeFixedHeaders()
 
 static void doVarHeaderPrologue(Arguments::Writer *writer, Message::VariableHeader field)
 {
-    writer->nextArrayEntry();
     writer->beginStruct();
     writer->writeByte(byte(field));
     writer->beginVariant();

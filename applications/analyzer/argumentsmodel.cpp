@@ -116,9 +116,6 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = descend(parent, hasData ? "Array" : "Array (no elements, showing just types)");
             emptyNesting += hasData ? 0 : 1;
             break; }
-        case Arguments::NextArrayEntry:
-            reader.nextArrayEntry();
-            break;
         case Arguments::EndArray:
             reader.endArray();
             parent = ascend(parent, model);
@@ -129,9 +126,6 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = descend(parent, hasData ? "Dict" : "Dict (no elements, showing just types)");
             emptyNesting += hasData ? 0 : 1;
             break; }
-        case Arguments::NextDictEntry:
-            reader.nextDictEntry();
-            break;
         case Arguments::EndDict:
             reader.endDict();
             parent = ascend(parent, model);

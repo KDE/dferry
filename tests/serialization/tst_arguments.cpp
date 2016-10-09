@@ -78,7 +78,6 @@ public:
                 int skipAggregatesFromLevel, int skipNilArraysFromLevel)
        : m_nestingLevel(0),
          m_nilArrayNesting(0),
-         m_calledNextOnCurrentNilArray(true), // intentionally "wrong" value to tease out errors
          m_skipAggregatesFromLevel(skipAggregatesFromLevel),
          m_skipNilArraysFromLevel(skipNilArraysFromLevel),
          m_reader(reader),
@@ -128,30 +127,8 @@ public:
             (*m_skippingReader.*skipFunc)();
         } else if (m_nilArrayNesting == m_skipNilArraysFromLevel) {
             (*m_skippingReader.*beginFunc)(Arguments::Reader::SkipIfEmpty);
-            // it's not necessary to track nesting levels for this because next must be called only
-            // exactly once and directly after begin, for which a simple bool is sufficient
-            m_calledNextOnCurrentNilArray = false;
         } else {
             (*m_skippingReader.*beginFunc)(Arguments::Reader::ReadTypesOnlyIfEmpty);
-        }
-    }
-
-    template<typename F>
-    void nextArrayEntry(F nextFunc)
-    {
-        (*m_reader.*nextFunc)();
-        // when skipping a nil array, the sequence is beginArray(), nexArrayEntry(), endArray(),
-        // so still call next*Entry() once when skipping the current nil array
-
-        if (m_nestingLevel < m_skipAggregatesFromLevel) {
-            if (m_nilArrayNesting < m_skipNilArraysFromLevel) {
-                (*m_skippingReader.*nextFunc)();
-            } else if (m_nilArrayNesting == m_skipNilArraysFromLevel && !m_calledNextOnCurrentNilArray) {
-                // when skipping a nil array, the sequence is beginArray(), nexArrayEntry(), endArray(),
-                // so still call next*Entry() once when skipping the current nil array
-                m_calledNextOnCurrentNilArray = true;
-                (*m_skippingReader.*nextFunc)();
-            }
         }
     }
 
@@ -160,7 +137,7 @@ public:
     {
         (*m_reader.*endFunc)();
 
-        // when skipping a nil array: do the last part of the beginArray(), nextArrayEntry(), endArray() sequence
+        // when skipping a nil array: do the last part of the beginArray(), endArray() sequence
         // when using skip*(): do not call end() on that level, skip*() moves right past the aggregate
         if (m_nestingLevel < m_skipAggregatesFromLevel &&
             (m_nilArrayNesting < m_skipNilArraysFromLevel ||
@@ -178,7 +155,6 @@ public:
 
     int m_nestingLevel;
     int m_nilArrayNesting;
-    bool m_calledNextOnCurrentNilArray;
     const int m_skipAggregatesFromLevel;
     const int m_skipNilArraysFromLevel;
 
@@ -243,17 +219,11 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
                 case Arguments::BeginArray:
                     checker.beginArrayAggregate(&Arguments::Reader::beginArray, &Arguments::Reader::skipArray);
                     break;
-                case Arguments::NextArrayEntry:
-                    checker.nextArrayEntry(&Arguments::Reader::nextArrayEntry);
-                    break;
                 case Arguments::EndArray:
                     checker.endAggregate(&Arguments::Reader::endArray, true);
                     break;
                 case Arguments::BeginDict:
                     checker.beginArrayAggregate(&Arguments::Reader::beginDict, &Arguments::Reader::skipDict);
-                    break;
-                case Arguments::NextDictEntry:
-                    checker.nextArrayEntry(&Arguments::Reader::nextDictEntry);
                     break;
                 case Arguments::EndDict:
                     checker.endAggregate(&Arguments::Reader::endDict, true);
@@ -312,8 +282,7 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
     }
 }
 
-static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtArrayStart,
-                               uint32 dataIncrement, bool debugPrint)
+static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, bool debugPrint)
 {
     Arguments::Reader reader(original);
     Arguments::Writer writer;
@@ -322,7 +291,6 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
     chunk shortData;
     bool isDone = false;
     uint32 emptyNesting = 0;
-    bool isFirstEntry = false;
 
     while (!isDone) {
         TEST(writer.state() != Arguments::InvalidData);
@@ -370,42 +338,22 @@ static void doRoundtripForReal(const Arguments &original, bool skipNextEntryAtAr
             writer.endVariant();
             break;
         case Arguments::BeginArray: {
-            isFirstEntry = true;
             const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
             writer.beginArray(hasData ? Arguments::Writer::NonEmptyArray
                                       : Arguments::Writer::WriteTypesOfEmptyArray);
             emptyNesting += hasData ? 0 : 1;
             break; }
-        case Arguments::NextArrayEntry:
-            if (reader.nextArrayEntry()) {
-                if (isFirstEntry && skipNextEntryAtArrayStart) {
-                    isFirstEntry = false;
-                } else {
-                    writer.nextArrayEntry();
-                }
-            }
-            break;
         case Arguments::EndArray:
             reader.endArray();
             writer.endArray();
             emptyNesting = std::max(emptyNesting - 1, 0u);
             break;
         case Arguments::BeginDict: {
-            isFirstEntry = true;
             const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
             writer.beginDict(hasData ? Arguments::Writer::NonEmptyArray
                                      : Arguments::Writer::WriteTypesOfEmptyArray);
             emptyNesting += hasData ? 0 : 1;
             break; }
-        case Arguments::NextDictEntry:
-            if (reader.nextDictEntry()) {
-                if (isFirstEntry && skipNextEntryAtArrayStart) {
-                    isFirstEntry = false;
-                } else {
-                    writer.nextDictEntry();
-                }
-            }
-            break;
         case Arguments::EndDict:
             reader.endDict();
             writer.endDict();
@@ -518,35 +466,34 @@ static void shallowAssign(Arguments *copy, const Arguments &original)
     *copy = Arguments(nullptr, signature, data);
 }
 
-static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextEntryAtArrayStart,
-                                         uint32 dataIncrement, bool debugPrint)
+static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataIncrement, bool debugPrint)
 {
     {
         // just pass through
-        doRoundtripForReal(arg_in, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(arg_in, dataIncrement, debugPrint);
     }
     {
         // shallow copy
         Arguments *shallowDuplicate = shallowCopy(arg_in);
-        doRoundtripForReal(*shallowDuplicate, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(*shallowDuplicate, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
         // assignment from shallow copy
         Arguments shallowAssigned;
         shallowAssign(&shallowAssigned, arg_in);
-        doRoundtripForReal(shallowAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(shallowAssigned, dataIncrement, debugPrint);
     }
     {
         // deep copy
         Arguments original(arg_in);
-        doRoundtripForReal(original, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(original, dataIncrement, debugPrint);
     }
     {
         // move construction from shallow copy
         Arguments *shallowDuplicate = shallowCopy(arg_in);
         Arguments shallowMoveConstructed(std::move(*shallowDuplicate));
-        doRoundtripForReal(shallowMoveConstructed, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(shallowMoveConstructed, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
@@ -554,21 +501,21 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, bool skipNextE
         Arguments *shallowDuplicate = shallowCopy(arg_in);
         Arguments shallowMoveAssigned;
         shallowMoveAssigned = std::move(*shallowDuplicate);
-        doRoundtripForReal(shallowMoveAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(shallowMoveAssigned, dataIncrement, debugPrint);
         delete shallowDuplicate;
     }
     {
         // move construction from deep copy
         Arguments duplicate(arg_in);
         Arguments moveConstructed(std::move(duplicate));
-        doRoundtripForReal(moveConstructed, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(moveConstructed, dataIncrement, debugPrint);
     }
     {
         // move assignment (hopefully, may the compiler optimize this to move-construction?) from deep copy
         Arguments duplicate(arg_in);
         Arguments moveAssigned;
         moveAssigned = std::move(duplicate);
-        doRoundtripForReal(moveAssigned, skipNextEntryAtArrayStart, dataIncrement, debugPrint);
+        doRoundtripForReal(moveAssigned, dataIncrement, debugPrint);
     }
 }
 
@@ -576,8 +523,7 @@ static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
     const uint32 maxIncrement = arg.data().length;
     for (uint32 i = 1; i <= maxIncrement; i++) {
-        doRoundtripWithCopyAssignEtc(arg, false, i, debugPrint);
-        doRoundtripWithCopyAssignEtc(arg, true, i, debugPrint);
+        doRoundtripWithCopyAssignEtc(arg, i, debugPrint);
     }
 
     testReadWithSkip(arg, debugPrint);
@@ -689,7 +635,6 @@ static void test_nesting()
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginArray();
-            writer.nextArrayEntry();
         }
         TEST(writer.state() != Arguments::InvalidData);
         writer.beginArray();
@@ -699,7 +644,6 @@ static void test_nesting()
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict();
-            writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
         TEST(writer.state() != Arguments::InvalidData);
@@ -710,7 +654,6 @@ static void test_nesting()
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict();
-            writer.nextDictEntry();
             writer.writeInt32(i); // key, next nested dict is value
         }
         TEST(writer.state() != Arguments::InvalidData);
@@ -833,30 +776,26 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginArray();
-        writer.writeByte(1); // in Writer, calling nextArrayEntry() after beginArray() is optional
+        writer.writeByte(1);
         writer.endArray();
         TEST(writer.state() != Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginArray();
-        writer.nextArrayEntry();    // optional and may not trigger an error
-        TEST(writer.state() != Arguments::InvalidData);
         writer.endArray(); // wrong, must contain exactly one type
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginArray();
-        writer.nextArrayEntry();
         writer.writeByte(1);
-        writer.writeByte(2);  // wrong, must contain exactly one type
+        writer.writeUint16(2);  // wrong, different from first element
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
-        writer.nextArrayEntry();
         writer.beginVariant();
         writer.endVariant(); // empty variants are okay if and only if inside an empty array
         writer.endArray();
@@ -872,7 +811,6 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginDict();
-        writer.nextDictEntry();
         writer.writeByte(1);
         writer.endDict(); // wrong, a dict must contain exactly two types
         TEST(writer.state() == Arguments::InvalidData);
@@ -888,17 +826,28 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginDict();
-        writer.nextDictEntry();
         writer.writeByte(1);
         writer.writeByte(2);
+        // second key-value pair
         TEST(writer.state() != Arguments::InvalidData);
-        writer.writeByte(3); // wrong, a dict contains only exactly two types
+        writer.writeUint16(3); // wrong, incompatible with first element
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginDict();
-        writer.nextDictEntry();
+        writer.writeByte(1);
+        writer.writeByte(2);
+        // second key-value pair
+        writer.writeByte(3);
+        TEST(writer.state() != Arguments::InvalidData);
+        writer.writeUint16(4); // wrong, incompatible with first element
+        TEST(writer.state() == Arguments::InvalidData);
+    }
+
+    {
+        Arguments::Writer writer;
+        writer.beginDict();
         writer.beginVariant(); // wrong, key type must be basic
         TEST(writer.state() == Arguments::InvalidData);
     }
@@ -991,23 +940,21 @@ static void test_complicated()
                 writer.beginVariant();
                     writer.writeString(cstring("twenty-three"));
                 writer.endVariant();
-            writer.nextDictEntry();
+                // key-value pair 2
                 writer.writeByte(83);
                 writer.beginVariant();
                 writer.writeObjectPath(cstring("/foo/bar/object"));
                 writer.endVariant();
-            writer.nextDictEntry();
+                // key-value pair 3
                 writer.writeByte(234);
                 writer.beginVariant();
                     writer.beginArray();
                         writer.writeUint16(234);
-                    writer.nextArrayEntry();
                         writer.writeUint16(234);
-                    writer.nextArrayEntry();
                         writer.writeUint16(234);
                     writer.endArray();
                 writer.endVariant();
-            writer.nextDictEntry();
+                // key-value pair 4
                 writer.writeByte(25);
                 writer.beginVariant();
                     addSomeVariantStuff(&writer);
@@ -1017,11 +964,8 @@ static void test_complicated()
         writer.writeString("Hello D-Bus!");
         writer.beginArray();
             writer.writeDouble(1.567898);
-        writer.nextArrayEntry();
             writer.writeDouble(1.523428);
-        writer.nextArrayEntry();
             writer.writeDouble(1.621133);
-        writer.nextArrayEntry();
             writer.writeDouble(1.982342);
         writer.endArray();
         TEST(writer.state() != Arguments::InvalidData);
@@ -1040,8 +984,7 @@ static void test_alignment()
         writer.beginArray();
         writer.writeByte(64);
         writer.endArray();
-        writer.writeByte(123);
-        for (int i = 124; i < 150; i++) {
+        for (int i = 123; i < 150; i++) {
             writer.writeByte(i);
         }
 
@@ -1239,7 +1182,6 @@ void test_primitiveArray()
                             byte *testDataPtr = testData;
                             if (arraySize) {
                                 for (uint m = 0; m < arraySize; m++) {
-                                    writer.nextArrayEntry();
                                     writeValue(&writer, typeInArray, testDataPtr);
                                     testDataPtr += 1 << (typeInArray - 1);
                                 }
@@ -1278,21 +1220,18 @@ void test_primitiveArray()
                             if (arraySize) {
                                 for (uint m = 0; m < arraySize; m++) {
                                     TEST(reader.state() != Arguments::InvalidData);
-                                    TEST(reader.nextArrayEntry());
                                     TEST(checkValue(&reader, typeInArray, testDataPtr));
                                     TEST(reader.state() != Arguments::InvalidData);
                                     testDataPtr += 1 << (typeInArray - 1);
                                 }
                             } else {
-                                TEST(reader.nextArrayEntry());
                                 TEST(reader.state() == arrayTypes[typeInArray]);
                                 // next: dummy read, necessary to move forward; value is ignored
                                 checkValue(&reader, typeInArray, testDataPtr);
                                 TEST(reader.state() != Arguments::InvalidData);
                             }
 
-                            TEST(!reader.nextArrayEntry());
-                            TEST(reader.state() != Arguments::InvalidData);
+                            TEST(reader.state() == Arguments::EndArray);
                             reader.endArray();
                             TEST(reader.state() != Arguments::InvalidData);
                         }
@@ -1329,16 +1268,15 @@ void test_signatureLengths()
 
         // The full doRoundtrip() just here makes this whole file take several seconds to execute
         // instead of a fraction of a second. This way is much quicker.
-        doRoundtripForReal(arg, false, 2048, false);
+        doRoundtripForReal(arg, 2048, false);
         Arguments argCopy = arg;
-        doRoundtripForReal(argCopy, false, 2048, false);
+        doRoundtripForReal(argCopy, 2048, false);
     }
 }
 
 void test_emptyArrayAndDict()
 {
     // Arrays
-
     {
         Arguments::Writer writer;
         writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
@@ -1436,7 +1374,6 @@ void test_emptyArrayAndDict()
                 writer.beginArray(i ? Arguments::Writer::NonEmptyArray
                                     : Arguments::Writer::WriteTypesOfEmptyArray);
                 for (int j = 0; j < std::max(i, 1); j++) {
-                    writer.nextArrayEntry();
                     writer.writeUint16(52345);
                 }
                 writer.endArray();
@@ -1456,7 +1393,6 @@ void test_emptyArrayAndDict()
                 if (j == 32) {
                     TEST(writer.state() == Arguments::InvalidData);
                 }
-                writer.nextArrayEntry();
             }
             if (i == 32) {
                 TEST(writer.state() == Arguments::InvalidData);
@@ -1505,7 +1441,7 @@ void test_emptyArrayAndDict()
         writer.beginVariant();
         writer.endVariant();
         TEST(writer.state() != Arguments::InvalidData);
-        writer.nextDictEntry();
+        writer.writeString(cstring("a"));
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
@@ -1531,7 +1467,6 @@ void test_emptyArrayAndDict()
                 if (j == 32) {
                     TEST(writer.state() == Arguments::InvalidData);
                 }
-                writer.nextDictEntry();
                 writer.writeUint16(12345);
             }
             if (i == 32) {

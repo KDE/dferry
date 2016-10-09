@@ -99,12 +99,10 @@ public:
 
         // states pertaining to aggregates
         BeginArray,
-        NextArrayEntry,
         EndArray,
         BeginDict,
-        NextDictEntry, // 10
         EndDict,
-        BeginStruct,
+        BeginStruct, // 10
         EndStruct,
         BeginVariant,
         EndVariant,
@@ -113,9 +111,9 @@ public:
         Byte,
         Int16,
         Uint16,
-        Int32, // 20
+        Int32,
         Uint32,
-        Int64,
+        Int64, // 20
         Uint64,
         Double,
         String,
@@ -197,13 +195,10 @@ public:
         // The return value is false if the array is empty (has 0 elements), true if it has >= 1 elements.
         // The return value is not affected by @p option.
         bool beginArray(EmptyArrayOption option = SkipIfEmpty);
-        // call this before reading each entry; when it returns false the array has ended.
-        bool nextArrayEntry();
         void skipArray(); // skips the current array; only  call this in state BeginArray!
         void endArray(); // leaves the current array; only  call this in state EndArray!
 
         bool beginDict(EmptyArrayOption option = SkipIfEmpty);
-        bool nextDictEntry(); // like nextArrayEntry()
         void skipDict(); // like skipArray()
         void endDict(); // like endArray()
 
@@ -259,7 +254,6 @@ public:
         void advanceStateFrom(IoState expectedState);
         void beginArrayOrDict(bool isDict, EmptyArrayOption option);
         void skipArrayOrDictSignature(bool isDict);
-        bool nextArrayOrDictEntry(bool isDict);
         void skipArrayOrDict(bool isDict);
         void skipCurrentAggregate();
 
@@ -299,13 +293,9 @@ public:
         };
 
         void beginArray(ArrayOption option = NonEmptyArray);
-        // call this before writing each entry; calling it before the first entry is optional for
-        // the convenience of client code.
-        void nextArrayEntry();
         void endArray();
 
         void beginDict(ArrayOption option = NonEmptyArray);
-        void nextDictEntry();
         void endDict();
 
         void beginStruct();
@@ -343,7 +333,6 @@ public:
         void doWriteString(uint32 lengthPrefixSize);
         void advanceState(cstring signatureFragment, IoState newState);
         void beginArrayOrDict(bool isDict, bool isEmpty);
-        void nextArrayOrDictEntry(bool isDict);
         void finishInternal();
 
         Private *d;
