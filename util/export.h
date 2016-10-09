@@ -23,13 +23,13 @@
 
 #ifdef _WIN32
 
-#ifdef BUILDING_LIBDFER
+#ifdef dfer_EXPORTS
 #define DFERRY_EXPORT __declspec(dllexport)
 #else
 #define DFERRY_EXPORT __declspec(dllimport)
 #endif
 
-#ifdef BUILDING_LIBDFERCLIENT
+#ifdef dferclient_EXPORTS
 #define DFERRYCLIENT_EXPORT __declspec(dllexport)
 #else
 #define DFERRYCLIENT_EXPORT __declspec(dllimport)
@@ -37,13 +37,13 @@
 
 #else
 
-#ifdef BUILDING_LIBDFER
+#ifdef dfer_EXPORTS
 #define DFERRY_EXPORT __attribute__ ((visibility ("protected")))
 #else
 #define DFERRY_EXPORT __attribute__ ((visibility ("default")))
 #endif
 
-#ifdef BUILDING_LIBDFERCLIENT
+#ifdef dferclient_EXPORTS
 #define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("protected")))
 #else
 #define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("default")))

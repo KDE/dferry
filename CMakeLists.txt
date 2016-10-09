@@ -123,7 +123,6 @@ set(DFER_HEADERS ${DFER_PUBLIC_HEADERS} ${DFER_PRIVATE_HEADERS})
 
 add_library(dfer SHARED ${DFER_SOURCES} ${DFER_HEADERS})
 target_include_directories(dfer INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
-target_compile_definitions(dfer PRIVATE -DBUILDING_LIBDFER)
 if (WIN32)
     target_link_libraries(dfer PRIVATE ws2_32)
 endif()
@@ -145,7 +144,6 @@ set(DFERCLIENT_HEADERS
 
 add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
 target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
-target_compile_definitions(dferclient PRIVATE -DBUILDING_LIBDFERCLIENT)
 target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
 
 install(TARGETS dfer dferclient EXPORT dferryExports DESTINATION ${CMAKE_INSTALL_LIBDIR})
