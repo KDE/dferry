@@ -150,13 +150,15 @@ class Arguments::Writer::Private
 {
 public:
     Private()
-       : m_signature(m_mainSignatureStorage, 0),
+       : m_signature(m_initialDataBuffer, 0),
          m_signaturePosition(0),
          m_data(m_initialDataBuffer),
          m_dataCapacity(InitialDataCapacity),
-         m_dataPosition(0),
+         m_dataPosition(MaxFullSignatureLength),
          m_nilArrayNesting(0)
     {
+        m_signature.ptr = reinterpret_cast<char *>(m_data + 1); // reserve a byte for length prefix
+        m_signature.length = 0;
         m_elements.reserve(16);
     }
 
@@ -170,6 +172,7 @@ public:
             newCapacity *= 2;
         } while (size > newCapacity);
 
+        byte *const oldDataPointer = m_data;
         if (m_data == m_initialDataBuffer) {
             byte *newAlloc = reinterpret_cast<byte *>(malloc(newCapacity));
             memcpy(newAlloc, m_data, m_dataCapacity);
@@ -177,11 +180,11 @@ public:
         } else {
             m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
         }
+        m_signature.ptr += m_data - oldDataPointer;
         m_dataCapacity = newCapacity;
     }
 
     uint32 m_dataElementsCountBeforeNilArray;
-    uint32 m_variantSignaturesCountBeforeNilArray;
     uint32 m_dataPositionBeforeNilArray;
 
     Arguments m_args;
@@ -197,8 +200,10 @@ public:
     Error m_error;
 
     enum {
-        // got a linker error with static const int...
-        InitialDataCapacity = 256
+        InitialDataCapacity = 512,
+        // max signature length w/ length prefix (1 byte) and terminator (1 byte)
+        // TODO can we add the length prefix during variant signature fixup?
+        MaxFullSignatureLength = MaxSignatureLength + 1
     };
 
     struct ArrayInfo
@@ -209,9 +214,10 @@ public:
 
     struct VariantInfo
     {
-        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
-        uint32 prevSignaturePosition; // need to store the old signature and parse position.
-        uint32 signatureIndex; // index in m_variantSignatures
+        // a variant switches the currently parsed signature, so we
+        // need to store the old signature and parse position.
+        uint32 prevSignatureOffset; // relative to m_data
+        uint32 prevSignaturePosition;
     };
 
     struct StructInfo
@@ -262,7 +268,6 @@ public:
         };
     };
 
-    char m_mainSignatureStorage[maxSignatureLength + 1];
     byte m_initialDataBuffer[InitialDataCapacity];
     std::vector<ElementInfo> m_elements;
 };
@@ -271,7 +276,6 @@ struct ArgAllocCaches
 {
     MallocCache<sizeof(Arguments::Private), 4> argsPrivate;
     MallocCache<sizeof(Arguments::Writer::Private), 4> writerPrivate;
-    MallocCache<Arguments::maxSignatureLength + 1, 8> writerSignatures;
 };
 
 thread_local static ArgAllocCaches allocCaches;
@@ -377,7 +381,6 @@ static cstring printableState(Arguments::IoState state)
     return cstring(strings[state]);
 }
 
-const int Arguments::maxSignatureLength; // for the linker; technically this is required
 static const int structAlignment = 8;
 
 Arguments::Arguments()
@@ -1750,17 +1753,6 @@ void Arguments::Writer::operator=(Writer &&other)
 
 Arguments::Writer::~Writer()
 {
-    for (cstring &sig : d->m_variantSignatures) {
-        // don't free m_signature.ptr twice
-        if (sig.ptr != d->m_signature.ptr) {
-            allocCaches.writerSignatures.free(sig.ptr);
-        }
-    }
-    if (d->m_signature.ptr && d->m_signature.ptr != d->m_mainSignatureStorage) {
-        allocCaches.writerSignatures.free(d->m_signature.ptr);
-        d->m_signature = cstring();
-    }
-
     if (d->m_data != d->m_initialDataBuffer) {
         free(d->m_data);
     }
@@ -1906,7 +1898,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     bool isWritingSignature = d->m_signaturePosition == d->m_signature.length;
     if (isWritingSignature) {
         // signature additions must conform to syntax
-        VALID_IF(d->m_signaturePosition + signatureFragment.length <= maxSignatureLength,
+        VALID_IF(d->m_signaturePosition + signatureFragment.length <= MaxSignatureLength,
                  Error::SignatureTooLong);
 
         if (!d->m_aggregateStack.empty()) {
@@ -2005,10 +1997,9 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.aggregateType = BeginVariant;
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
-        variantInfo.prevSignature.ptr = d->m_signature.ptr;
-        variantInfo.prevSignature.length = d->m_signature.length;
+        variantInfo.prevSignatureOffset = uint32(reinterpret_cast<byte *>(d->m_signature.ptr) - d->m_data);
+        d->m_signature.ptr[-1] = byte(d->m_signature.length);
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
-        variantInfo.signatureIndex = d->m_variantSignatures.size();
 
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
@@ -2016,12 +2007,13 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         // arrange for finish() to take a signature from d->m_variantSignatures
         d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::VariantSignature));
 
-        cstring str(reinterpret_cast<byte *>(allocCaches.writerSignatures.allocate()), 0);
-
-        d->m_variantSignatures.reserve(8);
-        d->m_variantSignatures.push_back(str);
-        d->m_signature = str;
+        const uint32 newDataPosition = d->m_dataPosition + Private::MaxFullSignatureLength;
+        d->reserveData(newDataPosition);
+        // allocate new signature in the data buffer, reserve one byte for length prefix
+        d->m_signature.ptr = reinterpret_cast<char *>(d->m_data) + d->m_dataPosition + 1;
+        d->m_signature.length = 0;
         d->m_signaturePosition = 0;
+        d->m_dataPosition = newDataPosition;
         break; }
     case EndVariant: {
         d->m_nesting.endVariant();
@@ -2029,20 +2021,17 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginVariant, Error::CannotEndVariantHere);
         if (likely(!d->m_nilArrayNesting)) {
-            // apparently, empty variants are not allowed. as an exception, in nil arrays they are
+            // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
+            // (This is a peculiarity of empty arrey handling in this API and has nothing to
+            // do with the wire format)
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
         }
-        d->m_signature.ptr[d->m_signaturePosition] = '\0';
-
+        d->m_signature.ptr[-1] = byte(d->m_signaturePosition);
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
-        assert(variantInfo.signatureIndex < d->m_variantSignatures.size());
-        d->m_variantSignatures[variantInfo.signatureIndex].length = d->m_signaturePosition;
-        assert(d->m_variantSignatures[variantInfo.signatureIndex].ptr = d->m_signature.ptr);
-
-        d->m_signature.ptr = variantInfo.prevSignature.ptr;
-        d->m_signature.length = variantInfo.prevSignature.length;
+        d->m_signature.ptr = reinterpret_cast<char *>(d->m_data) + variantInfo.prevSignatureOffset;
+        d->m_signature.length = d->m_signature.ptr[-1];
         d->m_signaturePosition = variantInfo.prevSignaturePosition;
         d->m_aggregateStack.pop_back();
         break; }
@@ -2084,13 +2073,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_aggregateStack.pop_back();
         if (unlikely(d->m_nilArrayNesting)) {
             if (!--d->m_nilArrayNesting) {
-                // last chance to erase data inside the empty array so it doesn't end up in the output
-                auto sigBeginIt = d->m_variantSignatures.begin() + d->m_variantSignaturesCountBeforeNilArray;
-                auto sigEndIt = d->m_variantSignatures.end();
-                for (auto it = sigBeginIt; it != sigEndIt; ++it) {
-                    free(it->ptr);
-                }
-                d->m_variantSignatures.erase(sigBeginIt, sigEndIt);
                 d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
                                     d->m_elements.end());
                 d->m_dataPosition = d->m_dataPositionBeforeNilArray;
@@ -2118,7 +2100,6 @@ void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
             // variant signatures written inside an empty array. when we close the array, though, we
             // throw away all that data and signatures and keep only changes in the signature containing
             // the topmost empty array.
-            d->m_variantSignaturesCountBeforeNilArray = d->m_variantSignatures.size();
             d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // +1 -> keep ArrayLengthField
             d->m_dataPositionBeforeNilArray = d->m_dataPosition;
         }
@@ -2255,7 +2236,7 @@ void Arguments::Writer::finishInternal()
     }
     VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentsHere);
     assert(!d->m_nilArrayNesting);
-    assert(d->m_signaturePosition <= maxSignatureLength); // this should have been caught before
+    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
     d->m_signature.ptr[d->m_signaturePosition] = '\0';
     d->m_signature.length = d->m_signaturePosition;
 
@@ -2266,7 +2247,8 @@ void Arguments::Writer::finishInternal()
     bool success = true;
     const uint32 count = d->m_elements.size();
     const uint32 dataSize = d->m_dataPosition;
-    d->m_dataPosition = 0;
+    d->m_dataPosition = Private::MaxFullSignatureLength;
+
     if (count) {
         // Note: if one of signature or data is nonempty, the other must also be nonempty.
         // Even "empty" things like empty arrays or null strings have a size field, in that case
@@ -2280,13 +2262,14 @@ void Arguments::Writer::finishInternal()
         // each (when they contain a byte).
         // Those estimates are very conservative (but easy!), so some space optimization is possible.
         const uint32 alignedSigLength = align(d->m_signature.length + 1, 8);
+        // TODO dataSize may be hugely oversized if there are many signatures in it, make it smaller!
         const uint32 bufferSize = alignedSigLength +
                                   dataSize * 2 + d->m_nesting.parenCount * 7;
-        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(uint32(Private::InitialDataCapacity), bufferSize)));
+        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(uint32(Private::InitialDataCapacity),
+                                                                bufferSize)));
         memcpy(buffer, d->m_signature.ptr, d->m_signature.length + 1);
         uint32 bufferPos = d->m_signature.length + 1;
         zeroPad(buffer, 8, &bufferPos);
-        uint32 variantSignatureIndex = 0;
 
         std::vector<ArrayLengthField> lengthFieldStack;
 
@@ -2341,11 +2324,11 @@ void Arguments::Writer::finishInternal()
                 break;
             case Private::ElementInfo::VariantSignature: {
                     // fill in signature (should already include trailing null)
-                    cstring signature = d->m_variantSignatures[variantSignatureIndex++];
-                    buffer[bufferPos++] = signature.length;
-                    memcpy(buffer + bufferPos, signature.ptr, signature.length + 1);
-                    bufferPos += signature.length + 1;
-                    allocCaches.writerSignatures.free(signature.ptr);
+                    const uint32 length = d->m_data[d->m_dataPosition] + 1; // + length prefix
+                    memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, length);
+                    buffer[bufferPos + length] = '\0';
+                    bufferPos += length + 1; // + null terminator
+                    d->m_dataPosition += Private::MaxFullSignatureLength;
                 }
                 break;
             }
@@ -2356,28 +2339,16 @@ void Arguments::Writer::finishInternal()
             d->m_error.setCode(Error::ArgumentsTooLong);
         }
 
+        d->m_aggregateStack.clear();
         if (success) {
-            assert(variantSignatureIndex == d->m_variantSignatures.size());
             assert(lengthFieldStack.empty());
-            // prevent double deletionn of signatures by the destructor
-            d->m_aggregateStack.clear();
-            d->m_variantSignatures.clear();
-
             d->m_args.d->m_memOwnership = buffer;
             d->m_args.d->m_signature = cstring(buffer, d->m_signature.length);
             d->m_args.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
-        } else {
-            d->m_aggregateStack.clear();
-            for (uint32 i = 0; i < d->m_variantSignatures.size(); i++) {
-                allocCaches.writerSignatures.free(d->m_variantSignatures[i].ptr);
-            }
         }
-    } else {
-        assert(d->m_variantSignatures.empty());
     }
 
     if (!count || !success) {
-        d->m_variantSignatures.clear();
         d->m_args.d->m_memOwnership = nullptr;
         d->m_args.d->m_signature = cstring();
         d->m_args.d->m_data = chunk();

@@ -1272,6 +1272,45 @@ void test_signatureLengths()
         Arguments argCopy = arg;
         doRoundtripForReal(argCopy, 2048, false);
     }
+    for (int i = 1 /* variants may not be empty */; i <= 256; i++) {
+        Arguments::Writer writer;
+
+        writer.beginVariant();
+        switch (i) {
+        case 0:
+            TEST(false);
+        case 1:
+            writer.writeByte(255);
+            break;
+        case 2:
+            // "ay" signature is two letters
+            writer.beginArray();
+            writer.writeByte(255);
+            writer.endArray();
+            break;
+        default:
+            // (y), (yy), ...
+            writer.beginStruct();
+            for (int j = strlen("()"); j < i; j++) {
+                writer.writeByte(255);
+            }
+            writer.endStruct();
+            break;
+        }
+        writer.endVariant();
+
+        if (i == 256) {
+            TEST(writer.state() == Arguments::InvalidData);
+            break;
+        }
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+
+        doRoundtripForReal(arg, 2048, false);
+        Arguments argCopy = arg;
+        doRoundtripForReal(argCopy, 2048, false);
+    }
 }
 
 void test_emptyArrayAndDict()
