@@ -275,8 +275,9 @@ public:
         explicit Writer();
         Writer(Writer &&other);
         void operator=(Writer &&other);
-        Writer(const Writer &other) = delete;
-        void operator=(const Writer &other) = delete;
+        // TODO unit-test copy and assignment
+        Writer(const Writer &other);
+        void operator=(const Writer &other);
 
         ~Writer();
 

@@ -163,6 +163,9 @@ public:
         m_elements.reserve(16);
     }
 
+    Private(const Private &other);
+    void operator=(const Private &other);
+
     void reserveData(uint32 size)
     {
         if (likely(size <= m_dataCapacity)) {
@@ -1725,6 +1728,51 @@ Arguments::IoState Arguments::Reader::currentAggregate() const
     return d->m_aggregateStack.back().aggregateType;
 }
 
+Arguments::Writer::Private::Private(const Private &other)
+{
+    *this = other;
+}
+
+void Arguments::Writer::Private::operator=(const Private &other)
+{
+    if (&other == this) {
+        assert(false); // if this happens, the (internal) caller did something wrong
+        return;
+    }
+
+    m_dataElementsCountBeforeNilArray = other.m_dataElementsCountBeforeNilArray;
+    m_dataPositionBeforeNilArray = other.m_dataPositionBeforeNilArray;
+
+    // Arguments m_args can only be default initialized empty or moved-from, in both cases
+    // copying it is okay and fairly cheap.
+    m_args = other.m_args;
+
+    m_nesting = other.m_nesting;
+    m_signature.ptr = other.m_signature.ptr; // ### still needs adjustment, done after allocating m_data
+    m_signature.length = other.m_signature.length;
+    m_signaturePosition = other.m_signaturePosition;
+    m_variantSignaturesWastedSpace = other.m_variantSignaturesWastedSpace;
+
+    m_dataCapacity = other.m_dataCapacity;
+    m_dataPosition = other.m_dataPosition;
+    // handle *m_data and the data it's pointing to
+    if (m_dataCapacity == InitialDataCapacity) {
+        m_data = m_initialDataBuffer;
+    } else {
+        m_data = reinterpret_cast<byte *>(malloc(m_dataCapacity));
+    }
+    memcpy(m_data, other.m_data, m_dataPosition);
+    m_signature.ptr += m_data - other.m_data;
+
+    m_nilArrayNesting = other.m_nilArrayNesting;
+    m_error = other.m_error;
+
+    m_variantSignatures = other.m_variantSignatures;
+
+    m_aggregateStack = other.m_aggregateStack;
+    m_elements = other.m_elements;
+}
+
 Arguments::Writer::Writer()
    : d(new(allocCaches.writerPrivate.allocate()) Private),
      m_state(AnyData)
@@ -1749,6 +1797,32 @@ void Arguments::Writer::operator=(Writer &&other)
     m_u = other.m_u;
 
     other.d = nullptr;
+}
+
+Arguments::Writer::Writer(const Writer &other)
+   : d(nullptr),
+     m_state(other.m_state),
+     m_u(other.m_u)
+{
+    if (other.d) {
+        d = new Private(*other.d);
+    }
+
+}
+
+void Arguments::Writer::operator=(const Writer &other)
+{
+    if (&other == this) {
+        return;
+    }
+    m_state = other.m_state;
+    m_u = other.m_u;
+    if (d && other.d) {
+        *d = *other.d;
+    } else {
+        Writer temp(other);
+        std::swap(d, temp.d);
+    }
 }
 
 Arguments::Writer::~Writer()
