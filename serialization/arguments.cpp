@@ -152,6 +152,7 @@ public:
     Private()
        : m_signature(m_initialDataBuffer, 0),
          m_signaturePosition(0),
+         m_variantSignaturesWastedSpace(0),
          m_data(m_initialDataBuffer),
          m_dataCapacity(InitialDataCapacity),
          m_dataPosition(MaxFullSignatureLength),
@@ -191,6 +192,7 @@ public:
     NestingWithParenCounter m_nesting;
     cstring m_signature;
     uint32 m_signaturePosition;
+    int32 m_variantSignaturesWastedSpace;
 
     byte *m_data;
     uint32 m_dataCapacity;
@@ -202,7 +204,6 @@ public:
     enum {
         InitialDataCapacity = 512,
         // max signature length w/ length prefix (1 byte) and terminator (1 byte)
-        // TODO can we add the length prefix during variant signature fixup?
         MaxFullSignatureLength = MaxSignatureLength + 1
     };
 
@@ -2026,6 +2027,9 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             // (This is a peculiarity of empty arrey handling in this API and has nothing to
             // do with the wire format)
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
+            assert(d->m_signaturePosition <= MaxSignatureLength); // should have been caught earlier
+            d->m_variantSignaturesWastedSpace += -1 // we don't store the null terminator but output does
+                + Private::MaxFullSignatureLength - d->m_signaturePosition;
         }
         d->m_signature.ptr[-1] = byte(d->m_signaturePosition);
 
@@ -2236,18 +2240,14 @@ void Arguments::Writer::finishInternal()
     }
     VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentsHere);
     assert(!d->m_nilArrayNesting);
-    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
-    d->m_signature.ptr[d->m_signaturePosition] = '\0';
-    d->m_signature.length = d->m_signaturePosition;
 
-    if (d->m_args.d->m_memOwnership) {
-        free(d->m_args.d->m_memOwnership);
-    }
+    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
+    // we're going to use the following identity to help the compiler
+    assert(d->m_signature.ptr == reinterpret_cast<char *>(d->m_data) + 1);
+    d->m_signature.length = d->m_signaturePosition;
 
     bool success = true;
     const uint32 count = d->m_elements.size();
-    const uint32 dataSize = d->m_dataPosition;
-    d->m_dataPosition = Private::MaxFullSignatureLength;
 
     if (count) {
         // Note: if one of signature or data is nonempty, the other must also be nonempty.
@@ -2261,15 +2261,25 @@ void Arguments::Writer::finishInternal()
         // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
         // each (when they contain a byte).
         // Those estimates are very conservative (but easy!), so some space optimization is possible.
+
+        // This one gets no length prefix, it's just the backing buffer for a cstring instance!
         const uint32 alignedSigLength = align(d->m_signature.length + 1, 8);
-        // TODO dataSize may be hugely oversized if there are many signatures in it, make it smaller!
-        const uint32 bufferSize = alignedSigLength +
-                                  dataSize * 2 + d->m_nesting.parenCount * 7;
+
+        const uint32 safeEstimatedDataSize =
+            2 * (d->m_dataPosition - Private::MaxFullSignatureLength // signature is in alignedSigLength
+                 - d->m_variantSignaturesWastedSpace)
+            + d->m_nesting.parenCount * 7 // max alignment padding in front of data structures
+            + alignedSigLength;
+
         byte *buffer = reinterpret_cast<byte *>(malloc(std::max(uint32(Private::InitialDataCapacity),
-                                                                bufferSize)));
-        memcpy(buffer, d->m_signature.ptr, d->m_signature.length + 1);
-        uint32 bufferPos = d->m_signature.length + 1;
-        zeroPad(buffer, 8, &bufferPos);
+                                                                safeEstimatedDataSize)));
+        memcpy(buffer, d->m_data + 1, d->m_signature.length);
+        uint32 bufferPos = d->m_signature.length;
+        for (; bufferPos < alignedSigLength; bufferPos++) {
+            buffer[bufferPos] = '\0';
+        }
+
+        d->m_dataPosition = Private::MaxFullSignatureLength;
 
         std::vector<ArrayLengthField> lengthFieldStack;
 
@@ -2323,7 +2333,7 @@ void Arguments::Writer::finishInternal()
                 }
                 break;
             case Private::ElementInfo::VariantSignature: {
-                    // fill in signature (should already include trailing null)
+                    // fill in signature and add null terminator
                     const uint32 length = d->m_data[d->m_dataPosition] + 1; // + length prefix
                     memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, length);
                     buffer[bufferPos + length] = '\0';
