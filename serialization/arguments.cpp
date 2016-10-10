@@ -1765,7 +1765,7 @@ Arguments::Writer::~Writer()
 
 bool Arguments::Writer::isValid() const
 {
-    return !d->m_args.error().isError();
+    return !d->m_error.isError();
 }
 
 Error Arguments::Writer::error() const
