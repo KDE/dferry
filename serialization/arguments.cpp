@@ -209,7 +209,6 @@ public:
 
     struct ArrayInfo
     {
-        uint32 dataBegin; // one past the last data byte of the array
         uint32 containedTypeBegin; // to rewind when reading the next element
     };
 
@@ -2048,7 +2047,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         }
         aggregateInfo.aggregateType = m_state;
-        aggregateInfo.arr.dataBegin = d->m_dataPosition;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
