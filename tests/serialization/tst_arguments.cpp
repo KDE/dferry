@@ -884,7 +884,7 @@ static void test_writerMisuse()
     }
 }
 
-void addSomeVariantStuff(Arguments::Writer *writer)
+static void addSomeVariantStuff(Arguments::Writer *writer)
 {
     // maybe should have typed the following into hackertyper.com to make it look more "legit" ;)
     static const char *aVeryLongString = "ujfgosuideuvcevfgeoauiyetoraedtmzaubeodtraueonuljfgonuiljofnuilojf"
@@ -1114,7 +1114,7 @@ static bool checkValue(Arguments::Reader *reader, uint32 typeIndex, const void *
     return false;
 }
 
-void test_primitiveArray()
+static void test_primitiveArray()
 {
     // TODO also test some error cases
 
@@ -1251,7 +1251,7 @@ void test_primitiveArray()
     }
 }
 
-void test_signatureLengths()
+static void test_signatureLengths()
 {
     for (int i = 0; i <= 256; i++) {
         Arguments::Writer writer;
@@ -1313,7 +1313,7 @@ void test_signatureLengths()
     }
 }
 
-void test_emptyArrayAndDict()
+static void test_emptyArrayAndDict()
 {
     // Arrays
     {
