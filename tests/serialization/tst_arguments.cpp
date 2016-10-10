@@ -1537,8 +1537,6 @@ int main(int, char *[])
     test_nesting();
     test_roundtrip();
     test_writerMisuse();
-    // TODO test_maxArrayLength
-    // TODO test_maxFullLength
     // TODO test arrays where array length does not align with end of an element
     //      (corruption of serialized data)
     test_complicated();

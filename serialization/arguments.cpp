@@ -2418,6 +2418,10 @@ void Arguments::Writer::finishInternal()
             }
         }
 
+        // OK, so this length check is more like a sanity check. The actual limit is about the size of the
+        // full message. Here we take the size of the "payload" plus the signature string and its alignment
+        // padding. However, messages have a header of nontrivial size, so our "estimate" of full message
+        // size is still too small.
         if (success && bufferPos > SpecMaxMessageLength) {
             success = false;
             d->m_error.setCode(Error::ArgumentsTooLong);
