@@ -36,11 +36,13 @@
 #include <cstring>
 #include <sstream>
 
-static const int s_specMaxArrayLength = 67108864; // 64 MiB
 // Maximum message length is a good upper bound for maximum Arguments data length. In order to limit
 // excessive memory consumption in error cases and prevent integer overflow exploits, enforce a maximum
 // data length already in Arguments.
-static const int s_specMaxMessageLength = 134217728; // 128 MiB
+enum {
+    SpecMaxArrayLength = 67108864, // 64 MiB
+    SpecMaxMessageLength = 134217728 // 128 MiB
+};
 
 static byte alignmentLog2(uint32 alignment)
 {
@@ -651,7 +653,7 @@ static void chopFirst(cstring *s)
 // static
 bool Arguments::isStringValid(cstring string)
 {
-    if (!string.ptr || string.length + 1 >= s_specMaxArrayLength || string.ptr[string.length] != 0) {
+    if (!string.ptr || string.length + 1 >= SpecMaxArrayLength || string.ptr[string.length] != 0) {
         return false;
     }
     // check that there are no embedded nulls, exploiting the highly optimized strlen...
@@ -666,7 +668,7 @@ static inline bool isObjectNameLetter(char c)
 // static
 bool Arguments::isObjectPathValid(cstring path)
 {
-    if (!path.ptr || path.length + 1 >= s_specMaxArrayLength || path.ptr[path.length] != 0) {
+    if (!path.ptr || path.length + 1 >= SpecMaxArrayLength || path.ptr[path.length] != 0) {
         return false;
     }
     char prevLetter = path.ptr[0];
@@ -1092,7 +1094,7 @@ void Arguments::Reader::doReadString(uint32 lengthPrefixSize)
     } else {
         stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
                                           d->m_args->d->m_isByteSwapped);
-        VALID_IF(stringLength + 1 < s_specMaxArrayLength, Error::MalformedMessageData);
+        VALID_IF(stringLength + 1 < SpecMaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
     if (unlikely(d->m_dataPosition + stringLength > d->m_data.length)) {
@@ -1295,7 +1297,7 @@ void Arguments::Reader::advanceState()
                 goto out_needMoreData;
             }
             arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
-            VALID_IF(arrayLength <= s_specMaxArrayLength, Error::MalformedMessageData);
+            VALID_IF(arrayLength <= SpecMaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
         }
 
@@ -2230,7 +2232,7 @@ void Arguments::Writer::endVariant()
 void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);
-    if (letterCode == 'c' || data.length > s_specMaxArrayLength) {
+    if (letterCode == 'c' || data.length > SpecMaxArrayLength) {
         m_state = InvalidData;
         return;
     }
@@ -2395,7 +2397,7 @@ void Arguments::Writer::finishInternal()
                     // just put the now known array length in front of the array
                     const ArrayLengthField al = lengthFieldStack.back();
                     const uint32 arrayLength = bufferPos - al.dataStartPosition;
-                    if (arrayLength > s_specMaxArrayLength) {
+                    if (arrayLength > SpecMaxArrayLength) {
                         d->m_error.setCode(Error::ArrayOrDictTooLong);
                         success = false;
                         break;
@@ -2416,7 +2418,7 @@ void Arguments::Writer::finishInternal()
             }
         }
 
-        if (success && bufferPos > s_specMaxMessageLength) {
+        if (success && bufferPos > SpecMaxMessageLength) {
             success = false;
             d->m_error.setCode(Error::ArgumentsTooLong);
         }
