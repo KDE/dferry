@@ -1807,7 +1807,7 @@ Arguments::Writer::Writer(const Writer &other)
      m_u(other.m_u)
 {
     if (other.d) {
-        d = new Private(*other.d);
+        d = new(allocCaches.writerPrivate.allocate()) Private(*other.d);
     }
 
 }
