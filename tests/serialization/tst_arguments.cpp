@@ -394,7 +394,33 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
     }
 }
 
-static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, bool debugPrint)
+static void verifyAfterRoundtrip(const Arguments &original, const Arguments::Reader &originalReader,
+                                 const Arguments &copy, const Arguments::Writer &copyWriter,
+                                 bool debugPrint)
+{
+    TEST(originalReader.state() == Arguments::Finished);
+    TEST(copyWriter.state() == Arguments::Finished);
+    cstring originalSignature = original.signature();
+    cstring copySignature = copy.signature();
+    if (originalSignature.length) {
+        TEST(Arguments::isSignatureValid(copySignature));
+        TEST(stringsEqual(originalSignature, copySignature));
+    } else {
+        TEST(copySignature.length == 0);
+    }
+
+    chunk originalData = original.data();
+
+    chunk copyData = copy.data();
+    TEST(originalData.length == copyData.length);
+    if (debugPrint && !chunksEqual(originalData, copyData)) {
+        printChunk(originalData);
+        printChunk(copyData);
+    }
+    TEST(chunksEqual(originalData, copyData));
+}
+
+static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncrement, bool debugPrint)
 {
     Arguments::Reader reader(original);
     Arguments::Writer writer;
@@ -440,31 +466,85 @@ static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, 
     }
 
     Arguments copy = writer.finish();
-    TEST(reader.state() == Arguments::Finished);
-    TEST(writer.state() == Arguments::Finished);
-    cstring originalSignature = original.signature();
-    cstring copySignature = copy.signature();
-    if (originalSignature.length) {
-        TEST(Arguments::isSignatureValid(copySignature));
-        TEST(stringsEqual(originalSignature, copySignature));
-    } else {
-        TEST(copySignature.length == 0);
-    }
-
-    // TODO when it's wired up between Reader and Arguments: chunk originalData = arg.data();
-    chunk originalData = original.data();
-
-    chunk copyData = copy.data();
-    TEST(originalData.length == copyData.length);
-    if (debugPrint && !chunksEqual(originalData, copyData)) {
-        printChunk(originalData);
-        printChunk(copyData);
-    }
-    TEST(chunksEqual(originalData, copyData));
-
+    verifyAfterRoundtrip(original, reader, copy, writer, debugPrint);
     if (shortData.ptr) {
         free(shortData.ptr);
     }
+}
+
+static void doRoundtripWithReaderCopy(const Arguments &original, uint32 dataIncrement, bool debugPrint)
+{
+    Arguments::Reader *reader = new Arguments::Reader(original);
+    Arguments::Writer writer;
+
+    bool isDone = false;
+    uint32 emptyNesting = 0;
+    uint32 i = 0;
+
+    while (!isDone) {
+        TEST(writer.state() != Arguments::InvalidData);
+        if (i++ == dataIncrement) {
+            Arguments::Reader *copy = new Arguments::Reader(*reader);
+            delete reader;
+            reader = copy;
+        }
+        if (debugPrint) {
+            std::cout << "Reader state: " << reader->stateString().ptr << '\n';
+        }
+        switch(reader->state()) {
+        case Arguments::Finished:
+            isDone = true;
+            break;
+        default:
+            defaultReadToWrite(reader, &writer, &emptyNesting);
+            break;
+        }
+    }
+
+    Arguments copy = writer.finish();
+    verifyAfterRoundtrip(original, *reader, copy, writer, debugPrint);
+    delete reader;
+}
+
+static void doRoundtripWithWriterCopy(const Arguments &original, uint32 dataIncrement, bool debugPrint)
+{
+    Arguments::Reader reader(original);
+    Arguments::Writer *writer = new Arguments::Writer;
+
+    bool isDone = false;
+    uint32 emptyNesting = 0;
+    uint32 i = 0;
+
+    while (!isDone) {
+        TEST(writer->state() != Arguments::InvalidData);
+        if (i++ == dataIncrement) {
+            Arguments::Writer *copy = new Arguments::Writer(*writer);
+            delete writer;
+            writer = copy;
+        }
+        if (debugPrint) {
+            std::cout << "Reader state: " << reader.stateString().ptr << '\n';
+        }
+        switch(reader.state()) {
+        case Arguments::Finished:
+            isDone = true;
+            break;
+        default:
+            defaultReadToWrite(&reader, writer, &emptyNesting);
+            break;
+        }
+    }
+
+    Arguments copy = writer->finish();
+    verifyAfterRoundtrip(original, reader, copy, *writer, debugPrint);
+    delete writer;
+}
+
+static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, bool debugPrint)
+{
+    doRoundtripWithShortReads(original, dataIncrement, debugPrint);
+    doRoundtripWithReaderCopy(original, dataIncrement, debugPrint);
+    doRoundtripWithWriterCopy(original, dataIncrement, debugPrint);
 }
 
 // not returning by value to avoid the move constructor or assignment operator -
@@ -539,7 +619,7 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataInc
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
     const uint32 maxIncrement = arg.data().length;
-    for (uint32 i = 1; i <= maxIncrement; i++) {
+    for (uint32 i = 0; i <= maxIncrement; i++) {
         doRoundtripWithCopyAssignEtc(arg, i, debugPrint);
     }
 
