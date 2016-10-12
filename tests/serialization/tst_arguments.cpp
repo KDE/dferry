@@ -282,6 +282,118 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
     }
 }
 
+// When using this to iterate over the reader, it will make an exact copy using the Writer.
+// You need to do something only in states where something special should happen.
+static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *writer, uint32 *emptyNesting)
+{
+    switch(reader->state()) {
+    case Arguments::BeginStruct:
+        reader->beginStruct();
+        writer->beginStruct();
+        break;
+    case Arguments::EndStruct:
+        reader->endStruct();
+        writer->endStruct();
+        break;
+    case Arguments::BeginVariant:
+        reader->beginVariant();
+        writer->beginVariant();
+        break;
+    case Arguments::EndVariant:
+        reader->endVariant();
+        writer->endVariant();
+        break;
+    case Arguments::BeginArray: {
+        const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
+                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+        *emptyNesting += hasData ? 0 : 1;
+        break; }
+    case Arguments::EndArray:
+        reader->endArray();
+        writer->endArray();
+        *emptyNesting = std::max(*emptyNesting - 1, 0u);
+        break;
+    case Arguments::BeginDict: {
+        const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
+                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+        *emptyNesting += hasData ? 0 : 1;
+        break; }
+    case Arguments::EndDict:
+        reader->endDict();
+        writer->endDict();
+        *emptyNesting = std::max(*emptyNesting - 1, 0u);
+        break;
+    case Arguments::Byte:
+        writer->writeByte(reader->readByte());
+        break;
+    case Arguments::Boolean:
+        writer->writeBoolean(reader->readBoolean());
+        break;
+    case Arguments::Int16:
+        writer->writeInt16(reader->readInt16());
+        break;
+    case Arguments::Uint16:
+        writer->writeUint16(reader->readUint16());
+        break;
+    case Arguments::Int32:
+        writer->writeInt32(reader->readInt32());
+        break;
+    case Arguments::Uint32:
+        writer->writeUint32(reader->readUint32());
+        break;
+    case Arguments::Int64:
+        writer->writeInt64(reader->readInt64());
+        break;
+    case Arguments::Uint64:
+        writer->writeUint64(reader->readUint64());
+        break;
+    case Arguments::Double:
+        writer->writeDouble(reader->readDouble());
+        break;
+    case Arguments::String: {
+        cstring s = reader->readString();
+        if (*emptyNesting) {
+            s = cstring("");
+        } else {
+            TEST(Arguments::isStringValid(s));
+        }
+        writer->writeString(s);
+        break; }
+    case Arguments::ObjectPath: {
+        cstring objectPath = reader->readObjectPath();
+        if (*emptyNesting) {
+            objectPath = cstring("/");
+        } else {
+            TEST(Arguments::isObjectPathValid(objectPath));
+        }
+        writer->writeObjectPath(objectPath);
+        break; }
+    case Arguments::Signature: {
+        cstring signature = reader->readSignature();
+        if (*emptyNesting) {
+            signature = cstring("");
+        } else {
+            TEST(Arguments::isSignatureValid(signature));
+        }
+        writer->writeSignature(signature);
+        break; }
+    case Arguments::UnixFd:
+        writer->writeUnixFd(reader->readUnixFd());
+        break;
+    // special cases follow
+    case Arguments::Finished:
+        break; // You *probably* want to handle that one in the caller, but you don't have to
+    case Arguments::NeedMoreData:
+        TEST(false); // No way to handle that one here
+        break;
+    default:
+        TEST(false);
+        break;
+    }
+}
+
 static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, bool debugPrint)
 {
     Arguments::Reader reader(original);
@@ -321,103 +433,8 @@ static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, 
             }
             reader.replaceData(shortData);
             break; }
-        case Arguments::BeginStruct:
-            reader.beginStruct();
-            writer.beginStruct();
-            break;
-        case Arguments::EndStruct:
-            reader.endStruct();
-            writer.endStruct();
-            break;
-        case Arguments::BeginVariant:
-            reader.beginVariant();
-            writer.beginVariant();
-            break;
-        case Arguments::EndVariant:
-            reader.endVariant();
-            writer.endVariant();
-            break;
-        case Arguments::BeginArray: {
-            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            writer.beginArray(hasData ? Arguments::Writer::NonEmptyArray
-                                      : Arguments::Writer::WriteTypesOfEmptyArray);
-            emptyNesting += hasData ? 0 : 1;
-            break; }
-        case Arguments::EndArray:
-            reader.endArray();
-            writer.endArray();
-            emptyNesting = std::max(emptyNesting - 1, 0u);
-            break;
-        case Arguments::BeginDict: {
-            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            writer.beginDict(hasData ? Arguments::Writer::NonEmptyArray
-                                     : Arguments::Writer::WriteTypesOfEmptyArray);
-            emptyNesting += hasData ? 0 : 1;
-            break; }
-        case Arguments::EndDict:
-            reader.endDict();
-            writer.endDict();
-            emptyNesting = std::max(emptyNesting - 1, 0u);
-            break;
-        case Arguments::Byte:
-            writer.writeByte(reader.readByte());
-            break;
-        case Arguments::Boolean:
-            writer.writeBoolean(reader.readBoolean());
-            break;
-        case Arguments::Int16:
-            writer.writeInt16(reader.readInt16());
-            break;
-        case Arguments::Uint16:
-            writer.writeUint16(reader.readUint16());
-            break;
-        case Arguments::Int32:
-            writer.writeInt32(reader.readInt32());
-            break;
-        case Arguments::Uint32:
-            writer.writeUint32(reader.readUint32());
-            break;
-        case Arguments::Int64:
-            writer.writeInt64(reader.readInt64());
-            break;
-        case Arguments::Uint64:
-            writer.writeUint64(reader.readUint64());
-            break;
-        case Arguments::Double:
-            writer.writeDouble(reader.readDouble());
-            break;
-        case Arguments::String: {
-            cstring s = reader.readString();
-            if (emptyNesting) {
-                s = cstring("");
-            } else {
-                TEST(Arguments::isStringValid(s));
-            }
-            writer.writeString(s);
-            break; }
-        case Arguments::ObjectPath: {
-            cstring objectPath = reader.readObjectPath();
-            if (emptyNesting) {
-                objectPath = cstring("/");
-            } else {
-                TEST(Arguments::isObjectPathValid(objectPath));
-            }
-            writer.writeObjectPath(objectPath);
-            break; }
-        case Arguments::Signature: {
-            cstring signature = reader.readSignature();
-            if (emptyNesting) {
-                signature = cstring("");
-            } else {
-                TEST(Arguments::isSignatureValid(signature));
-            }
-            writer.writeSignature(signature);
-            break; }
-        case Arguments::UnixFd:
-            writer.writeUnixFd(reader.readUnixFd());
-            break;
         default:
-            TEST(false);
+            defaultReadToWrite(&reader, &writer, &emptyNesting);
             break;
         }
     }
