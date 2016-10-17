@@ -169,6 +169,8 @@ public:
 
         IoState state() const { return m_state; }
         cstring stateString() const;
+        bool isInsideEmptyArray() const;
+        cstring currentSignature() const; // current signature, either main signature or current variant
         // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
         // WARNING: calling replaceData() invalidates copies (if any) of this Reader
         void replaceData(chunk data);
@@ -288,6 +290,8 @@ public:
 
         IoState state() const { return m_state; }
         cstring stateString() const;
+        bool isInsideEmptyArray() const;
+        cstring currentSignature() const; // current signature, either main signature or current variant
 
         enum ArrayOption
         {

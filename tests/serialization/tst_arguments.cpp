@@ -70,7 +70,7 @@ static bool stringsEqual(cstring s1, cstring s2)
 // 3) skips nil arrays at and below nil array nesting level m_skipNilArraysFromLevel with m_skippingReader
 // It even skips aggregates inside nil arrays as 2) + 3) imply.
 // It checks:
-// a) where nothing is skipped that the aggregate structure and data read is the same
+// a) where nothing is skipped, that the aggregate structure and data read are the same
 class SkipChecker
 {
 public:
@@ -284,7 +284,7 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
 
 // When using this to iterate over the reader, it will make an exact copy using the Writer.
 // You need to do something only in states where something special should happen.
-static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *writer, uint32 *emptyNesting)
+static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *writer)
 {
     switch(reader->state()) {
     case Arguments::BeginStruct:
@@ -307,23 +307,19 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
                                     : Arguments::Writer::WriteTypesOfEmptyArray);
-        *emptyNesting += hasData ? 0 : 1;
         break; }
     case Arguments::EndArray:
         reader->endArray();
         writer->endArray();
-        *emptyNesting = std::max(*emptyNesting - 1, 0u);
         break;
     case Arguments::BeginDict: {
         const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
                                     : Arguments::Writer::WriteTypesOfEmptyArray);
-        *emptyNesting += hasData ? 0 : 1;
         break; }
     case Arguments::EndDict:
         reader->endDict();
         writer->endDict();
-        *emptyNesting = std::max(*emptyNesting - 1, 0u);
         break;
     case Arguments::Byte:
         writer->writeByte(reader->readByte());
@@ -354,7 +350,7 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         break;
     case Arguments::String: {
         cstring s = reader->readString();
-        if (*emptyNesting) {
+        if (reader->isInsideEmptyArray()) {
             s = cstring("");
         } else {
             TEST(Arguments::isStringValid(s));
@@ -363,7 +359,7 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         break; }
     case Arguments::ObjectPath: {
         cstring objectPath = reader->readObjectPath();
-        if (*emptyNesting) {
+        if (reader->isInsideEmptyArray()) {
             objectPath = cstring("/");
         } else {
             TEST(Arguments::isObjectPathValid(objectPath));
@@ -372,7 +368,7 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         break; }
     case Arguments::Signature: {
         cstring signature = reader->readSignature();
-        if (*emptyNesting) {
+        if (reader->isInsideEmptyArray()) {
             signature = cstring("");
         } else {
             TEST(Arguments::isSignatureValid(signature));
@@ -428,7 +424,6 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
     chunk data = original.data();
     chunk shortData;
     bool isDone = false;
-    uint32 emptyNesting = 0;
 
     while (!isDone) {
         TEST(writer.state() != Arguments::InvalidData);
@@ -460,7 +455,7 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
             reader.replaceData(shortData);
             break; }
         default:
-            defaultReadToWrite(&reader, &writer, &emptyNesting);
+            defaultReadToWrite(&reader, &writer);
             break;
         }
     }
@@ -478,7 +473,6 @@ static void doRoundtripWithReaderCopy(const Arguments &original, uint32 dataIncr
     Arguments::Writer writer;
 
     bool isDone = false;
-    uint32 emptyNesting = 0;
     uint32 i = 0;
 
     while (!isDone) {
@@ -496,7 +490,7 @@ static void doRoundtripWithReaderCopy(const Arguments &original, uint32 dataIncr
             isDone = true;
             break;
         default:
-            defaultReadToWrite(reader, &writer, &emptyNesting);
+            defaultReadToWrite(reader, &writer);
             break;
         }
     }
@@ -512,7 +506,6 @@ static void doRoundtripWithWriterCopy(const Arguments &original, uint32 dataIncr
     Arguments::Writer *writer = new Arguments::Writer;
 
     bool isDone = false;
-    uint32 emptyNesting = 0;
     uint32 i = 0;
 
     while (!isDone) {
@@ -530,7 +523,7 @@ static void doRoundtripWithWriterCopy(const Arguments &original, uint32 dataIncr
             isDone = true;
             break;
         default:
-            defaultReadToWrite(&reader, writer, &emptyNesting);
+            defaultReadToWrite(&reader, writer);
             break;
         }
     }

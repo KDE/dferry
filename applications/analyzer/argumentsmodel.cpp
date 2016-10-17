@@ -88,7 +88,8 @@ QAbstractItemModel* createArgumentsModel(Message *message)
     }
 
     bool isDone = false;
-    int emptyNesting = 0;
+    // Cache it, don't call Reader::isInsideEmptyArray() on every data element.
+    bool inEmptyArray = false;
 
     while (!isDone) {
         switch(reader.state()) {
@@ -112,63 +113,61 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = ascend(parent, model);
             break;
         case Arguments::BeginArray: {
-            const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            parent = descend(parent, hasData ? "Array" : "Array (no elements, showing just types)");
-            emptyNesting += hasData ? 0 : 1;
+            inEmptyArray = !reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            parent = descend(parent, inEmptyArray ? "Array (no elements, showing just types)" : "Array");
             break; }
         case Arguments::EndArray:
             reader.endArray();
+            inEmptyArray = reader.isInsideEmptyArray();
             parent = ascend(parent, model);
-            emptyNesting = qMax(emptyNesting - 1, 0);
             break;
         case Arguments::BeginDict: {
-            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            parent = descend(parent, hasData ? "Dict" : "Dict (no elements, showing just types)");
-            emptyNesting += hasData ? 0 : 1;
+            inEmptyArray = !reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            parent = descend(parent, inEmptyArray ? "Dict (no elements, showing just types)" : "Dict");
             break; }
         case Arguments::EndDict:
             reader.endDict();
+            inEmptyArray = reader.isInsideEmptyArray();
             parent = ascend(parent, model);
-            emptyNesting = qMax(emptyNesting - 1, 0);
             break;
         case Arguments::Byte:
-            addKeyValue(parent, "byte", emptyNesting, reader.readByte());
+            addKeyValue(parent, "byte", inEmptyArray, reader.readByte());
             break;
         case Arguments::Boolean:
-            addKeyValue(parent, "boolean", emptyNesting, reader.readBoolean());
+            addKeyValue(parent, "boolean", inEmptyArray, reader.readBoolean());
             break;
         case Arguments::Int16:
-            addKeyValue(parent, "int16", emptyNesting, reader.readInt16());
+            addKeyValue(parent, "int16", inEmptyArray, reader.readInt16());
             break;
         case Arguments::Uint16:
-            addKeyValue(parent, "uint16", emptyNesting, reader.readUint16());
+            addKeyValue(parent, "uint16", inEmptyArray, reader.readUint16());
             break;
         case Arguments::Int32:
-            addKeyValue(parent, "int32", emptyNesting, reader.readInt32());
+            addKeyValue(parent, "int32", inEmptyArray, reader.readInt32());
             break;
         case Arguments::Uint32:
-            addKeyValue(parent, "uint32", emptyNesting, reader.readUint32());
+            addKeyValue(parent, "uint32", inEmptyArray, reader.readUint32());
             break;
         case Arguments::Int64:
-            addKeyValue(parent, "int64", emptyNesting, reader.readInt64());
+            addKeyValue(parent, "int64", inEmptyArray, reader.readInt64());
             break;
         case Arguments::Uint64:
-            addKeyValue(parent, "uint64", emptyNesting, reader.readUint64());
+            addKeyValue(parent, "uint64", inEmptyArray, reader.readUint64());
             break;
         case Arguments::Double:
-            addKeyValue(parent, "double", emptyNesting, reader.readDouble());
+            addKeyValue(parent, "double", inEmptyArray, reader.readDouble());
             break;
         case Arguments::String:
-            addKeyValue(parent, "string", emptyNesting, reader.readString().ptr);
+            addKeyValue(parent, "string", inEmptyArray, reader.readString().ptr);
             break;
         case Arguments::ObjectPath:
-            addKeyValue(parent, "object path", emptyNesting, reader.readObjectPath().ptr);
+            addKeyValue(parent, "object path", inEmptyArray, reader.readObjectPath().ptr);
             break;
         case Arguments::Signature:
-            addKeyValue(parent, "type signature", emptyNesting, reader.readSignature().ptr);
+            addKeyValue(parent, "type signature", inEmptyArray, reader.readSignature().ptr);
             break;
         case Arguments::UnixFd:
-            addKeyValue(parent, "file descriptor", emptyNesting, QVariant());
+            addKeyValue(parent, "file descriptor", inEmptyArray, QVariant());
             break;
         case Arguments::InvalidData:
         case Arguments::NeedMoreData:

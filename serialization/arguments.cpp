@@ -507,7 +507,10 @@ std::string Arguments::prettyPrint() const
     std::string nestingPrefix;
 
     bool isDone = false;
-    int emptyNesting = 0;
+
+    // Cache it, don't call Reader::isInsideEmptyArray() on every data element. This isn't really
+    // a big deal for performance here, but in other situations it is, so set a good example :)
+    bool inEmptyArray = false;
 
     while (!isDone) {
         // HACK use nestingPrefix to determine when we're switching from key to value - this can be done
@@ -548,27 +551,26 @@ std::string Arguments::prettyPrint() const
                 const std::pair<Arguments::IoState, chunk> bytes = reader.readPrimitiveArray();
                 assert(bytes.first == Arguments::Byte);
                 assert(bytes.second.length > 0);
+                inEmptyArray = reader.isInsideEmptyArray(); // Maybe not necessary, but safe
                 ret << nestingPrefix << "array of bytes [ " << uint(bytes.second.ptr[0]);
                 for (uint32 i = 1; i < bytes.second.length; i++) {
                     ret << ", " << uint(bytes.second.ptr[i]);
                 }
                 ret << " ]\n";
             } else {
-                const bool hasData = reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
-                emptyNesting += hasData ? 0 : 1;
+                inEmptyArray = !reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
                 ret << nestingPrefix << "begin array\n";
                 nestingPrefix += "[ ";
             }
             break;
         case Arguments::EndArray:
             reader.endArray();
-            emptyNesting = std::max(emptyNesting - 1, 0);
+            inEmptyArray = reader.isInsideEmptyArray();
             nestingPrefix.resize(nestingPrefix.size() - 2);
             ret << nestingPrefix << "end array\n";
             break;
         case Arguments::BeginDict: {
-            const bool hasData = reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            emptyNesting += hasData ? 0 : 1;
+            inEmptyArray = !reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
             ret << nestingPrefix << "begin dict\n";
             nestingPrefix += "{K ";
             break; }
@@ -583,14 +585,14 @@ std::string Arguments::prettyPrint() const
 #endif
         case Arguments::EndDict:
             reader.endDict();
-            emptyNesting = std::max(emptyNesting - 1, 0);
+            inEmptyArray = reader.isInsideEmptyArray();
             nestingPrefix.resize(nestingPrefix.size() - strlen("{V "));
             ret << nestingPrefix << "end dict\n";
             break;
         case Arguments::Boolean: {
             bool b = reader.readBoolean();
             ret << nestingPrefix << "bool: ";
-            if (emptyNesting) {
+            if (inEmptyArray) {
                 ret << "<nil>";
             } else {
                 ret << (b ? "true" : "false");
@@ -598,37 +600,37 @@ std::string Arguments::prettyPrint() const
             ret << '\n';
             break; }
         case Arguments::Byte:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, int(reader.readByte()), "byte");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, int(reader.readByte()), "byte");
             break;
         case Arguments::Int16:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt16(), "int16");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readInt16(), "int16");
             break;
         case Arguments::Uint16:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint16(), "uint16");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUint16(), "uint16");
             break;
         case Arguments::Int32:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt32(), "int32");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readInt32(), "int32");
             break;
         case Arguments::Uint32:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint32(), "uint32");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUint32(), "uint32");
             break;
         case Arguments::Int64:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readInt64(), "int64");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readInt64(), "int64");
             break;
         case Arguments::Uint64:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readUint64(), "uint64");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUint64(), "uint64");
             break;
         case Arguments::Double:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readDouble(), "double");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readDouble(), "double");
             break;
         case Arguments::String:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readString(), "string");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readString(), "string");
             break;
         case Arguments::ObjectPath:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readObjectPath(), "object path");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readObjectPath(), "object path");
             break;
         case Arguments::Signature:
-            printMaybeNil(&ret, nestingPrefix, emptyNesting, reader.readSignature(), "type signature");
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readSignature(), "type signature");
             break;
         case Arguments::UnixFd:
             // TODO
@@ -940,6 +942,36 @@ cstring Arguments::Reader::stateString() const
     return printableState(m_state);
 }
 
+bool Arguments::Reader::isInsideEmptyArray() const
+{
+    if (d->m_nilArrayNesting > 1) {
+        return true;
+    } else if (d->m_nilArrayNesting == 1) {
+        // Special case 1: in state BeginArray/Dict, when we've just entered the nil array according
+        // to our internal state, the API user cannot know that yet -> return false;
+        // Since this is easily done here, don't complicate the rest of the code with a hacky solution.
+        if (m_state == BeginArray || m_state == BeginDict) {
+            return false;
+        }
+        // Special case 2: in state EndArray/Dict, when we've just left the nil array according
+        // to our internal state, advanceState() and endArray/Dict() make sure that
+        // d->m_nilArrayNesting is only decremented after endArray/Dict() has been called.
+        // Nothing to do for us here, but this is the point to explain it.
+        return true;
+    } else {
+        assert(d->m_nilArrayNesting == 0);
+        return false;
+    }
+}
+
+cstring Arguments::Reader::currentSignature() const
+{
+    // ### not sure if determining length like that is the best way, should probably be as similar to
+    //     libdbus-1 as possible (unless we can do much better).
+    return cstring(d->m_signature.ptr,
+                   std::max(uint32(0), std::min(d->m_signature.length, d->m_signaturePosition)));
+}
+
 void Arguments::Reader::replaceData(chunk data)
 {
     VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
@@ -1167,20 +1199,24 @@ void Arguments::Reader::advanceState()
             const bool isDict = aggregateInfo.aggregateType == BeginDict;
             if (d->m_signaturePosition > aggregateInfo.arr.containedTypeBegin + (isDict ? 1 : 0)) {
                 const Private::ArrayInfo &arrayInfo = aggregateInfo.arr;
-                bool moreElements = false;
+                bool moreIterations = false;
                 if (unlikely(d->m_nilArrayNesting)) {
                     // we're done iterating over it once
                     // TODO unit-test this
-                    d->m_nilArrayNesting--;
+                    // HACK: decreasing m_nilArrayNesting here would be much cleaner! But from the
+                    // user's POV, the nil array has not been left before the call to endArray().
+                    // We will set state EndArray / EndDict, so we know that the user "must" call
+                    // endArray()/endDict(), so adjust d->m_nilArrayNesting in those methods.
+                    //d->m_nilArrayNesting--;
                 } else if (d->m_dataPosition < arrayInfo.dataEnd) {
                     if (isDict) {
                         d->m_dataPosition = align(d->m_dataPosition, 8); // align to dict entry
                     }
                     // rewind to start of contained type and read the type info there
                     d->m_signaturePosition = arrayInfo.containedTypeBegin;
-                    moreElements = true;
+                    moreIterations = true;
                 }
-                if (!moreElements) {
+                if (!moreIterations) {
                     // TODO check that final data position is where it should be according to the
                     // serialized array length
                     m_state = isDict ? EndDict : EndArray;
@@ -1326,7 +1362,8 @@ void Arguments::Reader::advanceState()
         VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
         if (firstElementTy.state() == BeginDict) {
             d->m_signaturePosition++;
-            // TODO check whether the first type is a primitive or string type!
+            // TODO check whether the first type is a primitive or string type! // ### isn't that already
+            // checked for the main signature and / or variants, though?
             // only closed at end of dict - there is no observable difference for clients
             VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         }
@@ -1462,7 +1499,11 @@ void Arguments::Reader::skipArray()
 
 void Arguments::Reader::endArray()
 {
-    advanceStateFrom(EndArray);
+    VALID_IF(m_state == EndArray, Error::ReadWrongType);
+    if (unlikely(d->m_nilArrayNesting)) {
+        d->m_nilArrayNesting--;
+    }
+    advanceState();
 }
 
 static bool isAligned(uint32 value, uint32 alignment)
@@ -1562,7 +1603,11 @@ void Arguments::Reader::skipDict()
 
 void Arguments::Reader::endDict()
 {
-    advanceStateFrom(EndDict);
+    VALID_IF(m_state == EndDict, Error::ReadWrongType);
+    if (unlikely(d->m_nilArrayNesting)) {
+        d->m_nilArrayNesting--;
+    }
+    advanceState();
 }
 
 void Arguments::Reader::beginStruct()
@@ -1851,6 +1896,18 @@ Error Arguments::Writer::error() const
 cstring Arguments::Writer::stateString() const
 {
     return printableState(m_state);
+}
+
+bool Arguments::Writer::isInsideEmptyArray() const
+{
+    return d->m_nilArrayNesting > 0;
+}
+
+cstring Arguments::Writer::currentSignature() const
+{
+    // ### see comment in Reader::currentSignature
+    return cstring(d->m_signature.ptr,
+                   std::max(uint32(0), std::min(d->m_signature.length, d->m_signaturePosition)));
 }
 
 void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
