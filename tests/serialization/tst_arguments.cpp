@@ -907,15 +907,28 @@ static void test_writerMisuse()
     }
     {
         Arguments::Writer writer;
-        writer.beginDict();
-        writer.writeByte(1);
-        writer.endDict(); // wrong, a dict must contain exactly two types
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.endDict(); // wrong, must contain exactly two types
         TEST(writer.state() == Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginDict();
-        writer.writeByte(1); // in Writer, calling nextDictEntry() after beginDict() is optional
+        writer.writeByte(1);
+        writer.endDict(); // wrong, must contain exactly two types
+        TEST(writer.state() == Arguments::InvalidData);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(1);
+        writer.endDict(); // wrong, must contain exactly two types
+        TEST(writer.state() == Arguments::InvalidData);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginDict();
+        writer.writeByte(1);
         writer.writeByte(2);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
