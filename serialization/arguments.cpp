@@ -1748,11 +1748,13 @@ void Arguments::Reader::skipCurrentAggregate()
         case Arguments::NeedMoreData:
             // TODO handle this properly: rewind the state to before the aggregate - or get fancy and support
             // resuming, but that is going to get really ugly
+            // fall through
         default:
             m_state = InvalidData;
             // TODO m_error =
-            break;
+            // fall through
         case Arguments::InvalidData:
+            isDone = true;
             break;
         }
     }
