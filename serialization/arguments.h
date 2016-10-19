@@ -215,6 +215,7 @@ public:
         void endVariant(); // like endArray()
 
         std::vector<IoState> aggregateStack() const; // the aggregates the reader is currently in
+        uint32 aggregateDepth() const; // like calling aggregateStack().size() but much faster
         IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
 
         // reading a type that is not indicated by state() will cause undefined behavior and at
@@ -255,7 +256,6 @@ public:
         void doReadPrimitiveType();
         void doReadString(uint32 lengthPrefixSize);
         void advanceState();
-        void advanceStateFrom(IoState expectedState);
         void beginArrayOrDict(bool isDict, EmptyArrayOption option);
         void skipArrayOrDictSignature(bool isDict);
         void skipArrayOrDict(bool isDict);
@@ -314,6 +314,7 @@ public:
         Arguments finish();
 
         std::vector<IoState> aggregateStack() const; // the aggregates the writer is currently in
+        uint32 aggregateDepth() const; // like calling aggregateStack().size() but much faster
         IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
 
         void writeByte(byte b);
