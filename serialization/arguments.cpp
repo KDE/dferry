@@ -1761,6 +1761,7 @@ void Arguments::Reader::skipCurrentAggregate()
 std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
 {
     std::vector<IoState> ret;
+    ret.reserve(d->m_aggregateStack.size());
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
         ret.push_back(aggregate.aggregateType);
     }
@@ -2507,6 +2508,7 @@ void Arguments::Writer::finishInternal()
 std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
 {
     std::vector<IoState> ret;
+    ret.reserve(d->m_aggregateStack.size());
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
         ret.push_back(aggregate.aggregateType);
     }
