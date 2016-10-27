@@ -349,28 +349,22 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         writer->writeDouble(reader->readDouble());
         break;
     case Arguments::String: {
-        cstring s = reader->readString();
-        if (reader->isInsideEmptyArray()) {
-            s = cstring("");
-        } else {
+        const cstring s = reader->readString();
+        if (!reader->isInsideEmptyArray()) {
             TEST(Arguments::isStringValid(s));
         }
         writer->writeString(s);
         break; }
     case Arguments::ObjectPath: {
-        cstring objectPath = reader->readObjectPath();
-        if (reader->isInsideEmptyArray()) {
-            objectPath = cstring("/");
-        } else {
+        const cstring objectPath = reader->readObjectPath();
+        if (!reader->isInsideEmptyArray()) {
             TEST(Arguments::isObjectPathValid(objectPath));
         }
         writer->writeObjectPath(objectPath);
         break; }
     case Arguments::Signature: {
-        cstring signature = reader->readSignature();
-        if (reader->isInsideEmptyArray()) {
-            signature = cstring("");
-        } else {
+        const cstring signature = reader->readSignature();
+        if (!reader->isInsideEmptyArray()) {
             TEST(Arguments::isSignatureValid(signature));
         }
         writer->writeSignature(signature);

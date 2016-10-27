@@ -2098,7 +2098,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         return;
     }
     if (isStringType) {
-        doWriteString(alignment);
+        // In case of nil array, skip writing to make sure that the input string (which is explicitly
+        // allowed to be garbage) is not validated and no wild pointer is dereferenced.
+        if (likely(!d->m_nilArrayNesting)) {
+            doWriteString(alignment);
+        }
         return;
     }
 
