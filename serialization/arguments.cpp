@@ -2154,7 +2154,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         if (likely(!d->m_nilArrayNesting)) {
             // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
-            // (This is a peculiarity of empty arrey handling in this API and has nothing to
+            // (This is a peculiarity of empty array handling in this API and has nothing to
             // do with the wire format)
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
             assert(d->m_signaturePosition <= MaxSignatureLength); // should have been caught earlier
@@ -2229,8 +2229,8 @@ void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
     isEmpty = isEmpty || d->m_nilArrayNesting;
     if (isEmpty) {
         if (!d->m_nilArrayNesting++) {
-            // for simplictiy and performance in the fast path, we keep storing the data chunks and any
-            // variant signatures written inside an empty array. when we close the array, though, we
+            // For simplictiy and performance in the fast path, we keep storing the data chunks and any
+            // variant signatures written inside an empty array. When we close the array, though, we
             // throw away all that data and signatures and keep only changes in the signature containing
             // the topmost empty array.
             d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // +1 -> keep ArrayLengthField
