@@ -2081,7 +2081,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         }
         d->m_signature.length += signatureFragment.length;
     } else {
-        VALID_IF(likely(!d->m_nilArrayNesting), Error::SubsequentIterationInNilArray);
+        VALID_IF(likely(!d->m_nilArrayNesting), Error::ExtraIterationInEmptyArray);
         // signature must match first iteration (of an array/dict)
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= d->m_signature.length,
                  Error::TypeMismatchInSubsequentArrayIteration);
