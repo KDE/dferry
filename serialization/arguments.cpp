@@ -2228,9 +2228,34 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     m_state = AnyData;
 }
 
-void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
+void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
 {
-    isEmpty = isEmpty || d->m_nilArrayNesting;
+    assert(beginWhat == BeginArray || beginWhat == BeginDict);
+    if (unlikely(option == RestartEmptyArrayToWriteTypes)) {
+        if (!d->m_aggregateStack.empty()) {
+            Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+            if (aggregateInfo.aggregateType == beginWhat) {
+                // No writes to the array or dict may have occurred yet
+                if (d->m_signature.length == aggregateInfo.arr.containedTypeBegin) {
+                    // Fix up state as if beginArray/Dict() had been called with WriteTypesOfEmptyArray
+                    // in the first place. After that small fixup we're done and return.
+                    // The code is a slightly modified version of code below under: if (isEmpty) {
+                    if (!d->m_nilArrayNesting) {
+                        d->m_nilArrayNesting = 1;
+                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1;
+                        d->m_dataPositionBeforeNilArray = d->m_dataPosition;
+                    } else {
+                        // The array may be implicitly nil (so our poor API client doesn't notice) because
+                        // an array below in the aggregate stack is nil, so just allow this as a no-op.
+                    }
+                    return;
+                }
+            }
+        }
+        VALID_IF(false, Error::InvalidStateToRestartEmptyArray);
+    }
+
+    const bool isEmpty = (option != NonEmptyArray) || d->m_nilArrayNesting;
     if (isEmpty) {
         if (!d->m_nilArrayNesting++) {
             // For simplictiy and performance in the fast path, we keep storing the data chunks and any
@@ -2241,16 +2266,16 @@ void Arguments::Writer::beginArrayOrDict(bool isDict, bool isEmpty)
             d->m_dataPositionBeforeNilArray = d->m_dataPosition;
         }
     }
-    if (isDict) {
-        advanceState(cstring("a{", strlen("a{")), BeginDict);
+    if (beginWhat == BeginArray) {
+        advanceState(cstring("a", strlen("a")), beginWhat);
     } else {
-        advanceState(cstring("a", strlen("a")), BeginArray);
+        advanceState(cstring("a{", strlen("a{")), beginWhat);
     }
 }
 
 void Arguments::Writer::beginArray(ArrayOption option)
 {
-    beginArrayOrDict(false, option == WriteTypesOfEmptyArray);
+    beginArrayOrDict(BeginArray, option);
 }
 
 void Arguments::Writer::endArray()
@@ -2260,7 +2285,7 @@ void Arguments::Writer::endArray()
 
 void Arguments::Writer::beginDict(ArrayOption option)
 {
-    beginArrayOrDict(true, option == WriteTypesOfEmptyArray);
+    beginArrayOrDict(BeginDict, option);
 }
 
 void Arguments::Writer::endDict()

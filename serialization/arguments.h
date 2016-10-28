@@ -296,7 +296,8 @@ public:
         enum ArrayOption
         {
             NonEmptyArray = 0,
-            WriteTypesOfEmptyArray
+            WriteTypesOfEmptyArray,
+            RestartEmptyArrayToWriteTypes
         };
 
         void beginArray(ArrayOption option = NonEmptyArray);
@@ -340,7 +341,7 @@ public:
         void doWritePrimitiveType(uint32 alignAndSize);
         void doWriteString(uint32 lengthPrefixSize);
         void advanceState(cstring signatureFragment, IoState newState);
-        void beginArrayOrDict(bool isDict, bool isEmpty);
+        void beginArrayOrDict(IoState beginWhat, ArrayOption option);
         void finishInternal();
 
         Private *d;
