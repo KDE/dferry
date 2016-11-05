@@ -1521,6 +1521,27 @@ static void test_emptyArrayAndDict()
             doRoundtrip(arg, false);
         }
     }
+    for (int i = 0; i < 4; i++) {
+        // Test RestartEmptyArrayToWriteTypes and writing an empty array inside the >1st iteration of another array
+        Arguments::Writer writer;
+        writer.beginArray((i & 2) ? Arguments::Writer::WriteTypesOfEmptyArray : Arguments::Writer::NonEmptyArray);
+            writer.beginArray(Arguments::Writer::NonEmptyArray); // don't care, the logic error is only in the second iteration
+                writer.writeString(cstring("a"));
+            writer.endArray();
+            if (i & 1) {
+                writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+            } else {
+                writer.beginArray(Arguments::Writer::NonEmptyArray);
+                writer.beginArray(Arguments::Writer::RestartEmptyArrayToWriteTypes);
+            }
+                    writer.writeString(cstring("a"));
+            writer.endArray();
+        writer.endArray();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
     {
         for (int i = 0; i <= 32; i++) {
             Arguments::Writer writer;
@@ -1576,9 +1597,14 @@ static void test_emptyArrayAndDict()
         writer.writeString(cstring("a"));
         writer.beginVariant();
         writer.endVariant();
-        TEST(writer.state() != Arguments::InvalidData);
         writer.writeString(cstring("a"));
-        TEST(writer.state() == Arguments::InvalidData);
+        writer.beginVariant();
+        writer.endVariant();
+        writer.endDict();
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
     }
     {
         Arguments::Writer writer;
@@ -1591,6 +1617,31 @@ static void test_emptyArrayAndDict()
         // empty variant in the output
         writer.endVariant();
         writer.endDict();
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    for (int i = 0; i < 4; i++) {
+        // Test RestartEmptyArrayToWriteTypes and writing an empty dict inside the >1st iteration of another dict
+        Arguments::Writer writer;
+        writer.beginDict((i & 2) ? Arguments::Writer::WriteTypesOfEmptyArray : Arguments::Writer::NonEmptyArray);
+            writer.writeString(cstring("a"));
+            writer.beginDict(Arguments::Writer::NonEmptyArray); // don't care, the logic error is only in the second iteration
+                writer.writeString(cstring("a"));
+                writer.writeInt32(1234);
+            writer.endDict();
+            writer.writeString(cstring("a"));
+            if (i & 1) {
+                writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+            } else {
+                writer.beginDict(Arguments::Writer::NonEmptyArray);
+                writer.beginDict(Arguments::Writer::RestartEmptyArrayToWriteTypes);
+            }
+                    writer.writeString(cstring("a"));
+                    writer.writeInt32(1234);
+            writer.endDict();
+        writer.endDict();
+        TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1619,7 +1670,6 @@ static void test_emptyArrayAndDict()
             doRoundtrip(arg, false);
         }
     }
-
 }
 
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array

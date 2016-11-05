@@ -71,7 +71,6 @@ public:
         CannotEndArrayHere,
         CannotEndArrayOrDictHere,
         TooFewTypesInArrayOrDict,
-        ExtraIterationInEmptyArray,
         InvalidStateToRestartEmptyArray,
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,

@@ -2081,7 +2081,17 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         }
         d->m_signature.length += signatureFragment.length;
     } else {
-        VALID_IF(likely(!d->m_nilArrayNesting), Error::ExtraIterationInEmptyArray);
+        // Do not try to prevent several iterations through a nil array. Two reasons:
+        // - We may be writing a nil array in the >1st iteration of a non-nil outer array.
+        //   This would need to be distinguished from just iterating through a nil array
+        //   several times. Which is well possible. We don't bother with that because...
+        // - As a QtDBus unittest illustrates, somebody may choose to serialize a fixed length
+        //   series of data elements as an array (instead of struct), so that a trivial
+        //   serialization of such data just to fill in type information in an outer empty array
+        //   would end up iterating through the inner, implicitly empty array several times.
+        // All in all it is just not much of a benefit to be strict, so don't.
+        //VALID_IF(likely(!d->m_nilArrayNesting), Error::ExtraIterationInEmptyArray);
+
         // signature must match first iteration (of an array/dict)
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= d->m_signature.length,
                  Error::TypeMismatchInSubsequentArrayIteration);
@@ -2236,13 +2246,16 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
             Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
             if (aggregateInfo.aggregateType == beginWhat) {
                 // No writes to the array or dict may have occurred yet
-                if (d->m_signature.length == aggregateInfo.arr.containedTypeBegin) {
+
+                if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
                     // Fix up state as if beginArray/Dict() had been called with WriteTypesOfEmptyArray
                     // in the first place. After that small fixup we're done and return.
                     // The code is a slightly modified version of code below under: if (isEmpty) {
                     if (!d->m_nilArrayNesting) {
                         d->m_nilArrayNesting = 1;
-                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1;
+                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // as below
+                        // Now correct for the elements already added in advanceState() with BeginArray / BeginDict
+                        d->m_dataElementsCountBeforeNilArray -= (beginWhat == BeginDict) ? 2 : 1;
                         d->m_dataPositionBeforeNilArray = d->m_dataPosition;
                     } else {
                         // The array may be implicitly nil (so our poor API client doesn't notice) because
