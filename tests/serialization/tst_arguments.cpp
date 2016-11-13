@@ -288,66 +288,34 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
 {
     switch(reader->state()) {
     case Arguments::BeginStruct:
-        reader->beginStruct();
-        writer->beginStruct();
-        break;
     case Arguments::EndStruct:
-        reader->endStruct();
-        writer->endStruct();
-        break;
     case Arguments::BeginVariant:
-        reader->beginVariant();
-        writer->beginVariant();
-        break;
     case Arguments::EndVariant:
-        reader->endVariant();
-        writer->endVariant();
+    case Arguments::EndArray:
+    case Arguments::EndDict:
+    case Arguments::Byte:
+    case Arguments::Boolean:
+    case Arguments::Int16:
+    case Arguments::Uint16:
+    case Arguments::Int32:
+    case Arguments::Uint32:
+    case Arguments::Int64:
+    case Arguments::Uint64:
+    case Arguments::Double:
+    case Arguments::UnixFd:
+        Arguments::copyOneElement(reader, writer);
         break;
+    // special handling for BeginArray and BeginDict to avoid "fast copy" for primitive arrays
     case Arguments::BeginArray: {
         const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
                                     : Arguments::Writer::WriteTypesOfEmptyArray);
         break; }
-    case Arguments::EndArray:
-        reader->endArray();
-        writer->endArray();
-        break;
     case Arguments::BeginDict: {
         const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
                                     : Arguments::Writer::WriteTypesOfEmptyArray);
         break; }
-    case Arguments::EndDict:
-        reader->endDict();
-        writer->endDict();
-        break;
-    case Arguments::Byte:
-        writer->writeByte(reader->readByte());
-        break;
-    case Arguments::Boolean:
-        writer->writeBoolean(reader->readBoolean());
-        break;
-    case Arguments::Int16:
-        writer->writeInt16(reader->readInt16());
-        break;
-    case Arguments::Uint16:
-        writer->writeUint16(reader->readUint16());
-        break;
-    case Arguments::Int32:
-        writer->writeInt32(reader->readInt32());
-        break;
-    case Arguments::Uint32:
-        writer->writeUint32(reader->readUint32());
-        break;
-    case Arguments::Int64:
-        writer->writeInt64(reader->readInt64());
-        break;
-    case Arguments::Uint64:
-        writer->writeUint64(reader->readUint64());
-        break;
-    case Arguments::Double:
-        writer->writeDouble(reader->readDouble());
-        break;
     case Arguments::String: {
         const cstring s = reader->readString();
         if (!reader->isInsideEmptyArray()) {
@@ -369,7 +337,7 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         }
         writer->writeSignature(signature);
         break; }
-    case Arguments::UnixFd:
+
         writer->writeUnixFd(reader->readUnixFd());
         break;
     // special cases follow

@@ -51,6 +51,113 @@ static byte alignmentLog2(uint32 alignment)
     return alignLog[alignment];
 }
 
+// When using this to iterate over the reader, it will make an exact copy using the Writer.
+// You need to do something only in states where something special should happen.
+// To check errors, "simply" (sorry!) check the reader->state() and writer()->state().
+// Note that you don't have to check the state before each element, it is fine to call
+// read / write functions in error state, including with garbage data from the possibly
+// invalid reader, and the reader / writer state will remain frozen in the state in which
+// the first error occurred
+// TODO: that text above belongs into a "Reader and Writer state / errors" explanation of the docs
+
+// static
+void Arguments::copyOneElement(Arguments::Reader *reader, Arguments::Writer *writer)
+{
+    switch(reader->state()) {
+    case Arguments::BeginStruct:
+        reader->beginStruct();
+        writer->beginStruct();
+        break;
+    case Arguments::EndStruct:
+        reader->endStruct();
+        writer->endStruct();
+        break;
+    case Arguments::BeginVariant:
+        reader->beginVariant();
+        writer->beginVariant();
+        break;
+    case Arguments::EndVariant:
+        reader->endVariant();
+        writer->endVariant();
+        break;
+    case Arguments::BeginArray: {
+        // Application note: to avoid handling arrays as primitive (where applicable), just don't
+        // call this function in BeginArray state and do as in the else case.
+        const Arguments::IoState primitiveType = reader->peekPrimitiveArray();
+        if (primitiveType != BeginArray) { // InvalidData can't happen because the state *is* BeginArray
+            const std::pair<Arguments::IoState, chunk> arrayData = reader->readPrimitiveArray();
+            writer->writePrimitiveArray(arrayData.first, arrayData.second);
+        } else {
+            const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
+                                       : Arguments::Writer::WriteTypesOfEmptyArray);
+        }
+        break; }
+    case Arguments::EndArray:
+        reader->endArray();
+        writer->endArray();
+        break;
+    case Arguments::BeginDict: {
+        const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
+                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+        break; }
+    case Arguments::EndDict:
+        reader->endDict();
+        writer->endDict();
+        break;
+    case Arguments::Byte:
+        writer->writeByte(reader->readByte());
+        break;
+    case Arguments::Boolean:
+        writer->writeBoolean(reader->readBoolean());
+        break;
+    case Arguments::Int16:
+        writer->writeInt16(reader->readInt16());
+        break;
+    case Arguments::Uint16:
+        writer->writeUint16(reader->readUint16());
+        break;
+    case Arguments::Int32:
+        writer->writeInt32(reader->readInt32());
+        break;
+    case Arguments::Uint32:
+        writer->writeUint32(reader->readUint32());
+        break;
+    case Arguments::Int64:
+        writer->writeInt64(reader->readInt64());
+        break;
+    case Arguments::Uint64:
+        writer->writeUint64(reader->readUint64());
+        break;
+    case Arguments::Double:
+        writer->writeDouble(reader->readDouble());
+        break;
+    case Arguments::String: {
+        const cstring s = reader->readString();
+        writer->writeString(s);
+        break; }
+    case Arguments::ObjectPath: {
+        const cstring objectPath = reader->readObjectPath();
+        writer->writeObjectPath(objectPath);
+        break; }
+    case Arguments::Signature: {
+        const cstring signature = reader->readSignature();
+        writer->writeSignature(signature);
+        break; }
+    case Arguments::UnixFd:
+        writer->writeUnixFd(reader->readUnixFd());
+        break;
+    // special cases follow
+    case Arguments::Finished:
+        break; // You *probably* want to handle that one in the caller, but you don't have to
+    case Arguments::NeedMoreData:
+        break; // No way to handle that one here
+    default:
+        break; // dito
+    }
+}
+
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
 {

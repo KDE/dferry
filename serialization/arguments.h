@@ -37,6 +37,9 @@ class Message;
 class DFERRY_EXPORT Arguments
 {
 public:
+    class Reader;
+    class Writer;
+
     enum SignatureType
     {
         MethodSignature = 0,
@@ -125,6 +128,8 @@ public:
     static bool isObjectPathValid(cstring objectPath);
     static bool isObjectPathElementValid(cstring pathElement);
     static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
+
+    static void copyOneElement(Reader *reader, Writer *writer);
 
 private:
     struct podCstring // Same as cstring but without ctor.
