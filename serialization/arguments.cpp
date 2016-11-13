@@ -949,10 +949,21 @@ bool Arguments::Reader::isInsideEmptyArray() const
 
 cstring Arguments::Reader::currentSignature() const
 {
-    // ### not sure if determining length like that is the best way, should probably be as similar to
-    //     libdbus-1 as possible (unless we can do much better).
-    return cstring(d->m_signature.ptr,
-                   std::max(uint32(0), std::min(d->m_signature.length, d->m_signaturePosition)));
+    return d->m_signature;
+}
+
+cstring Arguments::Reader::currentSingleCompleteTypeSignature() const
+{
+    const uint32 startingLength = d->m_signature.length - d->m_signaturePosition;
+    cstring sigCopy = { d->m_signature.ptr + d->m_signaturePosition, startingLength };
+    Nesting nest;
+    if (!parseSingleCompleteType(&sigCopy, &nest)) {
+        // the signature should have been validated before, but e.g. in Finished state this may happen
+        return cstring();
+    }
+    sigCopy.ptr = d->m_signature.ptr + d->m_signaturePosition;
+    sigCopy.length = startingLength - sigCopy.length;
+    return sigCopy;
 }
 
 void Arguments::Reader::replaceData(chunk data)

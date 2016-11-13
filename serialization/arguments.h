@@ -37,53 +37,19 @@ class Message;
 class DFERRY_EXPORT Arguments
 {
 public:
-    Arguments(); // constructs an empty argument list
-    // constructs an argument list to deserialize data in @p data with signature @p signature;
-    // if memOwnership is non-null, this means that signature and data's memory is contained in
-    // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
-    // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
-    // you need to make sure that the memory lives as long as the Arguments.
-    // (A notable user of this is Message - you can only get a const ref to its internal Arguments
-    //  so you need to copy to take the Arguments away from the Message, which copies out of the
-    //  borrowed memory into heap memory so the copy is safe)
-    // The copy contructor and assignment operator will always copy the data, so copying is safe
-    // regarding memory correctness but has a significant performance impact.
-    Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
-
-    // use these wherever possible if you care at all about efficiency!!
-    Arguments(Arguments &&other);
-    Arguments &operator=(Arguments &&other);
-
-    // copying needs special treatment due to the d-pointer
-    Arguments(const Arguments &other);
-    Arguments &operator=(const Arguments &other);
-
-    ~Arguments();
-
-    // error (if any) propagates to Message, so it is still available later
-    Error error() const;
-
-    std::string prettyPrint() const;
-
-    cstring signature() const;
-    chunk data() const;
-
     enum SignatureType
     {
         MethodSignature = 0,
         VariantSignature
     };
 
-    static bool isStringValid(cstring string);
-    static bool isObjectPathValid(cstring objectPath);
-    static bool isObjectPathElementValid(cstring pathElement);
-    static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
-
-    enum {
+    enum
+    {
         MaxSignatureLength = 255
     };
 
-    enum IoState {
+    enum IoState
+    {
         // "exceptional" states
         NotStarted = 0,
         Finished,
@@ -124,8 +90,43 @@ public:
         UnixFd
     };
 
-private:
+    Arguments(); // constructs an empty argument list
+    // constructs an argument list to deserialize data in @p data with signature @p signature;
+    // if memOwnership is non-null, this means that signature and data's memory is contained in
+    // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
+    // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
+    // you need to make sure that the memory lives as long as the Arguments.
+    // (A notable user of this is Message - you can only get a const ref to its internal Arguments
+    //  so you need to copy to take the Arguments away from the Message, which copies out of the
+    //  borrowed memory into heap memory so the copy is safe)
+    // The copy contructor and assignment operator will always copy the data, so copying is safe
+    // regarding memory correctness but has a significant performance impact.
+    Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
 
+    // use these wherever possible if you care at all about efficiency!!
+    Arguments(Arguments &&other);
+    Arguments &operator=(Arguments &&other);
+
+    // copying needs special treatment due to the d-pointer
+    Arguments(const Arguments &other);
+    Arguments &operator=(const Arguments &other);
+
+    ~Arguments();
+
+    // error (if any) propagates to Message, so it is still available later
+    Error error() const;
+
+    std::string prettyPrint() const;
+
+    cstring signature() const;
+    chunk data() const;
+
+    static bool isStringValid(cstring string);
+    static bool isObjectPathValid(cstring objectPath);
+    static bool isObjectPathElementValid(cstring pathElement);
+    static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
+
+private:
     struct podCstring // Same as cstring but without ctor.
                       // Can't put the cstring type into a union because it has a constructor :/
     {
@@ -148,7 +149,6 @@ private:
     } DataUnion;
 
 public:
-
     // error handling is done by asking state() or isError(), not by method return values.
     // occasionally looking at isError() is less work than checking every call.
     class DFERRY_EXPORT Reader
@@ -171,6 +171,7 @@ public:
         cstring stateString() const;
         bool isInsideEmptyArray() const;
         cstring currentSignature() const; // current signature, either main signature or current variant
+        cstring currentSingleCompleteTypeSignature() const;
         // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
         // WARNING: calling replaceData() invalidates copies (if any) of this Reader
         void replaceData(chunk data);
