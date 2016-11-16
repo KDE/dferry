@@ -167,7 +167,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             addKeyValue(parent, "type signature", inEmptyArray, reader.readSignature().ptr);
             break;
         case Arguments::UnixFd:
-            addKeyValue(parent, "file descriptor", inEmptyArray, QVariant());
+            addKeyValue(parent, "file descriptor", inEmptyArray, reader.readUnixFd());
             break;
         case Arguments::InvalidData:
         case Arguments::NeedMoreData:
