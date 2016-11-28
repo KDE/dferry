@@ -806,7 +806,28 @@ static void test_roundtrip()
             1, 2, 3, 4, 5, 6, 7, 8, // the double
             20, 21, 22, 23 // the int (not part of the variant)
         };
-        doRoundtrip(Arguments(nullptr, cstring("vi"), chunk(testData, 36)));
+        doRoundtrip(Arguments(nullptr, cstring("vi"), chunk(testData, sizeof(testData))));
+    }
+    {
+        // Spec says: alignment padding after array length, even if the array contains no data. Test this
+        // with different types and alignment situations.
+        byte testData[40] = {
+            0, 0, 0, 0, // length of array of uint64s - zero
+            0, 0, 0, 0, // alignment padding to 8 bytes (= natural alignment of uint64)
+            // ... zero uint64s ...
+            1, 2, 3, 4, // a uint32 to change the alignment, just to test
+            0, 0, 0, 0, // length of array of int64s - zero
+            // no alignment padding needed here
+            0, 0, 0, 0, // length of dict {uint32, uint32} - zero
+            0, 0, 0, 0, // alignment padding to 8 bytes (= alignment of dict entry)
+            // some data (single bytes) between the arrays to prevent all those zeros from accidentally
+            // looking valid when the Reader is confused. Also upset the alignment a bit.
+            101, 102, 103, 104, 105,
+            0, 0, 0, // padding to alignment of array size
+            0, 0, 0, 0, // length of array of structs - zero
+            0, 0, 0, 0  // alignment padding to 8 bytes (= alignment of struct)
+        };
+        doRoundtrip(Arguments(nullptr, cstring("atuaxa{uu}yyyyya(u)"), chunk(testData, sizeof(testData))));
     }
 }
 

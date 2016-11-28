@@ -1418,7 +1418,12 @@ void Arguments::Reader::advanceState()
         m_state = firstElementTy.state() == BeginDict ? BeginDict : BeginArray;
 
         uint32 dataEnd = d->m_dataPosition;
-        if (likely(arrayLength)) {
+        // If the internal type has greater alignment requirements than the array index type (which has
+        // 4 bytes), align to the nonexistent first element.
+        // Tricky: d->m_nilArrayNesting is only increased when the API client calls beginArray(), so this
+        // is the old state. Use it to increase alignment requirements once. If my guess from the previous
+        // paragraph was wrong, don't look at d->m_nilArrayNesting and just apply the alignment.
+        if (likely(!d->m_nilArrayNesting)) {
             const uint32 padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
@@ -2236,6 +2241,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         // allowed to be garbage) is not validated and no wild pointer is dereferenced.
         if (likely(!d->m_nilArrayNesting)) {
             doWriteString(newState, alignment);
+        } else {
+            // The code that ensures that even empty arrays respect the alignment of their contents
+            // expects *some* kind of data element in the array. Since a string after an array length
+            // field can never change the alignment, just add something that does nothing.
+            d->m_elements.push_back(Private::ElementInfo(1, 0));
         }
         return;
     }
@@ -2342,9 +2352,13 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                  Error::TooFewTypesInArrayOrDict);
         d->m_aggregateStack.pop_back();
         if (unlikely(d->m_nilArrayNesting)) {
-            if (!--d->m_nilArrayNesting) {
+            if (--d->m_nilArrayNesting == 0) {
+                assert(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray <= d->m_elements.end());
                 d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
                                     d->m_elements.end());
+                assert((d->m_elements.end() - 2)->size == Private::ElementInfo::ArrayLengthField);
+                // align, but don't have actual data for the first element
+                d->m_elements.back().size = 0;
                 d->m_dataPosition = d->m_dataPositionBeforeNilArray;
             }
         }
@@ -2374,7 +2388,7 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
                     // The code is a slightly modified version of code below under: if (isEmpty) {
                     if (!d->m_nilArrayNesting) {
                         d->m_nilArrayNesting = 1;
-                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // as below
+                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 2; // +2 as below
                         // Now correct for the elements already added in advanceState() with BeginArray / BeginDict
                         d->m_dataElementsCountBeforeNilArray -= (beginWhat == BeginDict) ? 2 : 1;
                         d->m_dataPositionBeforeNilArray = d->m_dataPosition;
@@ -2396,7 +2410,8 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
             // variant signatures written inside an empty array. When we close the array, though, we
             // throw away all that data and signatures and keep only changes in the signature containing
             // the topmost empty array.
-            d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 1; // +1 -> keep ArrayLengthField
+            // +2 -> keep ArrayLengthField, and first data element for alignment purposes
+            d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 2;
             d->m_dataPositionBeforeNilArray = d->m_dataPosition;
         }
     }
@@ -2604,6 +2619,7 @@ void Arguments::Writer::finishInternal()
                     al.lengthFieldPosition = bufferPos;
                     bufferPos += sizeof(uint32);
                     // alignment padding before first array element in output
+                    assert(i + 1 < d->m_elements.size());
                     zeroPad(buffer, d->m_elements[i + 1].alignment(), &bufferPos);
                     // array data starts at the first array element position
                     al.dataStartPosition = bufferPos;
