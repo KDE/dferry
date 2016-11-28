@@ -2189,6 +2189,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                     d->m_elements.push_back(Private::ElementInfo(structAlignment, 0));
                     d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
                     isWritingSignature = false;
+                    m_state = DictKey;
                 }
                 break;
             default:
