@@ -51,6 +51,43 @@ static byte alignmentLog2(uint32 alignment)
     return alignLog[alignment];
 }
 
+static cstring printableState(Arguments::IoState state)
+{
+    if (state < Arguments::NotStarted || state > Arguments::UnixFd) {
+        return cstring();
+    }
+    static const char *strings[Arguments::UnixFd + 1] = {
+        "NotStarted",
+        "Finished",
+        "NeedMoreData",
+        "InvalidData",
+        "AnyData",
+        "DictKey",
+        "BeginArray",
+        "EndArray",
+        "BeginDict",
+        "EndDict",
+        "BeginStruct",
+        "EndStruct",
+        "BeginVariant",
+        "EndVariant",
+        "Boolean",
+        "Byte",
+        "Int16",
+        "Uint16",
+        "Int32",
+        "Uint32",
+        "Int64",
+        "Uint64",
+        "Double",
+        "String",
+        "ObjectPath",
+        "Signature",
+        "UnixFd"
+    };
+    return cstring(strings[state]);
+}
+
 // When using this to iterate over the reader, it will make an exact copy using the Writer.
 // You need to do something only in states where something special should happen.
 // To check errors, "simply" (sorry!) check the reader->state() and writer()->state().
@@ -455,43 +492,6 @@ Arguments::Private::~Private()
 // Funny condition to avoid the dangling-else problem.
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     m_state = InvalidData; d->m_error.setCode(errCode); return; }
-
-static cstring printableState(Arguments::IoState state)
-{
-    if (state < Arguments::NotStarted || state > Arguments::UnixFd) {
-        return cstring();
-    }
-    static const char *strings[Arguments::UnixFd + 1] = {
-        "NotStarted",
-        "Finished",
-        "NeedMoreData",
-        "InvalidData",
-        "AnyData",
-        "DictKey",
-        "BeginArray",
-        "EndArray",
-        "BeginDict",
-        "EndDict",
-        "BeginStruct",
-        "EndStruct",
-        "BeginVariant",
-        "EndVariant",
-        "Boolean",
-        "Byte",
-        "Int16",
-        "Uint16",
-        "Int32",
-        "Uint32",
-        "Int64",
-        "Uint64",
-        "Double",
-        "String",
-        "ObjectPath",
-        "Signature",
-        "UnixFd"
-    };
-    return cstring(strings[state]);
-}
 
 static const int structAlignment = 8;
 
