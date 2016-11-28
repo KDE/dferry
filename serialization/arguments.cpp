@@ -2031,13 +2031,13 @@ cstring Arguments::Writer::currentSignature() const
                    std::max(uint32(0), std::min(d->m_signature.length, d->m_signaturePosition)));
 }
 
-void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
+void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
 {
     d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
     const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
     d->reserveData(newDataPosition);
 
-    switch(m_state) {
+    switch(type) {
     case Boolean: {
         uint32 num = m_u.Boolean ? 1 : 0;
         basic::writeUint32(d->m_data + d->m_dataPosition, num);
@@ -2079,15 +2079,15 @@ void Arguments::Writer::doWritePrimitiveType(uint32 alignAndSize)
     d->m_elements.push_back(Private::ElementInfo(alignAndSize, alignAndSize));
 }
 
-void Arguments::Writer::doWriteString(uint32 lengthPrefixSize)
+void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
 {
-    if (m_state == String) {
+    if (type == String) {
         VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidString);
-    } else if (m_state == ObjectPath) {
+    } else if (type == ObjectPath) {
         VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidObjectPath);
-    } else if (m_state == Signature) {
+    } else if (type == Signature) {
         VALID_IF(Arguments::isSignatureValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidSignature);
     }
@@ -2137,7 +2137,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     // assert(d->m_nesting.total() == d->m_aggregateStack.size());
     assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
 
-    m_state = newState;
+    m_state = AnyData;
     uint32 alignment = 1;
     bool isPrimitiveType = false;
     bool isStringType = false;
@@ -2162,12 +2162,12 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 // arrays and variants may contain just one single complete type; note that this will
                 // trigger only when not inside an aggregate inside the variant or (see below) array
                 if (d->m_signaturePosition >= 1) {
-                    VALID_IF(m_state == EndVariant, Error::NotSingleCompleteTypeInVariant);
+                    VALID_IF(newState == EndVariant, Error::NotSingleCompleteTypeInVariant);
                 }
                 break;
             case BeginArray:
                 if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1
-                    && m_state != EndArray) {
+                    && newState != EndArray) {
                     // we are not at start of contained type's signature, the array is at top of stack
                     // -> we are at the end of the single complete type inside the array, start the next
                     // entry. TODO: check compatibility (essentially what's in the else branch below)
@@ -2182,7 +2182,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 // first type has been checked already, second must be present (checked in EndDict
                 // state handler). no third type allowed.
                 if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
-                    && m_state != EndDict) {
+                    && newState != EndDict) {
                     // Start the next dict entry
                     d->m_nesting.parenCount += 1;
                     // align to dict entry
@@ -2227,21 +2227,21 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     }
 
     if (isPrimitiveType) {
-        doWritePrimitiveType(alignment);
+        doWritePrimitiveType(newState, alignment);
         return;
     }
     if (isStringType) {
         // In case of nil array, skip writing to make sure that the input string (which is explicitly
         // allowed to be garbage) is not validated and no wild pointer is dereferenced.
         if (likely(!d->m_nilArrayNesting)) {
-            doWriteString(alignment);
+            doWriteString(newState, alignment);
         }
         return;
     }
 
     Private::AggregateInfo aggregateInfo;
 
-    switch (m_state) {
+    switch (newState) {
     case BeginStruct:
         VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         aggregateInfo.aggregateType = BeginStruct;
@@ -2310,26 +2310,25 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     case BeginDict:
     case BeginArray: {
         VALID_IF(d->m_nesting.beginArray(), Error::ExcessiveNesting);
-        if (m_state == BeginDict) {
+        if (newState == BeginDict) {
             // not re-opened before each element: there is no observable difference for clients
             VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         }
-        aggregateInfo.aggregateType = m_state;
+        aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
         d->m_elements.push_back(Private::ElementInfo(4, Private::ElementInfo::ArrayLengthField));
-        if (m_state == BeginDict) {
+        if (newState == BeginDict) {
             d->m_elements.push_back(Private::ElementInfo(structAlignment, 0)); // align to dict entry
             m_state = DictKey;
-            return;
         }
         break; }
 
     case EndDict:
     case EndArray: {
-        const bool isDict = m_state == EndDict;
+        const bool isDict = newState == EndDict;
         if (isDict) {
             d->m_nesting.endParen();
         }
@@ -2357,8 +2356,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         VALID_IF(false, Error::InvalidType);
         break;
     }
-
-    m_state = AnyData;
 }
 
 void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)

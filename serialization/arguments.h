@@ -346,8 +346,8 @@ public:
         friend class Private;
 
     private:
-        void doWritePrimitiveType(uint32 alignAndSize);
-        void doWriteString(uint32 lengthPrefixSize);
+        void doWritePrimitiveType(IoState type, uint32 alignAndSize);
+        void doWriteString(IoState type, uint32 lengthPrefixSize);
         void advanceState(cstring signatureFragment, IoState newState);
         void beginArrayOrDict(IoState beginWhat, ArrayOption option);
         void finishInternal();
