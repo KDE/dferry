@@ -1703,7 +1703,7 @@ void Arguments::Reader::skipStruct()
         m_state = InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
-        skipCurrentAggregate();
+        skipCurrentElement();
     }
 }
 
@@ -1739,7 +1739,7 @@ void Arguments::Reader::skipVariant()
         m_state = InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
-        skipCurrentAggregate();
+        skipCurrentElement();
     }
 }
 
@@ -1758,12 +1758,11 @@ void Arguments::Reader::endVariant()
     advanceState();
 }
 
-void Arguments::Reader::skipCurrentAggregate()
+void Arguments::Reader::skipCurrentElement()
 {
-    // ### the serialized format has no quick way to do this and it makes little sense to implement
-    //     a "fast path" just to do this slow thing a little faster, so just use public API!
+    // ### We could implement a skipping fast path for more aggregates, but it would be a lot of work, so
+    //     until it's proven to be a problem, just reuse what we have.
 
-    assert(m_state == BeginStruct || m_state == BeginVariant);
 #ifndef NDEBUG
     Arguments::IoState stateOnEntry = m_state;
 #endif
@@ -1773,8 +1772,9 @@ void Arguments::Reader::skipCurrentAggregate()
     while (!isDone) {
         switch(state()) {
         case Arguments::Finished:
-            // We should never get here because we should have already quit when leaving the main aggregate
-            // that this was called on, i.e. in state EndStruct / EndVariant, which come before Finished
+            // Okay, that's a bit weird. I guess the graceful way to handle it is do nothing in release
+            // mode, and explode in debug mode in order to warn the API client.
+            // (We could use a warning message facility here, make one?)
             assert(false);
             isDone = true;
             break;
@@ -1787,7 +1787,6 @@ void Arguments::Reader::skipCurrentAggregate()
             nestingLevel--;
             if (!nestingLevel) {
                 assert(stateOnEntry == BeginStruct);
-                isDone = true;
             }
             break;
         case Arguments::BeginVariant:
@@ -1799,20 +1798,23 @@ void Arguments::Reader::skipCurrentAggregate()
             nestingLevel--;
             if (!nestingLevel) {
                 assert(stateOnEntry == BeginVariant);
-                isDone = true;
             }
             break;
         case Arguments::BeginArray:
             skipArray();
             break;
         case Arguments::EndArray:
-            assert(false); // can't happen because we skip all arrays
+            assert(stateOnEntry == EndArray); // only way this can happen - we gracefully skip EndArray
+                                              // and DON'T decrease nestingLevel b/c it would go negative.
+            endArray();
             break;
         case Arguments::BeginDict:
             skipDict();
             break;
         case Arguments::EndDict:
-            assert(false); // can't happen because we skip all dicts
+            assert(stateOnEntry == EndDict); // only way this can happen - we gracefully "skip" EndDict
+                                             // and DON'T decrease nestingLevel b/c it would go negative.
+            endDict();
             break;
         case Arguments::Boolean:
             readBoolean();
@@ -1851,7 +1853,7 @@ void Arguments::Reader::skipCurrentAggregate()
             readSignature();
             break;
         case Arguments::UnixFd:
-            // TODO
+            readUnixFd();
             break;
         case Arguments::NeedMoreData:
             // TODO handle this properly: rewind the state to before the aggregate - or get fancy and support
@@ -1864,6 +1866,9 @@ void Arguments::Reader::skipCurrentAggregate()
         case Arguments::InvalidData:
             isDone = true;
             break;
+        }
+        if (!nestingLevel) {
+            isDone = true;
         }
     }
 }

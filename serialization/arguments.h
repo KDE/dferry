@@ -240,6 +240,9 @@ public:
         cstring readSignature() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
         uint32 readUnixFd() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
 
+        void skipCurrentElement(); // works on single values and Begin... states. In the Begin... states,
+                                   // skips the whole aggregate.
+
         // Returns primitive type and the raw array data if in BeginArray state of an array containing only a
         // primitive type. You must copy the data before destroying the Reader or changing its backing store
         // with replaceData().
@@ -265,7 +268,6 @@ public:
         void beginArrayOrDict(bool isDict, EmptyArrayOption option);
         void skipArrayOrDictSignature(bool isDict);
         void skipArrayOrDict(bool isDict);
-        void skipCurrentAggregate();
 
         Private *d;
 
