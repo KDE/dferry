@@ -75,6 +75,11 @@ public:
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,
         ArrayOrDictTooLong,
+
+        MissingBeginDictEntry = 1019,
+        MisplacedBeginDictEntry,
+        MissingEndDictEntry,
+        MisplacedEndDictEntry,
         // we have a lot of error codes at our disposal, so reserve some for easy classification
         // by range
         MaxArgumentsError = 1023,

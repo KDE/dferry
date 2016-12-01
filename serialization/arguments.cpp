@@ -53,10 +53,10 @@ static byte alignmentLog2(uint32 alignment)
 
 static cstring printableState(Arguments::IoState state)
 {
-    if (state < Arguments::NotStarted || state > Arguments::UnixFd) {
+    if (state < Arguments::NotStarted || state >= Arguments::LastState) {
         return cstring();
     }
-    static const char *strings[Arguments::UnixFd + 1] = {
+    static const char *strings[Arguments::LastState] = {
         "NotStarted",
         "Finished",
         "NeedMoreData",
@@ -84,6 +84,11 @@ static cstring printableState(Arguments::IoState state)
         "ObjectPath",
         "Signature",
         "UnixFd"
+#ifdef WITH_DICT_ENTRY
+        ,
+        "BeginDictEntry",
+        "EndDictEntry"
+#endif
     };
     return cstring(strings[state]);
 }
@@ -143,6 +148,16 @@ void Arguments::copyOneElement(Arguments::Reader *reader, Arguments::Writer *wri
         reader->endDict();
         writer->endDict();
         break;
+#ifdef WITH_DICT_ENTRY
+    case Arguments::BeginDictEntry:
+        reader->beginDictEntry();
+        writer->beginDictEntry();
+        break;
+    case Arguments::EndDictEntry:
+        reader->endDictEntry();
+        writer->endDictEntry();
+        break;
+#endif
     case Arguments::Byte:
         writer->writeByte(reader->readByte());
         break;
@@ -356,9 +371,21 @@ public:
         MaxFullSignatureLength = MaxSignatureLength + 1
     };
 
+#ifdef WITH_DICT_ENTRY
+    enum DictEntryState : uint32
+    {
+        RequireBeginDictEntry = 0,
+        InDictEntry,
+        RequireEndDictEntry,
+        AfterEndDictEntry
+    };
+#endif
     struct ArrayInfo
     {
         uint32 containedTypeBegin; // to rewind when reading the next element
+#ifdef WITH_DICT_ENTRY
+        DictEntryState dictEntryState;
+#endif
     };
 
     struct VariantInfo
@@ -1312,8 +1339,19 @@ void Arguments::Reader::advanceState()
                 if (likely(!d->m_nilArrayNesting) && d->m_dataPosition < arrayInfo.dataEnd) {
                     d->m_dataPosition = align(d->m_dataPosition, 8); // align to dict entry
                     d->m_signaturePosition = arrayInfo.containedTypeBegin;
+#ifdef WITH_DICT_ENTRY
+                    d->m_signaturePosition--;
+                    m_state = EndDictEntry;
+                    m_u.Uint32 = 0; // meaning: more dict entries follow (state after next is BeginDictEntry)
+                    return;
+#endif
                     break;
                 }
+#ifdef WITH_DICT_ENTRY
+                m_state = EndDictEntry;
+                m_u.Uint32 = 1; // meaning: array end reached (state after next is EndDict)
+                return;
+#endif
                 m_state = EndDict;
                 return;
             }
@@ -1661,9 +1699,18 @@ bool Arguments::Reader::beginDict(EmptyArrayOption option)
 
     if (unlikely(d->m_nilArrayNesting && option == SkipIfEmpty)) {
         skipArrayOrDictSignature(true);
+#ifdef WITH_DICT_ENTRY
+        const bool ret = !d->m_nilArrayNesting;
+        advanceState();
+        endDictEntry();
+        return ret;
+    }
+    m_state = BeginDictEntry;
+#else
     }
 
     advanceState();
+#endif
     return !d->m_nilArrayNesting;
 }
 
@@ -1692,6 +1739,24 @@ void Arguments::Reader::endDict()
     }
     advanceState();
 }
+
+#ifdef WITH_DICT_ENTRY
+void Arguments::Reader::beginDictEntry()
+{
+    VALID_IF(m_state == BeginDictEntry, Error::ReadWrongType);
+    advanceState();
+}
+
+void Arguments::Reader::endDictEntry()
+{
+    VALID_IF(m_state == EndDictEntry, Error::ReadWrongType);
+    if (m_u.Uint32 == 0) {
+        m_state = BeginDictEntry;
+    } else {
+        m_state = EndDict;
+    }
+}
+#endif
 
 void Arguments::Reader::beginStruct()
 {
@@ -1816,6 +1881,14 @@ void Arguments::Reader::skipCurrentElement()
         case Arguments::BeginDict:
             skipDict();
             break;
+#ifdef WITH_DICT_ENTRY
+        case Arguments::BeginDictEntry:
+            beginDictEntry();
+            break;
+        case Arguments::EndDictEntry:
+            endDictEntry();
+            break;
+#endif
         case Arguments::EndDict:
             assert(stateOnEntry == EndDict); // only way this can happen - we gracefully "skip" EndDict
                                              // and DON'T decrease nestingLevel b/c it would go negative.
@@ -2160,9 +2233,8 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= MaxSignatureLength,
                  Error::SignatureTooLong);
     }
-
     if (!d->m_aggregateStack.empty()) {
-        const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+        Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
         case BeginVariant:
             // arrays and variants may contain just one single complete type; note that this will
@@ -2183,8 +2255,43 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             break;
         case BeginDict:
             if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
+#ifdef WITH_DICT_ENTRY
+                if (aggregateInfo.arr.dictEntryState == Private::RequireBeginDictEntry) {
+                    // This is only reached immediately after beginDict() so it's kinda wasteful, oh well.
+                    VALID_IF(newState == BeginDictEntry, Error::MissingBeginDictEntry);
+                    aggregateInfo.arr.dictEntryState = Private::InDictEntry;
+                    m_state = DictKey;
+                    return; // BeginDictEntry writes no data
+                }
+#endif
                 VALID_IF(isPrimitiveType || isStringType, Error::InvalidKeyTypeInDict);
             }
+#ifdef WITH_DICT_ENTRY
+            // TODO test this part of the state machine
+            if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2) {
+                if (aggregateInfo.arr.dictEntryState == Private::RequireEndDictEntry) {
+                    VALID_IF(newState == EndDictEntry, Error::MissingEndDictEntry);
+                    aggregateInfo.arr.dictEntryState = Private::AfterEndDictEntry;
+                    m_state = BeginDictEntry;
+                    return; // EndDictEntry writes no data
+                } else {
+                    // v should've been caught earlier
+                    assert(aggregateInfo.arr.dictEntryState == Private::AfterEndDictEntry);
+                    VALID_IF(newState == BeginDictEntry || newState == EndDict, Error::MissingBeginDictEntry);
+                    // "fall through", the rest (another iteration or finish) is handled below
+                }
+            } else if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1) {
+                assert(aggregateInfo.arr.dictEntryState == Private::InDictEntry);
+                aggregateInfo.arr.dictEntryState = Private::RequireEndDictEntry;
+                // Setting EndDictEntry after writing a primitive type works fine, but setting it after
+                // ending another aggregate would be somewhat involved and need to happen somewhere
+                // else, so just don't do that. We still produce an error when endDictEntry() is not
+                // used correctly.
+                // m_state = EndDictEntry;
+
+                // continue and write the dict entry's value
+            }
+#endif
             // first type has been checked already, second must be present (checked in EndDict
             // state handler). no third type allowed.
             if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
@@ -2196,7 +2303,13 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
                 isWritingSignature = false;
                 m_state = DictKey;
+#ifdef WITH_DICT_ENTRY
+                assert(newState == BeginDictEntry);
+                aggregateInfo.arr.dictEntryState = Private::InDictEntry;
+                return; // BeginDictEntry writes no data
+#endif
             }
+
             break;
         default:
             break;
@@ -2325,18 +2438,24 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             // not re-opened before each element: there is no observable difference for clients
             VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         }
+
         aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
-        d->m_aggregateStack.reserve(8);
-        d->m_aggregateStack.push_back(aggregateInfo);
 
         d->m_elements.push_back(Private::ElementInfo(4, Private::ElementInfo::ArrayLengthField));
         if (newState == BeginDict) {
             d->m_elements.push_back(Private::ElementInfo(structAlignment, 0)); // align to dict entry
+#ifdef WITH_DICT_ENTRY
+            m_state = BeginDictEntry;
+            aggregateInfo.arr.dictEntryState = Private::RequireBeginDictEntry;
+#else
             m_state = DictKey;
+#endif
         }
-        break; }
 
+        d->m_aggregateStack.reserve(8);
+        d->m_aggregateStack.push_back(aggregateInfo);
+        break; }
     case EndDict:
     case EndArray: {
         const bool isDict = newState == EndDict;
@@ -2367,6 +2486,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         //     due to alignment changes from a different start address
         d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::ArrayLengthEndMark));
         break; }
+#ifdef WITH_DICT_ENTRY
+    case BeginDictEntry:
+    case EndDictEntry:
+        break;
+#endif
     default:
         VALID_IF(false, Error::InvalidType);
         break;
@@ -2441,6 +2565,27 @@ void Arguments::Writer::endDict()
 {
     advanceState(cstring("}", strlen("}")), EndDict);
 }
+
+#ifdef WITH_DICT_ENTRY
+void Arguments::Writer::beginDictEntry()
+{
+    VALID_IF(m_state == BeginDictEntry, Error::MisplacedBeginDictEntry);
+    advanceState(cstring(), BeginDictEntry);
+}
+
+void Arguments::Writer::endDictEntry()
+{
+    if (!d->m_aggregateStack.empty()) {
+        Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+        if (aggregateInfo.aggregateType == BeginDict
+            && aggregateInfo.arr.dictEntryState == Private::RequireEndDictEntry) {
+            advanceState(cstring(), EndDictEntry);
+            return;
+        }
+    }
+    VALID_IF(false, Error::MisplacedEndDictEntry);
+}
+#endif
 
 void Arguments::Writer::beginStruct()
 {

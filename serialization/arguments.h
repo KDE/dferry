@@ -34,6 +34,8 @@
 class Error;
 class Message;
 
+//#define WITH_DICT_ENTRY
+
 class DFERRY_EXPORT Arguments
 {
 public:
@@ -90,7 +92,12 @@ public:
         String,
         ObjectPath,
         Signature,
-        UnixFd
+        UnixFd,
+#ifdef WITH_DICT_ENTRY
+        BeginDictEntry,
+        EndDictEntry,
+#endif
+        LastState
     };
 
     Arguments(); // constructs an empty argument list
@@ -258,6 +265,11 @@ public:
         // instead of the type of primitive.
         Arguments::IoState peekPrimitiveArray(EmptyArrayOption option = SkipIfEmpty) const;
 
+#ifdef WITH_DICT_ENTRY
+        void beginDictEntry();
+        void endDictEntry();
+#endif
+
     private:
         class Private;
         friend class Private;
@@ -341,6 +353,11 @@ public:
         void writeUnixFd(uint32 fd);
 
         void writePrimitiveArray(IoState type, chunk data);
+
+#ifdef WITH_DICT_ENTRY
+        void beginDictEntry();
+        void endDictEntry();
+#endif
 
         class Private;
         friend class Private;

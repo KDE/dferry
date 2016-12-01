@@ -64,6 +64,22 @@ static bool stringsEqual(cstring s1, cstring s2)
     return chunksEqual(chunk(s1.ptr, s1.length), chunk(s2.ptr, s2.length));
 }
 
+static void maybeBeginDictEntry(Arguments::Writer *writer)
+{
+    (void) writer;
+#ifdef WITH_DICT_ENTRY
+    writer->beginDictEntry();
+#endif
+}
+
+static void maybeEndDictEntry(Arguments::Writer *writer)
+{
+    (void) writer;
+#ifdef WITH_DICT_ENTRY
+    writer->endDictEntry();
+#endif
+}
+
 // This class does:
 // 1) iterates over the full Arguments with m_reader
 // 2) skips whole aggregates at and below nesting level m_skipAggregatesFromLevel with m_skippingReader
@@ -98,7 +114,24 @@ public:
             }
         }
     }
+#ifdef WITH_DICT_ENTRY
+    void beginDictEntry()
+    {
+        m_reader->beginDictEntry();
+        if (m_nestingLevel < m_skipAggregatesFromLevel && m_nilArrayNesting < m_skipNilArraysFromLevel) {
+            m_skippingReader->beginDictEntry();
+        }
+    }
 
+    void endDictEntry()
+    {
+        m_reader->endDictEntry();
+        if (m_nestingLevel < m_skipAggregatesFromLevel && m_nilArrayNesting < m_skipNilArraysFromLevel) {
+            m_skippingReader->endDictEntry();
+        }
+
+    }
+#endif
     template<typename F, typename G>
     void beginAggregate(F beginFunc, G skipFunc)
     {
@@ -225,6 +258,14 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
                 case Arguments::BeginDict:
                     checker.beginArrayAggregate(&Arguments::Reader::beginDict, &Arguments::Reader::skipDict);
                     break;
+#ifdef WITH_DICT_ENTRY
+                case Arguments::BeginDictEntry:
+                    checker.beginDictEntry();
+                    break;
+                case Arguments::EndDictEntry:
+                    checker.endDictEntry();
+                    break;
+#endif
                 case Arguments::EndDict:
                     checker.endAggregate(&Arguments::Reader::endDict, true);
                     break;
@@ -292,6 +333,10 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
     case Arguments::BeginVariant:
     case Arguments::EndVariant:
     case Arguments::EndArray:
+#ifdef WITH_DICT_ENTRY
+    case Arguments::BeginDictEntry:
+    case Arguments::EndDictEntry:
+#endif
     case Arguments::EndDict:
     case Arguments::Byte:
     case Arguments::Boolean:
@@ -696,6 +741,7 @@ static void test_nesting()
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict();
+            maybeBeginDictEntry(&writer);
             writer.writeInt32(i); // key, next nested dict is value
         }
         TEST(writer.state() != Arguments::InvalidData);
@@ -706,6 +752,7 @@ static void test_nesting()
         Arguments::Writer writer;
         for (int i = 0; i < 32; i++) {
             writer.beginDict();
+            maybeBeginDictEntry(&writer);
             writer.writeInt32(i); // key, next nested dict is value
         }
         TEST(writer.state() != Arguments::InvalidData);
@@ -904,17 +951,22 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginDict();
+        maybeBeginDictEntry(&writer);
         writer.writeByte(1);
         writer.writeByte(2);
+        maybeEndDictEntry(&writer);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
     }
     {
         Arguments::Writer writer;
         writer.beginDict();
+        maybeBeginDictEntry(&writer);
         writer.writeByte(1);
         writer.writeByte(2);
+        maybeEndDictEntry(&writer);
         // second key-value pair
+        maybeBeginDictEntry(&writer);
         TEST(writer.state() != Arguments::InvalidData);
         writer.writeUint16(3); // wrong, incompatible with first element
         TEST(writer.state() == Arguments::InvalidData);
@@ -922,9 +974,12 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginDict();
+        maybeBeginDictEntry(&writer);
         writer.writeByte(1);
         writer.writeByte(2);
+        maybeEndDictEntry(&writer);
         // second key-value pair
+        maybeBeginDictEntry(&writer);
         writer.writeByte(3);
         TEST(writer.state() != Arguments::InvalidData);
         writer.writeUint16(4); // wrong, incompatible with first element
@@ -934,6 +989,7 @@ static void test_writerMisuse()
     {
         Arguments::Writer writer;
         writer.beginDict();
+        maybeBeginDictEntry(&writer);
         writer.beginVariant(); // wrong, key type must be basic
         TEST(writer.state() == Arguments::InvalidData);
     }
@@ -1022,16 +1078,21 @@ static void test_complicated()
         writer.writeByte(115);
         writer.beginVariant();
             writer.beginDict();
+                maybeBeginDictEntry(&writer);
                 writer.writeByte(23);
                 writer.beginVariant();
                     writer.writeString(cstring("twenty-three"));
                 writer.endVariant();
+                maybeEndDictEntry(&writer);
                 // key-value pair 2
+                maybeBeginDictEntry(&writer);
                 writer.writeByte(83);
                 writer.beginVariant();
                 writer.writeObjectPath(cstring("/foo/bar/object"));
                 writer.endVariant();
+                maybeEndDictEntry(&writer);
                 // key-value pair 3
+                maybeBeginDictEntry(&writer);
                 writer.writeByte(234);
                 writer.beginVariant();
                     writer.beginArray();
@@ -1040,11 +1101,14 @@ static void test_complicated()
                         writer.writeUint16(234);
                     writer.endArray();
                 writer.endVariant();
+                maybeEndDictEntry(&writer);
                 // key-value pair 4
+                maybeBeginDictEntry(&writer);
                 writer.writeByte(25);
                 writer.beginVariant();
                     addSomeVariantStuff(&writer);
                 writer.endVariant();
+                maybeEndDictEntry(&writer);
             writer.endDict();
         writer.endVariant();
         writer.writeString("Hello D-Bus!");
@@ -1171,8 +1235,10 @@ static void test_isWritingSignatureBug()
         writer.beginArray();
             writer.beginStruct();
                 writer.beginDict();
+                    maybeBeginDictEntry(&writer);
                     writer.writeByte(1);
                     writer.writeByte(2);
+                    maybeEndDictEntry(&writer);
                 writer.endDict();
                 // Must add more stuff after the inner dict to ensure that the signature position of the
                 // dict's value is well inside the existing signature in the second dict entry.
@@ -1182,11 +1248,14 @@ static void test_isWritingSignatureBug()
             writer.endStruct();
             writer.beginStruct();
                 writer.beginDict();
+                    maybeBeginDictEntry(&writer);
                     writer.writeByte(1);
                     writer.writeByte(2);
+                    maybeEndDictEntry(&writer);
                     // In the second pass, we are definitely NOT writing a new part of the dict signature,
                     // which used to go (that was the bug!!) through a different code path in
                     // Arguments::Writer::advanceState().
+                    maybeBeginDictEntry(&writer);
                     writer.writeByte(1);
                     TEST(writer.state() != Arguments::InvalidData);
                     writer.writeUint16(2);
@@ -1564,7 +1633,8 @@ static void test_emptyArrayAndDict()
         // Test RestartEmptyArrayToWriteTypes and writing an empty array inside the >1st iteration of another array
         Arguments::Writer writer;
         writer.beginArray((i & 2) ? Arguments::Writer::WriteTypesOfEmptyArray : Arguments::Writer::NonEmptyArray);
-            writer.beginArray(Arguments::Writer::NonEmptyArray); // don't care, the logic error is only in the second iteration
+            // v don't care, the logic error is only in the second iteration
+            writer.beginArray(Arguments::Writer::NonEmptyArray);
                 writer.writeString(cstring("a"));
             writer.endArray();
             if (i & 1) {
@@ -1610,8 +1680,10 @@ static void test_emptyArrayAndDict()
     {
         Arguments::Writer writer;
         writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        maybeBeginDictEntry(&writer);
         writer.writeByte(0);
         writer.writeString(cstring("a"));
+        maybeEndDictEntry(&writer);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
@@ -1621,9 +1693,11 @@ static void test_emptyArrayAndDict()
     {
         Arguments::Writer writer;
         writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        maybeBeginDictEntry(&writer);
         writer.writeString(cstring("a"));
         writer.beginVariant();
         writer.endVariant();
+        maybeEndDictEntry(&writer);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
@@ -1633,12 +1707,16 @@ static void test_emptyArrayAndDict()
     {
         Arguments::Writer writer;
         writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        maybeBeginDictEntry(&writer);
         writer.writeString(cstring("a"));
         writer.beginVariant();
         writer.endVariant();
+        maybeEndDictEntry(&writer);
+        maybeBeginDictEntry(&writer);
         writer.writeString(cstring("a"));
         writer.beginVariant();
         writer.endVariant();
+        maybeEndDictEntry(&writer);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
@@ -1648,6 +1726,7 @@ static void test_emptyArrayAndDict()
     {
         Arguments::Writer writer;
         writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+        maybeBeginDictEntry(&writer);
         writer.writeString(cstring("a"));
         writer.beginVariant();
         TEST(writer.state() != Arguments::InvalidData);
@@ -1655,6 +1734,7 @@ static void test_emptyArrayAndDict()
         // variants in nil arrays may contain data but it will be discarded, i.e. there will only be an
         // empty variant in the output
         writer.endVariant();
+        maybeEndDictEntry(&writer);
         writer.endDict();
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
@@ -1664,21 +1744,31 @@ static void test_emptyArrayAndDict()
         // Test RestartEmptyArrayToWriteTypes and writing an empty dict inside the >1st iteration of another dict
         Arguments::Writer writer;
         writer.beginDict((i & 2) ? Arguments::Writer::WriteTypesOfEmptyArray : Arguments::Writer::NonEmptyArray);
+            maybeBeginDictEntry(&writer);
             writer.writeString(cstring("a"));
-            writer.beginDict(Arguments::Writer::NonEmptyArray); // don't care, the logic error is only in the second iteration
+            // v don't care, the logic error is only in the second iteration
+            writer.beginDict(Arguments::Writer::NonEmptyArray);
+                maybeBeginDictEntry(&writer);
                 writer.writeString(cstring("a"));
                 writer.writeInt32(1234);
+                maybeEndDictEntry(&writer);
             writer.endDict();
+            maybeEndDictEntry(&writer);
+            maybeBeginDictEntry(&writer);
             writer.writeString(cstring("a"));
             if (i & 1) {
                 writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+                    maybeBeginDictEntry(&writer);
             } else {
                 writer.beginDict(Arguments::Writer::NonEmptyArray);
                 writer.beginDict(Arguments::Writer::RestartEmptyArrayToWriteTypes);
+                    maybeBeginDictEntry(&writer);
             }
                     writer.writeString(cstring("a"));
                     writer.writeInt32(1234);
+                    maybeEndDictEntry(&writer);
             writer.endDict();
+            maybeEndDictEntry(&writer);
         writer.endDict();
         TEST(writer.state() != Arguments::InvalidData);
         Arguments arg = writer.finish();
@@ -1690,6 +1780,7 @@ static void test_emptyArrayAndDict()
             Arguments::Writer writer;
             for (int j = 0; j <= i; j++) {
                 writer.beginDict(Arguments::Writer::WriteTypesOfEmptyArray);
+                    maybeBeginDictEntry(&writer);
                 if (j == 32) {
                     TEST(writer.state() == Arguments::InvalidData);
                 }
@@ -1701,6 +1792,7 @@ static void test_emptyArrayAndDict()
             }
             writer.writeUint16(52345);
             for (int j = 0; j <= i; j++) {
+                maybeEndDictEntry(&writer);
                 writer.endDict();
             }
             TEST(writer.state() != Arguments::InvalidData);
@@ -1733,6 +1825,8 @@ int main(int, char *[])
     test_primitiveArray();
     test_signatureLengths();
     test_emptyArrayAndDict();
+
+    // TODO (maybe): specific tests for begin/endDictEntry() for both Reader and Writer.
 
     // TODO many more misuse tests for Writer and maybe some for Reader
     std::cout << "Passed!\n";
