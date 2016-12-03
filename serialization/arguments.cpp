@@ -2159,47 +2159,47 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         // signature additions must conform to syntax
         VALID_IF(d->m_signaturePosition + signatureFragment.length <= MaxSignatureLength,
                  Error::SignatureTooLong);
+    }
 
-        if (!d->m_aggregateStack.empty()) {
-            const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
-            switch (aggregateInfo.aggregateType) {
-            case BeginVariant:
-                // arrays and variants may contain just one single complete type; note that this will
-                // trigger only when not inside an aggregate inside the variant or (see below) array
-                if (d->m_signaturePosition >= 1) {
-                    VALID_IF(newState == EndVariant, Error::NotSingleCompleteTypeInVariant);
-                }
-                break;
-            case BeginArray:
-                if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1
-                    && newState != EndArray) {
-                    // we are not at start of contained type's signature, the array is at top of stack
-                    // -> we are at the end of the single complete type inside the array, start the next
-                    // entry. TODO: check compatibility (essentially what's in the else branch below)
-                    d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
-                    isWritingSignature = false;
-                }
-                break;
-            case BeginDict:
-                if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
-                    VALID_IF(isPrimitiveType || isStringType, Error::InvalidKeyTypeInDict);
-                }
-                // first type has been checked already, second must be present (checked in EndDict
-                // state handler). no third type allowed.
-                if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
-                    && newState != EndDict) {
-                    // Start the next dict entry
-                    d->m_nesting.parenCount += 1;
-                    // align to dict entry
-                    d->m_elements.push_back(Private::ElementInfo(structAlignment, 0));
-                    d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
-                    isWritingSignature = false;
-                    m_state = DictKey;
-                }
-                break;
-            default:
-                break;
+    if (!d->m_aggregateStack.empty()) {
+        const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+        switch (aggregateInfo.aggregateType) {
+        case BeginVariant:
+            // arrays and variants may contain just one single complete type; note that this will
+            // trigger only when not inside an aggregate inside the variant or (see below) array
+            if (d->m_signaturePosition >= 1) {
+                VALID_IF(newState == EndVariant, Error::NotSingleCompleteTypeInVariant);
             }
+            break;
+        case BeginArray:
+            if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1
+                && newState != EndArray) {
+                // we are not at start of contained type's signature, the array is at top of stack
+                // -> we are at the end of the single complete type inside the array, start the next
+                // entry. TODO: check compatibility (essentially what's in the else branch below)
+                d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+                isWritingSignature = false;
+            }
+            break;
+        case BeginDict:
+            if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
+                VALID_IF(isPrimitiveType || isStringType, Error::InvalidKeyTypeInDict);
+            }
+            // first type has been checked already, second must be present (checked in EndDict
+            // state handler). no third type allowed.
+            if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
+                && newState != EndDict) {
+                // Start the next dict entry
+                d->m_nesting.parenCount += 1;
+                // align to dict entry
+                d->m_elements.push_back(Private::ElementInfo(structAlignment, 0));
+                d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
+                isWritingSignature = false;
+                m_state = DictKey;
+            }
+            break;
+        default:
+            break;
         }
     }
 

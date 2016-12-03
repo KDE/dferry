@@ -1163,6 +1163,56 @@ static void test_realMessage()
     doRoundtrip(arg);
 }
 
+static void test_isWritingSignatureBug()
+{
+    {
+        // This was the original test, so it's the one with the comments :)
+        Arguments::Writer writer;
+        writer.beginArray();
+            writer.beginStruct();
+                writer.beginDict();
+                    writer.writeByte(1);
+                    writer.writeByte(2);
+                writer.endDict();
+                // Must add more stuff after the inner dict to ensure that the signature position of the
+                // dict's value is well inside the existing signature in the second dict entry.
+                // See isWritingSignature in Writer::advanceState().
+                writer.writeUint16(1);
+                writer.writeUint16(2);
+            writer.endStruct();
+            writer.beginStruct();
+                writer.beginDict();
+                    writer.writeByte(1);
+                    writer.writeByte(2);
+                    // In the second pass, we are definitely NOT writing a new part of the dict signature,
+                    // which used to go (that was the bug!!) through a different code path in
+                    // Arguments::Writer::advanceState().
+                    writer.writeByte(1);
+                    TEST(writer.state() != Arguments::InvalidData);
+                    writer.writeUint16(2);
+                    TEST(writer.state() == Arguments::InvalidData);
+    }
+    {
+        // For completeness, do the equivalent of the previous test with an array inside
+        Arguments::Writer writer;
+        writer.beginArray();
+            writer.beginStruct();
+                writer.beginArray();
+                    writer.writeByte(1);
+                writer.endArray();
+                writer.writeUint16(1);
+                writer.writeUint16(2);
+            writer.endStruct();
+            writer.beginStruct();
+                writer.beginArray();
+                    writer.writeByte(1);
+                    writer.writeByte(1);
+                    TEST(writer.state() != Arguments::InvalidData);
+                    writer.writeUint16(2);
+                    TEST(writer.state() == Arguments::InvalidData);
+    }
+}
+
 static void writeValue(Arguments::Writer *writer, uint32 typeIndex, const void *value)
 {
     switch (typeIndex) {
@@ -1679,6 +1729,7 @@ int main(int, char *[])
     test_alignment();
     test_arrayOfVariant();
     test_realMessage();
+    test_isWritingSignatureBug();
     test_primitiveArray();
     test_signatureLengths();
     test_emptyArrayAndDict();
