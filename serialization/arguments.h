@@ -217,6 +217,8 @@ public:
 
         bool beginDict(EmptyArrayOption option = SkipIfEmpty);
         void skipDict(); // like skipArray()
+        bool isDictKey() const; // this can be used to track whether the current value is a dict key or value, e.g.
+                                // for pretty-printing purposes (it is usually clear in marshalling code).
         void endDict(); // like endArray()
 
         void beginStruct();

@@ -649,7 +649,13 @@ std::string Arguments::prettyPrint() const
     while (!isDone) {
         // HACK use nestingPrefix to determine when we're switching from key to value - this can be done
         //      more cleanly with an aggregate stack if translation or similar makes this approach too ugly
-        if (strEndsWith(nestingPrefix, "{")) {
+        if (reader.isDictKey()) {
+            if (strEndsWith(nestingPrefix, "V ")) {
+                nestingPrefix.resize(nestingPrefix.size() - strlen("V "));
+                assert(strEndsWith(nestingPrefix, "{ "));
+            }
+        }
+        if (strEndsWith(nestingPrefix, "{ ")) {
             nestingPrefix += "K ";
         } else if (strEndsWith(nestingPrefix, "K ")) {
             nestingPrefix.replace(nestingPrefix.size() - strlen("K "), strlen("V "), "V ");
@@ -672,7 +678,7 @@ std::string Arguments::prettyPrint() const
         case Arguments::BeginVariant:
             reader.beginVariant();
             ret << nestingPrefix << "begin variant\n";
-            nestingPrefix += "v ";
+            nestingPrefix += "* ";
             break;
         case Arguments::EndVariant:
             reader.endVariant();
@@ -706,21 +712,22 @@ std::string Arguments::prettyPrint() const
         case Arguments::BeginDict: {
             inEmptyArray = !reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
             ret << nestingPrefix << "begin dict\n";
-            nestingPrefix += "{K ";
+            nestingPrefix += "{ ";
             break; }
-#if 0 // TODO
-        case Arguments::NextDictEntry:
-            reader.nextDictEntry();
-            if (strEndsWith(nestingPrefix, "V ")) {
-                nestingPrefix.resize(nestingPrefix.size() - strlen("V "));
-                assert(strEndsWith(nestingPrefix, "{"));
-            }
+#ifdef WITH_DICT_ENTRY
+        // We *could* use those states to be a bit more efficient than with calling isDictKey() all
+        // the time, but let's keep it simple, and WITH_DICT_ENTRY as a non-default configuration.
+        case Arguments::BeginDictEntry:
+            reader.beginDictEntry();
+            break;
+        case Arguments::EndDictEntry:
+            reader.endDictEntry();
             break;
 #endif
         case Arguments::EndDict:
             reader.endDict();
             inEmptyArray = reader.isInsideEmptyArray();
-            nestingPrefix.resize(nestingPrefix.size() - strlen("{V "));
+            nestingPrefix.resize(nestingPrefix.size() - strlen("{ V "));
             ret << nestingPrefix << "end dict\n";
             break;
         case Arguments::Boolean: {
@@ -1724,6 +1731,16 @@ void Arguments::Reader::skipDict()
         d->m_signaturePosition++; // skip '{' like beginDict() does - skipArrayOrDict() expects it
         skipArrayOrDict(true);
     }
+}
+
+bool Arguments::Reader::isDictKey() const
+{
+    if (!d->m_aggregateStack.empty()) {
+        const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
+        return aggregateInfo.aggregateType == BeginDict &&
+               d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin;
+    }
+    return false;
 }
 
 void Arguments::Reader::endDict()
