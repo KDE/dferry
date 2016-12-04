@@ -1119,7 +1119,7 @@ static void test_complicated()
             writer.writeDouble(1.982342);
         writer.endArray();
         TEST(writer.state() != Arguments::InvalidData);
-        writer.finish();
+        arg = writer.finish();
         TEST(writer.state() != Arguments::InvalidData);
     }
     doRoundtrip(arg);
@@ -1127,7 +1127,6 @@ static void test_complicated()
 
 static void test_alignment()
 {
-    Arguments arg;
     {
         Arguments::Writer writer;
         writer.writeByte(123);
@@ -1139,7 +1138,7 @@ static void test_alignment()
         }
 
         TEST(writer.state() != Arguments::InvalidData);
-        writer.finish();
+        Arguments arg = writer.finish();
         TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
@@ -1150,14 +1149,13 @@ static void test_alignment()
         writer.writeByte(110);
         writer.endStruct();
         writer.writeByte(200);
-        writer.finish();
+        Arguments arg = writer.finish();
         doRoundtrip(arg);
     }
 }
 
 static void test_arrayOfVariant()
 {
-    Arguments arg;
     // non-empty array
     {
         Arguments::Writer writer;
@@ -1170,7 +1168,7 @@ static void test_arrayOfVariant()
         writer.writeByte(123);
 
         TEST(writer.state() != Arguments::InvalidData);
-        writer.finish();
+        Arguments arg = writer.finish();
         TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
@@ -1185,7 +1183,7 @@ static void test_arrayOfVariant()
         writer.writeByte(123);
 
         TEST(writer.state() != Arguments::InvalidData);
-        writer.finish();
+        Arguments arg = writer.finish();
         TEST(writer.state() != Arguments::InvalidData);
         doRoundtrip(arg);
     }
@@ -1221,7 +1219,7 @@ static void test_realMessage()
         writer.writeInt64(46137372);
 
         TEST(writer.state() != Arguments::InvalidData);
-        writer.finish();
+        arg = writer.finish();
         TEST(writer.state() != Arguments::InvalidData);
     }
     doRoundtrip(arg);
