@@ -774,7 +774,7 @@ std::string Arguments::prettyPrint() const
             printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readSignature(), "type signature");
             break;
         case Arguments::UnixFd:
-            // TODO
+            printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUnixFd(), "file descriptor");
             break;
         case Arguments::InvalidData:
         case Arguments::NeedMoreData:
