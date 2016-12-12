@@ -1631,29 +1631,21 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
         return ret;
     }
 
-    if (!d->m_nilArrayNesting) {
-        const uint32 size = m_u.Uint32 - d->m_dataPosition;
-        // does the end of data line up with the end of the last data element?
-        if (!isAligned(size, elementType.alignment)) {
-            return ret;
-        }
-
+    const uint32 size = m_u.Uint32 - d->m_dataPosition;
+    // does the end of data line up with the end of the last data element?
+    if (!isAligned(size, elementType.alignment)) {
+        return ret;
+    }
+    if (size) {
         ret.second.ptr = d->m_data.ptr + d->m_dataPosition;
         ret.second.length = size;
     }
-    ret.first = elementType.state();
-/*
-    TODO test peek / readPrimitiveArray inside a nil array, and inside a nil array inside another
-         nil array. I am pretty sure that something is wrong here.
+    // No need to change  d->m_nilArrayNesting - it can't be observed while "in" the current array
 
-    if (unlikely(d->m_nilArrayNesting)) {
-        // we're done iterating over it once
-        d->m_nilArrayNesting--;
-    }
-*/
-    m_state = EndArray;
+    ret.first = elementType.state();
     d->m_signaturePosition += 1;
     d->m_dataPosition = m_u.Uint32;
+    m_state = EndArray;
     d->m_nesting.endArray();
 
     // ... leave the array, there is nothing more to do in it
@@ -1668,8 +1660,8 @@ Arguments::IoState Arguments::Reader::peekPrimitiveArray(EmptyArrayOption option
     if (m_state != BeginArray) {
         return InvalidData;
     }
-    // TODO as noted in readPrimitiveArray(), primitive nil arrays need testing!
-    if (option == SkipIfEmpty && d->m_nilArrayNesting) {
+    const uint32 arrayLength = m_u.Uint32 - d->m_dataPosition;
+    if (option == SkipIfEmpty && !arrayLength) {
         return BeginArray;
     }
     const TypeInfo elementType = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);

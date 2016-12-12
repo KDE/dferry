@@ -1649,6 +1649,67 @@ static void test_emptyArrayAndDict()
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
     }
+    for (int i = 0; i < 3; i++) {
+        // Test arrays inside empty arrays and especially peekPrimitiveArray / readPrimitiveArray
+        Arguments::Writer writer;
+        const bool outerEmpty = i > 1;
+        const bool innerEmpty = i > 0;
+        writer.beginArray(outerEmpty ? Arguments::Writer::WriteTypesOfEmptyArray
+                                     : Arguments::Writer::NonEmptyArray);
+        writer.beginArray(innerEmpty ? Arguments::Writer::WriteTypesOfEmptyArray
+                                     : Arguments::Writer::NonEmptyArray);
+        // Iterating several times through an empty array is allowed while writing
+        writer.writeUint64(1234);
+        writer.writeUint64(1234);
+        TEST(writer.state() != Arguments::InvalidData);
+        writer.endArray();
+        writer.endArray();
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        {
+            Arguments::Reader reader(arg);
+            reader.beginArray();
+            if (outerEmpty) {
+                TEST(reader.state() == Arguments::EndArray);
+                reader.endArray();
+            } else {
+                TEST(reader.state() == Arguments::BeginArray); // the inner array
+                reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+                TEST(reader.state() == Arguments::Uint64);
+                reader.readUint64();
+                if (!innerEmpty) {
+                    reader.readUint64();
+                }
+                TEST(reader.state() == Arguments::EndArray);
+                reader.endArray();
+                reader.endArray();
+            }
+            TEST(reader.state() == Arguments::Finished);
+        }
+        {
+            Arguments::Reader reader(arg);
+            TEST(reader.peekPrimitiveArray(Arguments::Reader::ReadTypesOnlyIfEmpty) == Arguments::BeginArray);
+            reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            TEST(reader.state() == Arguments::BeginArray);
+            if (innerEmpty) {
+                TEST(reader.peekPrimitiveArray() == Arguments::BeginArray);
+            } else {
+                TEST(reader.peekPrimitiveArray() == Arguments::Uint64);
+            }
+            TEST(reader.peekPrimitiveArray(Arguments::Reader::ReadTypesOnlyIfEmpty) == Arguments::Uint64);
+
+            std::pair<Arguments::IoState, chunk> array = reader.readPrimitiveArray();
+            TEST(array.first == Arguments::Uint64);
+            if (innerEmpty) {
+                TEST(array.second.ptr == nullptr);
+                TEST(array.second.length == 0);
+            } else {
+                TEST(array.second.length == 2 * sizeof(uint64));
+            }
+            reader.endArray();
+            TEST(reader.state() == Arguments::Finished);
+        }
+    }
     {
         for (int i = 0; i <= 32; i++) {
             Arguments::Writer writer;
