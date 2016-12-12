@@ -651,6 +651,13 @@ void Message::setArguments(Arguments arguments)
     d->m_dirty = true;
     d->m_error = arguments.error();
     d->m_mainArguments = std::move(arguments);
+
+    cstring signature = d->m_mainArguments.signature();
+    if (signature.length) {
+        d->m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
+    } else {
+        d->m_varHeaders.clearStringHeader(Message::SignatureHeader);
+    }
 }
 
 const Arguments &Message::arguments() const
@@ -1028,12 +1035,6 @@ bool MessagePrivate::serialize()
 
     if (m_error.isError() || !requiredHeadersPresent()) {
         return false;
-    }
-
-    // ### can this be done more cleanly?
-    cstring signature = m_mainArguments.signature();
-    if (signature.length) {
-        m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
     }
 
     Arguments headerArgs = serializeVariableHeaders();

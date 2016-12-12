@@ -34,6 +34,16 @@
 
 using namespace std;
 
+static void test_signatureHeader()
+{
+    Message msg;
+    Arguments::Writer writer;
+    writer.writeByte(123);
+    writer.writeUint64(1);
+    msg.setArguments(writer.finish());
+    TEST(msg.signature() == "yt");
+}
+
 class PrintAndTerminateClient : public IMessageReceiver
 {
 public:
@@ -91,6 +101,7 @@ void testBasic(const ConnectionInfo &clientConnection)
 
 int main(int, char *[])
 {
+    test_signatureHeader();
 #ifdef __linux__
     {
         ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
