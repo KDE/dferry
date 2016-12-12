@@ -186,8 +186,10 @@ void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
     if (!isStringHeader(header)) {
         return;
     }
-    m_headerPresenceBitmap &= ~(1u << header);
-    stringHeaders()[indexOfHeader(header)].~string();
+    if (hasHeader(header)) {
+        m_headerPresenceBitmap &= ~(1u << header);
+        stringHeaders()[indexOfHeader(header)].~string();
+    }
 }
 
 uint32 VarHeaderStorage::intHeader(Message::VariableHeader header) const
