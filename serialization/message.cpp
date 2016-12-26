@@ -819,6 +819,21 @@ void MessagePrivate::notifyConnectionReadyWrite()
 }
 #endif // !DFERRY_SERDES_ONLY
 
+chunk Message::serializeAndView()
+{
+    chunk ret; // one return variable to enable return value optimization (RVO) in gcc
+    if (d->m_state > MessagePrivate::LastSteadyState) {
+        return ret;
+    }
+    if (!d->m_buffer.length && !d->serialize()) {
+        // TODO report error?
+        return ret;
+    }
+    ret = d->m_buffer;
+    return ret;
+
+}
+
 std::vector<byte> Message::save()
 {
     vector<byte> ret;
@@ -836,21 +851,18 @@ std::vector<byte> Message::save()
     return ret;
 }
 
-// This does not return bool because full validation of the main arguments would take quite
-// a few cycles. Validating only the header of the message doesn't seem to be worth it.
-void Message::load(const std::vector<byte> &data)
+void Message::deserializeAndTake(chunk memOwnership)
 {
     if (d->m_state > MessagePrivate::LastSteadyState) {
+        free(memOwnership.ptr);
         return;
     }
     d->m_headerLength = 0;
     d->m_bodyLength = 0;
 
     d->clearBuffer();
-    d->m_buffer.length = data.size();
+    d->m_buffer = memOwnership;
     d->m_bufferPos = d->m_buffer.length;
-    d->m_buffer.ptr = reinterpret_cast<byte *>(malloc(d->m_buffer.length));
-    memcpy(d->m_buffer.ptr, &data[0], d->m_buffer.length);
 
     bool ok = d->m_buffer.length >= s_extendedFixedHeaderLength;
     ok = ok && d->deserializeFixedHeaders();
@@ -868,6 +880,20 @@ void Message::load(const std::vector<byte> &data)
     d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
                                    bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Deserialized;
+}
+
+// This does not return bool because full validation of the main arguments would take quite
+// a few cycles. Validating only the header of the message doesn't seem to be worth it.
+void Message::load(const std::vector<byte> &data)
+{
+    if (d->m_state > MessagePrivate::LastSteadyState || data.empty()) {
+        return;
+    }
+    chunk buf;
+    buf.length = data.size();
+    buf.ptr = reinterpret_cast<byte *>(malloc(buf.length));
+
+    deserializeAndTake(buf);
 }
 
 bool MessagePrivate::requiredHeadersPresent()
