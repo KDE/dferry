@@ -359,10 +359,12 @@ public:
         };
     };
 
-    void maybeQueueData(QueuedDataInfo qdi)
+    // The parameter is not a QueuedDataInfo because the compiler doesn't seem to optimize away
+    // QueuedDataInfo construction when insideVariant() is false, despite inlining.
+    void maybeQueueData(byte alignment, byte size)
     {
         if (insideVariant()) {
-            m_queuedData.push_back(qdi);
+            m_queuedData.push_back(QueuedDataInfo(alignment, size));
         }
     }
 
@@ -2169,7 +2171,7 @@ void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
     }
 
     d->m_dataPosition += alignAndSize;
-    d->maybeQueueData(Private::QueuedDataInfo(alignAndSize, alignAndSize));
+    d->maybeQueueData(alignAndSize, alignAndSize);
 }
 
 void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
@@ -2195,7 +2197,7 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
         basic::writeUint32(d->m_data + d->m_dataPosition, m_u.String.length);
     }
     d->m_dataPosition += lengthPrefixSize;
-    d->maybeQueueData(Private::QueuedDataInfo(lengthPrefixSize, lengthPrefixSize));
+    d->maybeQueueData(lengthPrefixSize, lengthPrefixSize);
 
     d->appendBulkData(chunk(m_u.String.ptr, m_u.String.length + 1));
 }
@@ -2462,7 +2464,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         basic::writeUint32(d->m_data + d->m_dataPosition, 0);
         aggregateInfo.arr.lengthFieldPosition = d->m_dataPosition;
         d->m_dataPosition += sizeof(uint32);
-        d->maybeQueueData(Private::QueuedDataInfo(4, Private::QueuedDataInfo::ArrayLengthField));
+        d->maybeQueueData(sizeof(uint32), Private::QueuedDataInfo::ArrayLengthField);
 
         if (newState == BeginDict) {
             d->alignData(structAlignment);
@@ -2741,7 +2743,6 @@ Arguments Arguments::Writer::finish()
     const uint32 dataSize = d->m_dataPosition - Private::SignatureReservedSpace;
     if (success && dataSize > SpecMaxMessageLength) {
         success = false;
-        m_state = InvalidData;
         d->m_error.setCode(Error::ArgumentsTooLong);
     }
 
@@ -2757,6 +2758,7 @@ Arguments Arguments::Writer::finish()
     }
 
     if (!success) {
+        m_state = InvalidData;
         return Arguments();
     }
     m_state = Finished;
