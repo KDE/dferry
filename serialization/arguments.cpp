@@ -411,8 +411,6 @@ public:
         };
     };
 
-    std::vector<cstring> m_variantSignatures;
-
     // this keeps track of which aggregates we are currently in
     std::vector<AggregateInfo> m_aggregateStack;
 
@@ -2022,8 +2020,6 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_nilArrayNesting = other.m_nilArrayNesting;
     m_error = other.m_error;
 
-    m_variantSignatures = other.m_variantSignatures;
-
     m_aggregateStack = other.m_aggregateStack;
     m_elements = other.m_elements;
 }
@@ -2405,7 +2401,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
-        // arrange for finish() to take a signature from d->m_variantSignatures
         d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::VariantSignature));
 
         const uint32 newDataPosition = d->m_dataPosition + Private::MaxFullSignatureLength;
