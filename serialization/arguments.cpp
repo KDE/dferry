@@ -231,16 +231,6 @@ struct Nesting
     uint32 variant;
 };
 
-struct NestingWithParenCounter : public Nesting
-{
-    NestingWithParenCounter() : parenCount(0) {}
-    // no need to be virtual, the type will be known statically
-    // theoretically it's unnecessary to check the return value: when it is false, the Arguments is
-    // already invalid so we could abandon all correctness.
-    bool beginParen() { bool p = Nesting::beginParen(); parenCount += likely(p) ? 1 : 0; return p; }
-    uint32 parenCount;
-};
-
 class Arguments::Private
 {
 public:
@@ -311,17 +301,14 @@ class Arguments::Writer::Private
 {
 public:
     Private()
-       : m_signature(m_initialDataBuffer, 0),
-         m_signaturePosition(0),
-         m_variantSignaturesWastedSpace(0),
-         m_data(m_initialDataBuffer),
+       : m_signaturePosition(0),
+         m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
          m_dataCapacity(InitialDataCapacity),
-         m_dataPosition(MaxFullSignatureLength),
+         m_dataPosition(SignatureReservedSpace),
          m_nilArrayNesting(0)
     {
         m_signature.ptr = reinterpret_cast<char *>(m_data + 1); // reserve a byte for length prefix
         m_signature.length = 0;
-        m_elements.reserve(16);
     }
 
     Private(const Private &other);
@@ -338,25 +325,80 @@ public:
         } while (size > newCapacity);
 
         byte *const oldDataPointer = m_data;
-        if (m_data == m_initialDataBuffer) {
-            byte *newAlloc = reinterpret_cast<byte *>(malloc(newCapacity));
-            memcpy(newAlloc, m_data, m_dataCapacity);
-            m_data = newAlloc;
-        } else {
-            m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
-        }
+        m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
         m_signature.ptr += m_data - oldDataPointer;
         m_dataCapacity = newCapacity;
     }
 
+    bool insideVariant()
+    {
+        return !m_queuedData.empty();
+    }
+
+    // We don't know how long a variant signature is when starting the variant, but we have to
+    // insert the signature into the datastream before the data. For that reason, we need a
+    // postprocessing pass to fix things up once the outermost variant is closed.
+    // QueuedDataInfo stores enough information about data inside variants to be able to do
+    // the patching up while respecting alignment and other requirements.
+    struct QueuedDataInfo
+    {
+        QueuedDataInfo(byte alignment, byte size_)
+            : size(size_)
+        {
+            alignmentExponent = alignmentLog2(alignment);
+        }
+        byte alignment() const { return 1 << alignmentExponent; }
+
+        byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
+        byte size : 6; // that's up to 63
+        enum SizeCode {
+            LargestSize = 60,
+            ArrayLengthField,
+            ArrayLengthEndMark,
+            VariantSignature
+        };
+    };
+
+    void maybeQueueData(QueuedDataInfo qdi)
+    {
+        if (insideVariant()) {
+            m_queuedData.push_back(qdi);
+        }
+    }
+
+    // Caution: does not ensure that enough space is available!
+    void appendBulkData(chunk data)
+    {
+        // Align only the first of the back-to-back data chunks - otherwise, when storing values which
+        // are 8 byte aligned, the second half of an element straddling a chunk boundary
+        // (QueuedDataInfo::LargestSize == 60) would start at an 8-byte aligned position (so 64)
+        // instead of 60 where we want it in order to just write a contiguous block of data.
+        memcpy(m_data + m_dataPosition, data.ptr, data.length);
+        m_dataPosition += data.length;
+        if (insideVariant()) {
+            for (uint32 l = data.length; l; ) {
+                uint32 chunkSize = std::min(l, uint32(QueuedDataInfo::LargestSize));
+                m_queuedData.push_back(QueuedDataInfo(1, chunkSize));
+                l -= chunkSize;
+            }
+        }
+    }
+
+    void alignData(uint32 alignment)
+    {
+        if (insideVariant()) {
+            m_queuedData.push_back(QueuedDataInfo(alignment, 0));
+        }
+        zeroPad(m_data, alignment, &m_dataPosition);
+    }
+
     uint32 m_dataElementsCountBeforeNilArray;
-    uint32 m_dataPositionBeforeNilArray;
+    uint32 m_dataPositionBeforeVariant;
 
     Arguments m_args;
-    NestingWithParenCounter m_nesting;
+    Nesting m_nesting;
     cstring m_signature;
     uint32 m_signaturePosition;
-    int32 m_variantSignaturesWastedSpace;
 
     byte *m_data;
     uint32 m_dataCapacity;
@@ -367,12 +409,13 @@ public:
 
     enum {
         InitialDataCapacity = 512,
-        // max signature length w/ length prefix (1 byte) and terminator (1 byte)
-        MaxFullSignatureLength = MaxSignatureLength + 1
+        // max signature length (255) + length prefix(1) + null terminator(1), rounded up to multiple of 8
+        // because that doesn't change alignment
+        SignatureReservedSpace = 264
     };
 
 #ifdef WITH_DICT_ENTRY
-    enum DictEntryState : uint32
+    enum DictEntryState : byte
     {
         RequireBeginDictEntry = 0,
         InDictEntry,
@@ -385,6 +428,9 @@ public:
         uint32 containedTypeBegin; // to rewind when reading the next element
 #ifdef WITH_DICT_ENTRY
         DictEntryState dictEntryState;
+        uint32 lengthFieldPosition : 24;
+#else
+        uint32 lengthFieldPosition;
 #endif
     };
 
@@ -413,37 +459,7 @@ public:
 
     // this keeps track of which aggregates we are currently in
     std::vector<AggregateInfo> m_aggregateStack;
-
-
-    // we don't know how long a variant signature is when starting the variant, but we have to
-    // insert the signature into the datastream before the data. for that reason, we need a
-    // postprocessing pass to insert the signatures when the stream is otherwise finished.
-
-    // - need to split up long string data: all unaligned, arbitrary length
-    // - need to fix up array length because even the length excluding the padding before and
-    //   after varies with alignment of the first byte - for that the alignment parameters as
-    //   described in plan.txt need to be solved (we can use a worst-case estimate at first)
-    struct ElementInfo
-    {
-        ElementInfo(byte alignment, byte size_)
-            : size(size_)
-        {
-            alignmentExponent = alignmentLog2(alignment);
-        }
-        byte alignment() const { return 1 << alignmentExponent; }
-
-        byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
-        byte size : 6; // that's up to 63
-        enum SizeCode {
-            LargestSize = 60,
-            ArrayLengthField,
-            ArrayLengthEndMark,
-            VariantSignature
-        };
-    };
-
-    byte m_initialDataBuffer[InitialDataCapacity];
-    std::vector<ElementInfo> m_elements;
+    std::vector<QueuedDataInfo> m_queuedData;
 };
 
 struct ArgAllocCaches
@@ -1113,17 +1129,17 @@ void Arguments::Reader::replaceData(chunk data)
 
     // fix up variant signature addresses occurring on the aggregate stack pointing into m_data;
     // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
-    bool isOriginalSignature = true;
+    bool isMainSignature = true;
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
         if (aggregate.aggregateType == BeginVariant) {
-            if (isOriginalSignature) {
-                isOriginalSignature = false;
+            if (isMainSignature) {
+                isMainSignature = false;
             } else {
                 aggregate.var.prevSignature.ptr += offset;
             }
         }
     }
-    if (!isOriginalSignature) {
+    if (!isMainSignature) {
         d->m_signature.ptr += offset;
     }
 
@@ -1461,11 +1477,13 @@ void Arguments::Reader::advanceState()
         m_state = firstElementTy.state() == BeginDict ? BeginDict : BeginArray;
 
         uint32 dataEnd = d->m_dataPosition;
-        // If the internal type has greater alignment requirements than the array index type (which has
-        // 4 bytes), align to the nonexistent first element.
-        // Tricky: d->m_nilArrayNesting is only increased when the API client calls beginArray(), so this
-        // is the old state. Use it to increase alignment requirements once. If my guess from the previous
-        // paragraph was wrong, don't look at d->m_nilArrayNesting and just apply the alignment.
+        // In case (and we don't check this) the internal type has greater alignment requirements than the
+        // array index type (which aligns to 4 bytes), align to the nonexistent first element.
+        // d->m_nilArrayNesting is only increased when the API client calls beginArray(), so
+        // d->m_nilArrayNesting is the old state. As a side effect of that, it is possible to implement the
+        // requirement that, in nested containers inside empty arrays, only the outermost array's first type
+        // is used for alignment purposes.
+        // TODO: unit-test this
         if (likely(!d->m_nilArrayNesting)) {
             const uint32 padStart = d->m_dataPosition;
             d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
@@ -1994,7 +2012,7 @@ void Arguments::Writer::Private::operator=(const Private &other)
     }
 
     m_dataElementsCountBeforeNilArray = other.m_dataElementsCountBeforeNilArray;
-    m_dataPositionBeforeNilArray = other.m_dataPositionBeforeNilArray;
+    m_dataPositionBeforeVariant = other.m_dataPositionBeforeVariant;
 
     // Arguments m_args can only be default initialized empty or moved-from, in both cases
     // copying it is okay and fairly cheap.
@@ -2004,16 +2022,11 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_signature.ptr = other.m_signature.ptr; // ### still needs adjustment, done after allocating m_data
     m_signature.length = other.m_signature.length;
     m_signaturePosition = other.m_signaturePosition;
-    m_variantSignaturesWastedSpace = other.m_variantSignaturesWastedSpace;
 
     m_dataCapacity = other.m_dataCapacity;
     m_dataPosition = other.m_dataPosition;
     // handle *m_data and the data it's pointing to
-    if (m_dataCapacity == InitialDataCapacity) {
-        m_data = m_initialDataBuffer;
-    } else {
-        m_data = reinterpret_cast<byte *>(malloc(m_dataCapacity));
-    }
+    m_data = reinterpret_cast<byte *>(malloc(m_dataCapacity));
     memcpy(m_data, other.m_data, m_dataPosition);
     m_signature.ptr += m_data - other.m_data;
 
@@ -2021,7 +2034,7 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_error = other.m_error;
 
     m_aggregateStack = other.m_aggregateStack;
-    m_elements = other.m_elements;
+    m_queuedData = other.m_queuedData;
 }
 
 Arguments::Writer::Writer()
@@ -2078,9 +2091,7 @@ void Arguments::Writer::operator=(const Writer &other)
 
 Arguments::Writer::~Writer()
 {
-    if (d->m_data != d->m_initialDataBuffer) {
-        free(d->m_data);
-    }
+    free(d->m_data);
     d->m_data = nullptr;
     d->~Private();
     allocCaches.writerPrivate.free(d);
@@ -2116,9 +2127,8 @@ cstring Arguments::Writer::currentSignature() const
 
 void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
 {
-    d->m_dataPosition = align(d->m_dataPosition, alignAndSize);
-    const uint32 newDataPosition = d->m_dataPosition + alignAndSize;
-    d->reserveData(newDataPosition);
+    d->reserveData(d->m_dataPosition + (alignAndSize << 1));
+    zeroPad(d->m_data, alignAndSize, &d->m_dataPosition);
 
     switch(type) {
     case Boolean: {
@@ -2158,8 +2168,8 @@ void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
         VALID_IF(false, Error::InvalidType);
     }
 
-    d->m_dataPosition = newDataPosition;
-    d->m_elements.push_back(Private::ElementInfo(alignAndSize, alignAndSize));
+    d->m_dataPosition += alignAndSize;
+    d->maybeQueueData(Private::QueuedDataInfo(alignAndSize, alignAndSize));
 }
 
 void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
@@ -2175,9 +2185,9 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
                  Error::InvalidSignature);
     }
 
-    d->m_dataPosition = align(d->m_dataPosition, lengthPrefixSize);
-    const uint32 newDataPosition = d->m_dataPosition + lengthPrefixSize + m_u.String.length + 1;
-    d->reserveData(newDataPosition);
+    d->reserveData(d->m_dataPosition + (lengthPrefixSize << 1) + m_u.String.length + 1);
+
+    zeroPad(d->m_data, lengthPrefixSize, &d->m_dataPosition);
 
     if (lengthPrefixSize == 1) {
         d->m_data[d->m_dataPosition] = m_u.String.length;
@@ -2185,15 +2195,9 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
         basic::writeUint32(d->m_data + d->m_dataPosition, m_u.String.length);
     }
     d->m_dataPosition += lengthPrefixSize;
-    d->m_elements.push_back(Private::ElementInfo(lengthPrefixSize, lengthPrefixSize));
+    d->maybeQueueData(Private::QueuedDataInfo(lengthPrefixSize, lengthPrefixSize));
 
-    memcpy(d->m_data + d->m_dataPosition, m_u.String.ptr, m_u.String.length + 1);
-    d->m_dataPosition = newDataPosition;
-    for (uint32 l = m_u.String.length + 1; l; ) {
-        uint32 chunkSize = std::min(l, uint32(Private::ElementInfo::LargestSize));
-        d->m_elements.push_back(Private::ElementInfo(1, chunkSize));
-        l -= chunkSize;
-    }
+    d->appendBulkData(chunk(m_u.String.ptr, m_u.String.length + 1));
 }
 
 void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState)
@@ -2226,7 +2230,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     bool isStringType = false;
 
     if (signatureFragment.length) {
-        TypeInfo ty = typeInfo(signatureFragment.ptr[0]);
+        const TypeInfo ty = typeInfo(signatureFragment.ptr[0]);
         alignment = ty.alignment;
         isPrimitiveType = ty.isPrimitive;
         isStringType = ty.isString;
@@ -2301,10 +2305,8 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             // state handler). no third type allowed.
             if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
                 && newState != EndDict) {
-                // Start the next dict entry
-                d->m_nesting.parenCount += 1;
                 // align to dict entry
-                d->m_elements.push_back(Private::ElementInfo(structAlignment, 0));
+                d->alignData(structAlignment);
                 d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
                 isWritingSignature = false;
                 m_state = DictKey;
@@ -2360,10 +2362,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         if (likely(!d->m_nilArrayNesting)) {
             doWriteString(newState, alignment);
         } else {
-            // The code that ensures that even empty arrays respect the alignment of their contents
-            // expects *some* kind of data element in the array. Since a string after an array length
-            // field can never change the alignment, just add something that does nothing.
-            d->m_elements.push_back(Private::ElementInfo(1, 0));
+            // The alignment of the first element in a nil array determines where array data starts,
+            // which is needed to serialize the length correctly. Write the minimum to achieve that.
+            // (The check to see if we're really at the first element is omitted - for performance
+            // it's worth trying to add that check)
+            d->alignData(alignment);
         }
         return;
     }
@@ -2377,7 +2380,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.sct.containedTypeBegin = d->m_signaturePosition;
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
-        d->m_elements.push_back(Private::ElementInfo(alignment, 0)); // align only
+        d->alignData(alignment);
         break;
     case EndStruct:
         d->m_nesting.endParen();
@@ -2398,12 +2401,17 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_signature.ptr[-1] = byte(d->m_signature.length);
         variantInfo.prevSignaturePosition = d->m_signaturePosition;
 
+        if (!d->insideVariant()) {
+            d->m_dataPositionBeforeVariant = d->m_dataPosition;
+        }
+
         d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
-        d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::VariantSignature));
+        d->m_queuedData.reserve(16);
+        d->m_queuedData.push_back(Private::QueuedDataInfo(1, Private::QueuedDataInfo::VariantSignature));
 
-        const uint32 newDataPosition = d->m_dataPosition + Private::MaxFullSignatureLength;
+        const uint32 newDataPosition = d->m_dataPosition + Private::SignatureReservedSpace;
         d->reserveData(newDataPosition);
         // allocate new signature in the data buffer, reserve one byte for length prefix
         d->m_signature.ptr = reinterpret_cast<char *>(d->m_data) + d->m_dataPosition + 1;
@@ -2419,12 +2427,9 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         if (likely(!d->m_nilArrayNesting)) {
             // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
-            // (This is a peculiarity of empty array handling in this API and has nothing to
-            // do with the wire format)
+            // No use adding stuff when it's not required or even possible.
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
             assert(d->m_signaturePosition <= MaxSignatureLength); // should have been caught earlier
-            d->m_variantSignaturesWastedSpace += -1 // we don't store the null terminator but output does
-                + Private::MaxFullSignatureLength - d->m_signaturePosition;
         }
         d->m_signature.ptr[-1] = byte(d->m_signaturePosition);
 
@@ -2433,6 +2438,12 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_signature.length = d->m_signature.ptr[-1];
         d->m_signaturePosition = variantInfo.prevSignaturePosition;
         d->m_aggregateStack.pop_back();
+
+        // if not in any variant anymore, flush queued data and resume unqueued operation
+        if (d->m_signature.ptr == reinterpret_cast<char *>(d->m_data) + 1) {
+            flushQueuedData();
+        }
+
         break; }
 
     case BeginDict:
@@ -2446,9 +2457,15 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
 
-        d->m_elements.push_back(Private::ElementInfo(4, Private::ElementInfo::ArrayLengthField));
+        d->reserveData(d->m_dataPosition + (sizeof(uint32) << 1));
+        zeroPad(d->m_data, sizeof(uint32), &d->m_dataPosition);
+        basic::writeUint32(d->m_data + d->m_dataPosition, 0);
+        aggregateInfo.arr.lengthFieldPosition = d->m_dataPosition;
+        d->m_dataPosition += sizeof(uint32);
+        d->maybeQueueData(Private::QueuedDataInfo(4, Private::QueuedDataInfo::ArrayLengthField));
+
         if (newState == BeginDict) {
-            d->m_elements.push_back(Private::ElementInfo(structAlignment, 0)); // align to dict entry
+            d->alignData(structAlignment);
 #ifdef WITH_DICT_ENTRY
             m_state = BeginDictEntry;
             aggregateInfo.arr.dictEntryState = Private::RequireBeginDictEntry;
@@ -2473,22 +2490,36 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                  Error::CannotEndArrayOrDictHere);
         VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1),
                  Error::TooFewTypesInArrayOrDict);
-        d->m_aggregateStack.pop_back();
+
+        // array data starts (and in empty arrays ends) at the first array element position *after alignment*
+        const uint32 contentAlign = isDict ? 8
+                        : typeInfo(d->m_signature.ptr[aggregateInfo.arr.containedTypeBegin]).alignment;
+        const uint32 arrayDataStart = align(aggregateInfo.arr.lengthFieldPosition + sizeof(uint32),
+                                            contentAlign);
+
         if (unlikely(d->m_nilArrayNesting)) {
             if (--d->m_nilArrayNesting == 0) {
-                assert(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray <= d->m_elements.end());
-                d->m_elements.erase(d->m_elements.begin() + d->m_dataElementsCountBeforeNilArray,
-                                    d->m_elements.end());
-                assert((d->m_elements.end() - 2)->size == Private::ElementInfo::ArrayLengthField);
-                // align, but don't have actual data for the first element
-                d->m_elements.back().size = 0;
-                d->m_dataPosition = d->m_dataPositionBeforeNilArray;
+                d->m_dataPosition = arrayDataStart;
+                if (d->insideVariant()) {
+                    assert(d->m_queuedData.begin() + d->m_dataElementsCountBeforeNilArray <=
+                           d->m_queuedData.end());
+                    d->m_queuedData.erase(d->m_queuedData.begin() + d->m_dataElementsCountBeforeNilArray,
+                                          d->m_queuedData.end());
+                    assert((d->m_queuedData.end() - 2)->size == Private::QueuedDataInfo::ArrayLengthField);
+                    // align, but don't have actual data for the first element
+                    d->m_queuedData.back().size = 0;
+                }
             }
         }
 
-        // ### not checking array size here, it may change by a few bytes in the final data stream
-        //     due to alignment changes from a different start address
-        d->m_elements.push_back(Private::ElementInfo(1, Private::ElementInfo::ArrayLengthEndMark));
+        // (arrange to) patch in the array length now that it is known
+        if (d->insideVariant()) {
+            d->m_queuedData.push_back(Private::QueuedDataInfo(1, Private::QueuedDataInfo::ArrayLengthEndMark));
+        } else {
+            basic::writeUint32(d->m_data + aggregateInfo.arr.lengthFieldPosition,
+                               d->m_dataPosition - arrayDataStart);
+        }
+        d->m_aggregateStack.pop_back();
         break; }
 #ifdef WITH_DICT_ENTRY
     case BeginDictEntry:
@@ -2516,10 +2547,9 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
                     // The code is a slightly modified version of code below under: if (isEmpty) {
                     if (!d->m_nilArrayNesting) {
                         d->m_nilArrayNesting = 1;
-                        d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 2; // +2 as below
+                        d->m_dataElementsCountBeforeNilArray = d->m_queuedData.size() + 2; // +2 as below
                         // Now correct for the elements already added in advanceState() with BeginArray / BeginDict
                         d->m_dataElementsCountBeforeNilArray -= (beginWhat == BeginDict) ? 2 : 1;
-                        d->m_dataPositionBeforeNilArray = d->m_dataPosition;
                     } else {
                         // The array may be implicitly nil (so our poor API client doesn't notice) because
                         // an array below in the aggregate stack is nil, so just allow this as a no-op.
@@ -2539,8 +2569,7 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
             // throw away all that data and signatures and keep only changes in the signature containing
             // the topmost empty array.
             // +2 -> keep ArrayLengthField, and first data element for alignment purposes
-            d->m_dataElementsCountBeforeNilArray = d->m_elements.size() + 2;
-            d->m_dataPositionBeforeNilArray = d->m_dataPosition;
+            d->m_dataElementsCountBeforeNilArray = d->m_queuedData.size() + 2;
         }
     }
     if (beginWhat == BeginArray) {
@@ -2637,31 +2666,16 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
         return;
     }
 
-    // undo the dummy write
+    // undo the dummy write (except for the preceding alignment bytes, if any)
     d->m_dataPosition -= elementType.alignment;
-    d->m_elements.pop_back();
-
-    // ensure that we have room for the data
-    const uint32 newDataPosition = d->m_dataPosition + data.length;
-    d->reserveData(newDataPosition);
-
-    // copy the data
-    memcpy(d->m_data + d->m_dataPosition, data.ptr, data.length);
-    d->m_dataPosition = newDataPosition;
-
-    // Store ElementInfos about the data
-    // Align only the first of the back-to-back data chunks - otherwise, when storing values which
-    // are 8 byte aligned, the second half of an element straddling a chunk boundary
-    // (Private::ElementInfo::LargestSize == 60) would start at an 8-byte aligned position (so 64)
-    // instead of 60 where we want it in order to just write a contiguous block of data.
-    // Also, it's somewhat faster to skip alignment logic altogether.
-    uint32 alignment = elementType.alignment;
-    for (uint32 l = data.length; l; ) {
-        uint32 chunkSize = std::min(l, uint32(Private::ElementInfo::LargestSize));
-        d->m_elements.push_back(Private::ElementInfo(alignment, chunkSize));
-        alignment = 1;
-        l -= chunkSize;
+    if (d->insideVariant()) {
+        d->m_queuedData.pop_back();
+        d->m_queuedData.push_back(Private::QueuedDataInfo(elementType.alignment, 0));
     }
+
+    // append the payload
+    d->reserveData(d->m_dataPosition + data.length);
+    d->appendBulkData(data);
 
     endArray();
 }
@@ -2669,13 +2683,61 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 Arguments Arguments::Writer::finish()
 {
     if (!d->m_args.d) {
-        // TODO proper error - what must have happened is that finish() was called > 1 times
+        // TODO proper error - was finish() called more than once or what?
         return Arguments();
     }
-    finishInternal();
+    // what needs to happen here:
+    // - check if the message can be closed - basically the aggregate stack must be empty
+    // - close the signature by adding the terminating null
+    if (m_state == InvalidData) {
+        return Arguments();
+    }
+    if (d->m_nesting.total() != 0) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::CannotEndArgumentsHere);
+        return Arguments();
+    }
+    assert(!d->m_nilArrayNesting);
+    assert(!d->insideVariant());
 
+    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
+    assert(d->m_signature.ptr == reinterpret_cast<char *>(d->m_data) + 1);
+
+    // Note that we still keep the full SignatureReservedSpace for the main signature, which means
+    // less copying around to shrink the gap between signature and data, but also wastes an enormous
+    // amount of space (relative to the possible minimum) in some cases. It should not be a big space
+    // problem because normally not many D-Bus Message / Arguments instances exist at the same time.
+
+    d->m_signature.length = d->m_signaturePosition;
+    d->m_signature.ptr[d->m_signature.length] = '\0';
     d->m_args.d->m_error = d->m_error;
 
+    // OK, so this length check is more of a sanity check. The actual limit limits the size of the
+    // full message. Here we take the size of the "payload" and don't add the size of the signature -
+    // why bother doing it accurately when the real check with full information comes later anyway?
+    bool success = true;
+    const uint32 dataSize = d->m_dataPosition - Private::SignatureReservedSpace;
+    if (success && dataSize > SpecMaxMessageLength) {
+        success = false;
+        d->m_error.setCode(Error::ArgumentsTooLong);
+    }
+
+    if (!dataSize || !success) {
+        d->m_args.d->m_memOwnership = nullptr;
+        d->m_args.d->m_signature = cstring();
+        d->m_args.d->m_data = chunk();
+    } else {
+        d->m_args.d->m_memOwnership = d->m_data;
+        d->m_args.d->m_signature = cstring(d->m_data + 1 /* w/o length prefix */, d->m_signature.length);
+        d->m_args.d->m_data = chunk(d->m_data + Private::SignatureReservedSpace, dataSize);
+        d->m_data = nullptr; // now owned by Arguments and later freed there
+    }
+
+    if (!success) {
+        m_state = InvalidData;
+        return Arguments();
+    }
+    m_state = Finished;
     return std::move(d->m_args);
 }
 
@@ -2685,149 +2747,97 @@ struct ArrayLengthField
     uint32 dataStartPosition;
 };
 
-void Arguments::Writer::finishInternal()
+void Arguments::Writer::flushQueuedData()
 {
-    // what needs to happen here:
-    // - check if the message can be closed - basically the aggregate stack must be empty
-    // - assemble the message, inserting variant signatures and array lengths
-    // - close the signature by adding the terminating null
-    if (m_state == InvalidData) {
-        return;
-    }
-    VALID_IF(d->m_nesting.total() == 0, Error::CannotEndArgumentsHere);
-    assert(!d->m_nilArrayNesting);
+    const uint32 count = d->m_queuedData.size();
+    assert(count); // just don't call this method otherwise!
 
-    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
-    // we're going to use the following identity to help the compiler
-    assert(d->m_signature.ptr == reinterpret_cast<char *>(d->m_data) + 1);
-    d->m_signature.length = d->m_signaturePosition;
+    // Note: if one of signature or data is nonempty, the other must also be nonempty.
+    // Even "empty" things like empty arrays or null strings have a size field, in that case
+    // (for all(?) types) of value zero.
 
-    bool success = true;
-    const uint32 count = d->m_elements.size();
+    // Copy the signature and main data (thus the whole contents) into one allocated block,
+    // which is good to have for performance and simplicity reasons.
 
-    if (count) {
-        // Note: if one of signature or data is nonempty, the other must also be nonempty.
-        // Even "empty" things like empty arrays or null strings have a size field, in that case
-        // (for all(?) types) of value zero.
+    // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
+    // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
+    // each (when they contain a byte).
+    // Those estimates are very conservative (but easy!), so some space optimization is possible.
 
-        // Copy the signature and main data (thus the whole contents) into one allocated block,
-        // which is good to have for performance and simplicity reasons.
+    uint32 inPos = d->m_dataPositionBeforeVariant;
+    uint32 outPos = d->m_dataPositionBeforeVariant;
+    byte *const buffer = d->m_data;
 
-        // The maximum alignment blowup for naturally aligned types is just less than a factor of 2.
-        // Structs and dict entries are always 8 byte aligned so they add a maximum blowup of 7 bytes
-        // each (when they contain a byte).
-        // Those estimates are very conservative (but easy!), so some space optimization is possible.
+    std::vector<ArrayLengthField> lengthFieldStack;
 
-        // This one gets no length prefix, it's just the backing buffer for a cstring instance!
-        const uint32 alignedSigLength = align(d->m_signature.length + 1, 8);
-
-        const uint32 safeEstimatedDataSize =
-            2 * (d->m_dataPosition - Private::MaxFullSignatureLength // signature is in alignedSigLength
-                 - d->m_variantSignaturesWastedSpace)
-            + d->m_nesting.parenCount * 7 // max alignment padding in front of data structures
-            + alignedSigLength;
-
-        byte *buffer = reinterpret_cast<byte *>(malloc(std::max(uint32(Private::InitialDataCapacity),
-                                                                safeEstimatedDataSize)));
-        memcpy(buffer, d->m_data + 1, d->m_signature.length);
-        uint32 bufferPos = d->m_signature.length;
-        for (; bufferPos < alignedSigLength; bufferPos++) {
-            buffer[bufferPos] = '\0';
-        }
-
-        d->m_dataPosition = Private::MaxFullSignatureLength;
-
-        std::vector<ArrayLengthField> lengthFieldStack;
-
-        for (uint32 i = 0; i < count; i++) {
-            const Private::ElementInfo ei = d->m_elements[i];
-            switch (ei.size) {
-            case 0: {
-                    // if !ei.size, the current element is alignment padding which does not apply
-                    // to source data, so only add padding and only advance the output stream (not input)
-                    zeroPad(buffer, ei.alignment(), &bufferPos);
-                }
-                break;
-            default: {
-                    assert(ei.size && ei.size <= Private::ElementInfo::LargestSize);
-                    // apply alignment padding in output and input
-                    zeroPad(buffer, ei.alignment(), &bufferPos);
-                    d->m_dataPosition = align(d->m_dataPosition, ei.alignment());
-                    // copy data chunk
-                    memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, ei.size);
-                    bufferPos += ei.size;
-                    d->m_dataPosition += ei.size;
-                }
-                break;
-            case Private::ElementInfo::ArrayLengthField: {
-                    //   start of an array
-                    // alignment padding before length field in output
-                    zeroPad(buffer, ei.alignment(), &bufferPos);
-                    // reserve length field
-                    ArrayLengthField al;
-                    al.lengthFieldPosition = bufferPos;
-                    bufferPos += sizeof(uint32);
-                    // alignment padding before first array element in output
-                    assert(i + 1 < d->m_elements.size());
-                    zeroPad(buffer, d->m_elements[i + 1].alignment(), &bufferPos);
-                    // array data starts at the first array element position
-                    al.dataStartPosition = bufferPos;
-                    lengthFieldStack.push_back(al);
-                }
-                break;
-            case Private::ElementInfo::ArrayLengthEndMark: {
-                    //   end of an array
-                    // just put the now known array length in front of the array
-                    const ArrayLengthField al = lengthFieldStack.back();
-                    const uint32 arrayLength = bufferPos - al.dataStartPosition;
-                    if (arrayLength > SpecMaxArrayLength) {
-                        d->m_error.setCode(Error::ArrayOrDictTooLong);
-                        success = false;
-                        break;
-                    }
-                    basic::writeUint32(buffer + al.lengthFieldPosition, arrayLength);
-                    lengthFieldStack.pop_back();
-                }
-                break;
-            case Private::ElementInfo::VariantSignature: {
-                    // fill in signature and add null terminator
-                    const uint32 length = d->m_data[d->m_dataPosition] + 1; // + length prefix
-                    memcpy(buffer + bufferPos, d->m_data + d->m_dataPosition, length);
-                    buffer[bufferPos + length] = '\0';
-                    bufferPos += length + 1; // + null terminator
-                    d->m_dataPosition += Private::MaxFullSignatureLength;
-                }
-                break;
+    for (uint32 i = 0; i < count; i++) {
+        const Private::QueuedDataInfo ei = d->m_queuedData[i];
+        switch (ei.size) {
+        case 0: {
+                inPos = align(inPos, ei.alignment());
+                zeroPad(buffer, ei.alignment(), &outPos);
             }
-        }
-
-        // OK, so this length check is more like a sanity check. The actual limit is about the size of the
-        // full message. Here we take the size of the "payload" plus the signature string and its alignment
-        // padding. However, messages have a header of nontrivial size, so our "estimate" of full message
-        // size is still too small.
-        if (success && bufferPos > SpecMaxMessageLength) {
-            success = false;
-            d->m_error.setCode(Error::ArgumentsTooLong);
-        }
-
-        d->m_aggregateStack.clear();
-        if (success) {
-            assert(lengthFieldStack.empty());
-            d->m_args.d->m_memOwnership = buffer;
-            d->m_args.d->m_signature = cstring(buffer, d->m_signature.length);
-            d->m_args.d->m_data = chunk(buffer + alignedSigLength, bufferPos - alignedSigLength);
+            break;
+        default: {
+                assert(ei.size && ei.size <= Private::QueuedDataInfo::LargestSize);
+                inPos = align(inPos, ei.alignment());
+                zeroPad(buffer, ei.alignment(), &outPos);
+                // copy data chunk
+                memmove(buffer + outPos, buffer + inPos, ei.size);
+                inPos += ei.size;
+                outPos += ei.size;
+            }
+            break;
+        case Private::QueuedDataInfo::ArrayLengthField: {
+                //   start of an array
+                // alignment padding before length field
+                inPos = align(inPos, ei.alignment());
+                zeroPad(buffer, ei.alignment(), &outPos);
+                // reserve length field
+                ArrayLengthField al;
+                al.lengthFieldPosition = outPos;
+                inPos += sizeof(uint32);
+                outPos += sizeof(uint32);
+                // alignment padding before first array element
+                assert(i + 1 < d->m_queuedData.size());
+                const uint32 contentsAlignment = d->m_queuedData[i + 1].alignment();
+                inPos = align(inPos, contentsAlignment);
+                zeroPad(buffer, contentsAlignment, &outPos);
+                // array data starts at the first array element position after alignment
+                al.dataStartPosition = outPos;
+                lengthFieldStack.push_back(al);
+            }
+            break;
+        case Private::QueuedDataInfo::ArrayLengthEndMark: {
+                //   end of an array
+                // just put the now known array length in front of the array
+                const ArrayLengthField al = lengthFieldStack.back();
+                const uint32 arrayLength = outPos - al.dataStartPosition;
+                if (arrayLength > SpecMaxArrayLength) {
+                    m_state = InvalidData;
+                    d->m_error.setCode(Error::ArrayOrDictTooLong);
+                    i = count + 1; // break out of the loop
+                    break;
+                }
+                basic::writeUint32(buffer + al.lengthFieldPosition, arrayLength);
+                lengthFieldStack.pop_back();
+            }
+            break;
+        case Private::QueuedDataInfo::VariantSignature: {
+                // move the signature and add its null terminator
+                const uint32 length = buffer[inPos] + 1; // + length prefix
+                memmove(buffer + outPos, buffer + inPos, length);
+                buffer[outPos + length] = '\0';
+                outPos += length + 1; // + null terminator
+                inPos += Private::Private::SignatureReservedSpace;
+            }
+            break;
         }
     }
+    assert(m_state == InvalidData || lengthFieldStack.empty());
 
-    if (!count || !success) {
-        d->m_args.d->m_memOwnership = nullptr;
-        d->m_args.d->m_signature = cstring();
-        d->m_args.d->m_data = chunk();
-    }
-
-    d->m_elements.clear();
-
-    m_state = success ? Finished : InvalidData;
+    d->m_dataPosition = outPos;
+    d->m_queuedData.clear();
 }
 
 std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const

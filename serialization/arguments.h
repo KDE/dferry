@@ -369,7 +369,7 @@ public:
         void doWriteString(IoState type, uint32 lengthPrefixSize);
         void advanceState(cstring signatureFragment, IoState newState);
         void beginArrayOrDict(IoState beginWhat, ArrayOption option);
-        void finishInternal();
+        void flushQueuedData();
 
         Private *d;
 
