@@ -51,6 +51,7 @@ public:
         ReplacementDataIsShorter,
         MalformedMessageData,
         ReadWrongType,
+        NotPrimitiveType,
         InvalidType,
         InvalidString,
         InvalidObjectPath,
@@ -75,6 +76,8 @@ public:
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,
         ArrayOrDictTooLong,
+
+        StateNotSkippable,
 
         MissingBeginDictEntry = 1019,
         MisplacedBeginDictEntry,

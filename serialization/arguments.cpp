@@ -1964,7 +1964,7 @@ void Arguments::Reader::skipCurrentElement()
             // fall through
         default:
             m_state = InvalidData;
-            // TODO m_error =
+            d->m_error.setCode(Error::StateNotSkippable);
             // fall through
         case Arguments::InvalidData:
             isDone = true;
@@ -2645,6 +2645,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
     const char letterCode = letterForPrimitiveIoState(type);
     if (letterCode == 'c' || data.length > SpecMaxArrayLength) {
         m_state = InvalidData;
+        d->m_error.setCode(Error::NotPrimitiveType);
         return;
     }
 
@@ -2719,6 +2720,7 @@ Arguments Arguments::Writer::finish()
     const uint32 dataSize = d->m_dataPosition - Private::SignatureReservedSpace;
     if (success && dataSize > SpecMaxMessageLength) {
         success = false;
+        m_state = InvalidData;
         d->m_error.setCode(Error::ArgumentsTooLong);
     }
 
@@ -2734,7 +2736,6 @@ Arguments Arguments::Writer::finish()
     }
 
     if (!success) {
-        m_state = InvalidData;
         return Arguments();
     }
     m_state = Finished;
