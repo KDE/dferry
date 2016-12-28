@@ -2640,6 +2640,27 @@ void Arguments::Writer::endVariant()
     advanceState(cstring(), EndVariant);
 }
 
+void Arguments::Writer::writeVariantForMessageHeader(char sig)
+{
+    // Note: the sugnature we're vorking with there is a(yv)
+    // If we know that and can trust the client, this can be very easy and fast...
+    d->m_signature.ptr[3] = 'v';
+    d->m_signature.length = 4;
+    d->m_signaturePosition = 4;
+
+    d->reserveData(d->m_dataPosition + 3);
+    d->m_data[d->m_dataPosition++] = 1;
+    d->m_data[d->m_dataPosition++] = sig;
+    d->m_data[d->m_dataPosition++] = 0;
+}
+
+void Arguments::Writer::fixupAfterWriteVariantForMessageHeader()
+{
+    // We just wrote something to the main signature when we shouldn't have.
+    d->m_signature.length = 4;
+    d->m_signaturePosition = 4;
+}
+
 void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);

@@ -1130,13 +1130,6 @@ static void doVarHeaderPrologue(Arguments::Writer *writer, Message::VariableHead
 {
     writer->beginStruct();
     writer->writeByte(byte(field));
-    writer->beginVariant();
-}
-
-static void doVarHeaderEpilogue(Arguments::Writer *writer)
-{
-    writer->endVariant();
-    writer->endStruct();
 }
 
 Arguments MessagePrivate::serializeVariableHeaders()
@@ -1154,14 +1147,18 @@ Arguments MessagePrivate::serializeVariableHeaders()
 
             const string &str = m_varHeaders.stringHeaders()[i];
             if (field == Message::PathHeader) {
+                writer.writeVariantForMessageHeader('o');
                 writer.writeObjectPath(cstring(str.c_str(), str.length()));
             } else if (field == Message::SignatureHeader) {
+                writer.writeVariantForMessageHeader('g');
                 writer.writeSignature(cstring(str.c_str(), str.length()));
             } else {
+                writer.writeVariantForMessageHeader('s');
                 writer.writeString(cstring(str.c_str(), str.length()));
             }
 
-            doVarHeaderEpilogue(&writer);
+            writer.fixupAfterWriteVariantForMessageHeader();
+            writer.endStruct();
 
             if (unlikely(writer.error().isError())) {
                 static const Error::Code stringHeaderErrors[VarHeaderStorage::s_stringHeaderCount] = {
@@ -1183,8 +1180,10 @@ Arguments MessagePrivate::serializeVariableHeaders()
         const Message::VariableHeader field = s_intHeaderAtIndex[i];
         if (m_varHeaders.hasHeader(field)) {
             doVarHeaderPrologue(&writer, field);
+            writer.writeVariantForMessageHeader('u');
             writer.writeUint32(m_varHeaders.m_intHeaders[i]);
-            doVarHeaderEpilogue(&writer);
+            writer.fixupAfterWriteVariantForMessageHeader();
+            writer.endStruct();
         }
     }
 

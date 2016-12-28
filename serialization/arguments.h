@@ -33,6 +33,7 @@
 
 class Error;
 class Message;
+class MessagePrivate;
 
 //#define WITH_DICT_ENTRY
 
@@ -365,6 +366,12 @@ public:
         friend class Private;
 
     private:
+        friend class MessagePrivate;
+        void writeVariantForMessageHeader(char sig); // faster variant for typical message headers;
+        // does not work for nested variants which aren't needed for message headers. Also does not
+        // change the aggregate stack, but Message knows how to handle it.
+        void fixupAfterWriteVariantForMessageHeader();
+
         void doWritePrimitiveType(IoState type, uint32 alignAndSize);
         void doWriteString(IoState type, uint32 lengthPrefixSize);
         void advanceState(cstring signatureFragment, IoState newState);
