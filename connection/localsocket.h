@@ -40,10 +40,12 @@ public:
 
     ~LocalSocket();
 
-    // pure virtuals from IConnection
+    // virtuals from IConnection
     uint32 write(chunk data) override;
+    uint32 writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors) override;
     uint32 availableBytesForReading() override;
     chunk read(byte *buffer, uint32 maxSize) override;
+    chunk readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
     void close() override;
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;

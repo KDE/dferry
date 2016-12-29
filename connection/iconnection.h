@@ -50,9 +50,11 @@ public:
 
     virtual uint32 availableBytesForReading() = 0;
     virtual chunk read(byte *buffer, uint32 maxSize) = 0;
+    virtual chunk readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors);
     virtual uint32 write(chunk data) = 0;
-    virtual void close() = 0;
+    virtual uint32 writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors);
 
+    virtual void close() = 0;
     virtual bool isOpen() = 0;
 
     void setEventDispatcher(EventDispatcher *ed) override;
@@ -66,6 +68,8 @@ protected:
     // IioEventClient
     void notifyRead() override;
     void notifyWrite() override;
+
+    bool m_supportsFileDescriptors;
 
 private:
     friend class IConnectionClient;

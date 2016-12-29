@@ -39,7 +39,8 @@
 using namespace std;
 
 IConnection::IConnection()
-   : m_eventDispatcher(0),
+   : m_supportsFileDescriptors(false),
+     m_eventDispatcher(0),
      m_readNotificationEnabled(false),
      m_writeNotificationEnabled(false)
 {
@@ -51,6 +52,16 @@ IConnection::~IConnection()
     for (size_t i = clientsCopy.size() - 1; i + 1 > 0; i--) {
         removeClient(clientsCopy[i]); // LIFO (stack) order seems safest...
     }
+}
+
+chunk IConnection::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *)
+{
+    return read(buffer, maxSize);
+}
+
+uint32 IConnection::writeWithFileDescriptors(chunk data, const vector<int> &)
+{
+    return write(data);
 }
 
 void IConnection::addClient(IConnectionClient *client)

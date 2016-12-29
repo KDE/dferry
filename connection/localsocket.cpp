@@ -44,6 +44,7 @@ using namespace std;
 LocalSocket::LocalSocket(const string &socketFilePath)
    : m_fd(-1)
 {
+    m_supportsFileDescriptors = true;
     const int fd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
         return;
@@ -86,7 +87,38 @@ void LocalSocket::close()
     m_fd = -1;
 }
 
-uint32 LocalSocket::write(chunk a)
+uint32 LocalSocket::write(chunk data)
+{
+    if (m_fd < 0) {
+        return 0; // TODO -1?
+    }
+
+    const uint32 initialLength = data.length;
+
+    while (data.length > 0) {
+        ssize_t nbytes = send(m_fd, data.ptr, data.length, MSG_DONTWAIT);
+        if (nbytes < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            // see EAGAIN comment in read()
+            if (errno == EAGAIN /* && iov.iov_len < a.length */ ) {
+                break;
+            }
+            close();
+            return false;
+        }
+
+        data.ptr += nbytes;
+        data.length -= size_t(nbytes);
+    }
+
+    return initialLength - data.length;
+}
+
+// TODO: consider using iovec to avoid "copying together" message parts before sending; iovec tricks
+// are probably not going to help for receiving, though.
+uint32 LocalSocket::writeWithFileDescriptors(chunk data, const vector<int> &fileDescriptors)
 {
     if (m_fd < 0) {
         return 0; // TODO -1?
@@ -102,13 +134,13 @@ uint32 LocalSocket::write(chunk a)
     send_msg.msg_iov = &iov;
     send_msg.msg_iovlen = 1;
 
-    iov.iov_base = a.ptr;
-    iov.iov_len = a.length;
+    iov.iov_base = data.ptr;
+    iov.iov_len = data.length;
 
     // we can only send a fixed number of fds anyway due to the non-flexible size of the control message
     // receive buffer, so we set an arbitrary limit.
-    const int numFds = 0; // TODO - how many should we get? do we need to know?
-    assert(numFds <= maxFds);
+    const uint32 numFds = fileDescriptors.size();
+    assert(fileDescriptors.size() <= maxFds); // TODO proper error
 
     char cmsgBuf[CMSG_SPACE(sizeof(int) * maxFds)];
 
@@ -123,9 +155,8 @@ uint32 LocalSocket::write(chunk a)
         c_msg->cmsg_type = SCM_RIGHTS;
 
         // set the control data to pass - this is why we don't use the simpler write()
-        for (int i = 0; i < numFds; i++) {
-            // TODO
-            // reinterpret_cast<int *>(CMSG_DATA(c_msg))[i] = message.m_fileDescriptors[i];
+        for (uint32 i = 0; i < numFds; i++) {
+            reinterpret_cast<int *>(CMSG_DATA(c_msg))[i] = fileDescriptors[i];
         }
     } else {
         // no file descriptor to send, no control message
@@ -151,7 +182,7 @@ uint32 LocalSocket::write(chunk a)
         iov.iov_len -= size_t(nbytes);
     }
 
-    return a.length - iov.iov_len;
+    return data.length - iov.iov_len;
 }
 
 uint32 LocalSocket::availableBytesForReading()
@@ -164,6 +195,34 @@ uint32 LocalSocket::availableBytesForReading()
 }
 
 chunk LocalSocket::read(byte *buffer, uint32 maxSize)
+{
+    chunk ret(buffer, 0);
+
+    while (ret.length < maxSize) {
+        ssize_t nbytes = recv(m_fd, ret.ptr + ret.length, maxSize - ret.length, MSG_DONTWAIT);
+        if (nbytes < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            // If we were notified for reading directly by the event dispatcher, we must be able to read at
+            // least one byte before getting AGAIN aka EWOULDBLOCK - *however* the event loop might notify
+            // something that is very eager to read everything (like Message::notifyRead()...) by reading
+            // multiple times and in that case, we may be called in an attempt to read more when there is
+            // currently no more data.
+            // Just return zero bytes and no error in that case.
+            if (errno == EAGAIN /* && iov.iov_len < maxSize */) {
+                break;
+            }
+            close();
+            return ret;
+        }
+        ret.length += size_t(nbytes);
+    }
+
+    return ret;
+}
+
+chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *fileDescriptors)
 {
     chunk ret;
     if (maxSize <= 0) {
@@ -218,13 +277,11 @@ chunk LocalSocket::read(byte *buffer, uint32 maxSize)
 
     struct cmsghdr *c_msg = CMSG_FIRSTHDR(&recv_msg);
     if (c_msg && c_msg->cmsg_level == SOL_SOCKET && c_msg->cmsg_type == SCM_RIGHTS) {
-        /* TODO
         const int len = c_msg->cmsg_len / sizeof(int);
-        int *data = reinterpret_cast<int *>(CMSG_DATA(c_msg));
+        int *cmsgData = reinterpret_cast<int *>(CMSG_DATA(c_msg));
         for (int i = 0; i < len; i++) {
-            message.appendFileDescriptor(data[i]);
+            fileDescriptors->push_back(cmsgData[i]);
         }
-        */
     }
 
     return ret;
