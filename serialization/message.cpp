@@ -745,7 +745,13 @@ void MessagePrivate::notifyConnectionReadyRead()
 
         const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
-        in = connection()->read(m_buffer.ptr + m_bufferPos, readMax);
+        if (m_bufferPos == 0) {
+            // File descriptors should arrive only with the first byte
+            in = connection()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
+                                                       &m_fileDescriptors);
+        } else {
+            in = connection()->read(m_buffer.ptr + m_bufferPos, readMax);
+        }
         m_bufferPos += in.length;
         assert(m_bufferPos <= m_buffer.length);
 
@@ -770,7 +776,8 @@ void MessagePrivate::notifyConnectionReadyRead()
             m_state = Deserialized;
             chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
             m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
-                                        bodyData, m_isByteSwapped);
+                                        bodyData, std::move(m_fileDescriptors), m_isByteSwapped);
+            m_fileDescriptors.clear(); // put it into a well-defined state
             assert(!isError);
             connection()->removeClient(this);
             notifyCompletionClient(); // do not access members after this because it might delete us!
@@ -809,7 +816,13 @@ void MessagePrivate::notifyConnectionReadyWrite()
             notifyCompletionClient();
             break;
         }
-        uint32 written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+        uint32 written = 0;
+        if (m_bufferPos == 0) {
+            written = connection()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
+                                                             m_mainArguments.fileDescriptors());
+        } else {
+            written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+        }
         if (written <= 0) {
             // TODO error handling
             break;
@@ -1201,6 +1214,7 @@ void MessagePrivate::clearBuffer()
         assert(m_buffer.length == 0);
         assert(m_bufferPos == 0);
     }
+    m_fileDescriptors.clear();
 }
 
 static uint32 nextPowerOf2(uint32 x)

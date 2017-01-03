@@ -113,6 +113,9 @@ public:
     // The copy contructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
     Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
+    // same thing as above, just with file descriptors
+    Arguments(byte *memOwnership, cstring signature, chunk data,
+              std::vector<int> fileDescriptors, bool isByteSwapped = false);
 
     // use these wherever possible if you care at all about efficiency!!
     Arguments(Arguments &&other);
@@ -131,6 +134,7 @@ public:
 
     cstring signature() const;
     chunk data() const;
+    const std::vector<int> &fileDescriptors() const;
 
     static bool isStringValid(cstring string);
     static bool isObjectPathValid(cstring objectPath);
@@ -248,7 +252,7 @@ public:
         cstring readString() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
         cstring readObjectPath() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
         cstring readSignature() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
-        uint32 readUnixFd() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
+        int32 readUnixFd() { int32 ret = m_u.Int32; advanceState(); return ret; }
 
         void skipCurrentElement(); // works on single values and Begin... states. In the Begin... states,
                                    // skips the whole aggregate.
@@ -353,7 +357,7 @@ public:
         void writeString(cstring string);
         void writeObjectPath(cstring objectPath);
         void writeSignature(cstring signature);
-        void writeUnixFd(uint32 fd);
+        void writeUnixFd(int32 fd);
 
         void writePrimitiveArray(IoState type, chunk data);
 

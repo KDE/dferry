@@ -428,7 +428,7 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
     const chunk data = original.data();
     chunk shortData;
 
-    Arguments arg(nullptr, original.signature(), shortData);
+    Arguments arg(nullptr, original.signature(), shortData, original.fileDescriptors());
     Arguments::Reader reader(arg);
     Arguments::Writer writer;
 
@@ -553,16 +553,19 @@ static void doRoundtripForReal(const Arguments &original, uint32 dataIncrement, 
 // those should have separate tests
 static Arguments *shallowCopy(const Arguments &original)
 {
+    // File descriptors can't do shallow copies - don't care for now, file descriptors are an identity
+    // type, not a value type (and therefore don't fit well into the whole data model), and in the vast
+    // majority of messages there aren't any.
     cstring signature = original.signature();
     chunk data = original.data();
-    return new Arguments(nullptr, signature, data);
+    return new Arguments(nullptr, signature, data, original.fileDescriptors());
 }
 
 static void shallowAssign(Arguments *copy, const Arguments &original)
 {
     cstring signature = original.signature();
     chunk data = original.data();
-    *copy = Arguments(nullptr, signature, data);
+    *copy = Arguments(nullptr, signature, data, original.fileDescriptors());
 }
 
 static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataIncrement, bool debugPrint)
@@ -1864,6 +1867,25 @@ static void test_emptyArrayAndDict()
     }
 }
 
+static void test_fileDescriptors()
+{
+#ifdef __unix__
+    Arguments::Writer writer;
+    writer.writeUnixFd(200);
+    writer.writeByte(12);
+    writer.writeUnixFd(1);
+    Arguments arg = writer.finish();
+    doRoundtrip(arg, false);
+    // doRoundtrip only checks the serialized data, but unfortunately file descriptors
+    // are out of band, so check explicitly
+    Arguments::Reader reader(arg);
+    TEST(reader.readUnixFd() == 200);
+    TEST(reader.readByte() == 12);
+    TEST(reader.readUnixFd() == 1);
+    TEST(reader.state() == Arguments::Finished);
+#endif
+}
+
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
 //       length and long/short type signature, to make sure that the signature is written but not
 //       any data if the array is zero-length.
@@ -1886,6 +1908,7 @@ int main(int, char *[])
     test_primitiveArray();
     test_signatureLengths();
     test_emptyArrayAndDict();
+    test_fileDescriptors();
 
     // TODO (maybe): specific tests for begin/endDictEntry() for both Reader and Writer.
 

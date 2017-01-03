@@ -27,6 +27,7 @@
 #include "error.h"
 #include "malloccache.h"
 #include "message.h"
+#include "platform.h"
 #include "stringtools.h"
 
 #include <algorithm>
@@ -248,6 +249,7 @@ public:
     bool m_isByteSwapped;
     byte *m_memOwnership;
     cstring m_signature;
+    std::vector<int> m_fileDescriptors;
     Error m_error;
 };
 
@@ -406,6 +408,7 @@ public:
     uint32 m_dataPosition;
 
     int m_nilArrayNesting;
+    std::vector<int> m_fileDescriptors;
     Error m_error;
 
     enum {
@@ -498,6 +501,9 @@ void Arguments::Private::initFrom(const Private &other)
     m_signature.length = other.m_signature.length;
     m_data.length = other.m_data.length;
 
+    m_fileDescriptors = other.m_fileDescriptors;
+    m_error = other.m_error;
+
     const uint32 alignedSigLength = other.m_signature.length ? align(other.m_signature.length + 1, 8) : 0;
     const uint32 fullLength = alignedSigLength + other.m_data.length;
 
@@ -549,6 +555,17 @@ Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isB
     d->m_memOwnership = memOwnership;
     d->m_signature = signature;
     d->m_data = data;
+}
+
+Arguments::Arguments(byte *memOwnership, cstring signature, chunk data,
+                     std::vector<int> fileDescriptors, bool isByteSwapped)
+   : d(new(allocCaches.argsPrivate.allocate()) Private)
+{
+    d->m_isByteSwapped = isByteSwapped;
+    d->m_memOwnership = memOwnership;
+    d->m_signature = signature;
+    d->m_data = data;
+    d->m_fileDescriptors = std::move(fileDescriptors);
 }
 
 Arguments::Arguments(Arguments &&other)
@@ -607,6 +624,10 @@ chunk Arguments::data() const
     return d->m_data;
 }
 
+const std::vector<int> &Arguments::fileDescriptors() const
+{
+    return d->m_fileDescriptors;
+}
 
 static void printMaybeNilProlog(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
                                 const char *typeName)
@@ -1259,8 +1280,12 @@ void Arguments::Reader::doReadPrimitiveType()
         break;
     case UnixFd: {
         uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
-        uint32 ret = index; // ### highly bogus; TODO use index to retrieve the actual file descriptor
-        m_u.Uint32 = ret;
+        if (!d->m_nilArrayNesting) {
+            VALID_IF(index < d->m_args->d->m_fileDescriptors.size(), Error::MalformedMessageData);
+            m_u.Int32 = d->m_args->d->m_fileDescriptors[index];
+        } else {
+            m_u.Int32 = InvalidFileDescriptor;
+        }
         break; }
     default:
         assert(false);
@@ -2028,6 +2053,7 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_signature.ptr += m_data - other.m_data;
 
     m_nilArrayNesting = other.m_nilArrayNesting;
+    m_fileDescriptors = other.m_fileDescriptors;
     m_error = other.m_error;
 
     m_aggregateStack = other.m_aggregateStack;
@@ -2157,7 +2183,10 @@ void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
         basic::writeDouble(d->m_data + d->m_dataPosition, m_u.Double);
         break;
     case UnixFd: {
-        uint32 index = 0; // TODO = index of the FD we actually want to send
+        const uint32 index = d->m_fileDescriptors.size();
+        if (!d->m_nilArrayNesting) {
+            d->m_fileDescriptors.push_back(m_u.Int32);
+        }
         basic::writeUint32(d->m_data + d->m_dataPosition, index);
         break; }
     default:
@@ -2701,18 +2730,20 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 
 Arguments Arguments::Writer::finish()
 {
-    Arguments args;
-
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - close the signature by adding the terminating null
+    // TODO set error in returned Arguments in error cases
+
+    Arguments args;
+
     if (m_state == InvalidData) {
-        return Arguments();
+        return args;
     }
     if (d->m_nesting.total() != 0) {
         m_state = InvalidData;
         d->m_error.setCode(Error::CannotEndArgumentsHere);
-        return Arguments();
+        return args;
     }
     assert(!d->m_nilArrayNesting);
     assert(!d->insideVariant());
@@ -2754,6 +2785,7 @@ Arguments Arguments::Writer::finish()
         m_state = InvalidData;
         return Arguments();
     }
+    args.d->m_fileDescriptors = std::move(d->m_fileDescriptors);
     m_state = Finished;
     return std::move(args);
 }
@@ -2955,8 +2987,8 @@ void Arguments::Writer::writeSignature(cstring signature)
     advanceState(cstring("g", strlen("g")), Signature);
 }
 
-void Arguments::Writer::writeUnixFd(uint32 fd)
+void Arguments::Writer::writeUnixFd(int32 fd)
 {
-    m_u.Uint32 = fd;
+    m_u.Int32 = fd;
     advanceState(cstring("h", strlen("h")), UnixFd);
 }
