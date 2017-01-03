@@ -45,10 +45,12 @@ enum {
     SpecMaxMessageLength = 134217728 // 128 MiB
 };
 
-static byte alignmentLog2(uint32 alignment)
+static constexpr byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
+
+static constexpr byte alignmentLog2(uint32 alignment)
 {
-    static const byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
-    assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
+    // The following is not constexpr in C++14, and it hasn't triggered in ages
+    // assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
     return alignLog[alignment];
 }
 
@@ -344,11 +346,10 @@ public:
     // the patching up while respecting alignment and other requirements.
     struct QueuedDataInfo
     {
-        QueuedDataInfo(byte alignment, byte size_)
-            : size(size_)
-        {
-            alignmentExponent = alignmentLog2(alignment);
-        }
+        constexpr QueuedDataInfo(byte alignment, byte size_)
+            : alignmentExponent(alignmentLog2(alignment)),
+              size(size_)
+        {}
         byte alignment() const { return 1 << alignmentExponent; }
 
         byte alignmentExponent : 2; // powers of 2, so 1, 2, 4, 8
