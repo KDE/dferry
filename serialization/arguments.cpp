@@ -397,7 +397,6 @@ public:
     uint32 m_dataElementsCountBeforeNilArray;
     uint32 m_dataPositionBeforeVariant;
 
-    Arguments m_args;
     Nesting m_nesting;
     cstring m_signature;
     uint32 m_signaturePosition;
@@ -2016,10 +2015,6 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_dataElementsCountBeforeNilArray = other.m_dataElementsCountBeforeNilArray;
     m_dataPositionBeforeVariant = other.m_dataPositionBeforeVariant;
 
-    // Arguments m_args can only be default initialized empty or moved-from, in both cases
-    // copying it is okay and fairly cheap.
-    m_args = other.m_args;
-
     m_nesting = other.m_nesting;
     m_signature.ptr = other.m_signature.ptr; // ### still needs adjustment, done after allocating m_data
     m_signature.length = other.m_signature.length;
@@ -2706,10 +2701,8 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 
 Arguments Arguments::Writer::finish()
 {
-    if (!d->m_args.d) {
-        // TODO proper error - was finish() called more than once or what?
-        return Arguments();
-    }
+    Arguments args;
+
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - close the signature by adding the terminating null
@@ -2734,7 +2727,7 @@ Arguments Arguments::Writer::finish()
 
     d->m_signature.length = d->m_signaturePosition;
     d->m_signature.ptr[d->m_signature.length] = '\0';
-    d->m_args.d->m_error = d->m_error;
+    args.d->m_error = d->m_error;
 
     // OK, so this length check is more of a sanity check. The actual limit limits the size of the
     // full message. Here we take the size of the "payload" and don't add the size of the signature -
@@ -2747,13 +2740,13 @@ Arguments Arguments::Writer::finish()
     }
 
     if (!dataSize || !success) {
-        d->m_args.d->m_memOwnership = nullptr;
-        d->m_args.d->m_signature = cstring();
-        d->m_args.d->m_data = chunk();
+        args.d->m_memOwnership = nullptr;
+        args.d->m_signature = cstring();
+        args.d->m_data = chunk();
     } else {
-        d->m_args.d->m_memOwnership = d->m_data;
-        d->m_args.d->m_signature = cstring(d->m_data + 1 /* w/o length prefix */, d->m_signature.length);
-        d->m_args.d->m_data = chunk(d->m_data + Private::SignatureReservedSpace, dataSize);
+        args.d->m_memOwnership = d->m_data;
+        args.d->m_signature = cstring(d->m_data + 1 /* w/o length prefix */, d->m_signature.length);
+        args.d->m_data = chunk(d->m_data + Private::SignatureReservedSpace, dataSize);
         d->m_data = nullptr; // now owned by Arguments and later freed there
     }
 
@@ -2762,7 +2755,7 @@ Arguments Arguments::Writer::finish()
         return Arguments();
     }
     m_state = Finished;
-    return std::move(d->m_args);
+    return std::move(args);
 }
 
 struct ArrayLengthField
