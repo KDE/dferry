@@ -277,9 +277,10 @@ public:
         void endDictEntry();
 #endif
 
-    private:
         class Private;
         friend class Private;
+
+    private:
         void beginRead();
         void doReadPrimitiveType();
         void doReadString(uint32 lengthPrefixSize);

@@ -471,6 +471,7 @@ struct ArgAllocCaches
 {
     MallocCache<sizeof(Arguments::Private), 4> argsPrivate;
     MallocCache<sizeof(Arguments::Writer::Private), 4> writerPrivate;
+    MallocCache<sizeof(Arguments::Reader::Private), 4> readerPrivate;
 };
 
 thread_local static ArgAllocCaches allocCaches;
@@ -1026,7 +1027,7 @@ bool Arguments::isSignatureValid(cstring signature, SignatureType type)
 }
 
 Arguments::Reader::Reader(const Arguments &al)
-   : d(new Private),
+   : d(new(allocCaches.readerPrivate.allocate()) Private),
      m_state(NotStarted)
 {
     d->m_args = &al;
@@ -1034,7 +1035,7 @@ Arguments::Reader::Reader(const Arguments &al)
 }
 
 Arguments::Reader::Reader(const Message &msg)
-   : d(new Private),
+   : d(new(allocCaches.readerPrivate.allocate()) Private),
      m_state(NotStarted)
 {
     d->m_args = &msg.arguments();
@@ -1054,7 +1055,10 @@ void Arguments::Reader::operator=(Reader &&other)
     if (&other == this) {
         return;
     }
-    delete d;
+    if (d) {
+        d->~Private();
+        allocCaches.writerPrivate.free(d);
+    }
     d = other.d;
     m_state = other.m_state;
     m_u = other.m_u;
