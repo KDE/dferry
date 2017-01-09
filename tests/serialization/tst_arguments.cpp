@@ -425,11 +425,13 @@ static void verifyAfterRoundtrip(const Arguments &original, const Arguments::Rea
 
 static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncrement, bool debugPrint)
 {
-    Arguments::Reader reader(original);
+    const chunk data = original.data();
+    chunk shortData;
+
+    Arguments arg(nullptr, original.signature(), shortData);
+    Arguments::Reader reader(arg);
     Arguments::Writer writer;
 
-    chunk data = original.data();
-    chunk shortData;
     bool isDone = false;
 
     while (!isDone) {
@@ -619,7 +621,7 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataInc
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
     const uint32 maxIncrement = arg.data().length;
-    for (uint32 i = 0; i <= maxIncrement; i++) {
+    for (uint32 i = 1; i <= maxIncrement; i++) {
         doRoundtripWithCopyAssignEtc(arg, i, debugPrint);
     }
 
