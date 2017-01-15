@@ -37,6 +37,10 @@
 #include <cstring>
 #include <sstream>
 
+#ifdef HAVE_BOOST
+#include <boost/container/small_vector.hpp>
+#endif
+
 // Maximum message length is a good upper bound for maximum Arguments data length. In order to limit
 // excessive memory consumption in error cases and prevent integer overflow exploits, enforce a maximum
 // data length already in Arguments.
@@ -298,7 +302,11 @@ public:
     };
 
     // this keeps track of which aggregates we are currently in
+#ifdef HAVE_BOOST
+    boost::small_vector<AggregateInfo, 8> m_aggregateStack;
+#else
     std::vector<AggregateInfo> m_aggregateStack;
+#endif
 };
 
 class Arguments::Writer::Private
@@ -463,7 +471,11 @@ public:
     };
 
     // this keeps track of which aggregates we are currently in
+#ifdef HAVE_BOOST
+    boost::small_vector<AggregateInfo, 8> m_aggregateStack;
+#else
     std::vector<AggregateInfo> m_aggregateStack;
+#endif
     std::vector<QueuedDataInfo> m_queuedData;
 };
 
@@ -2409,7 +2421,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         aggregateInfo.aggregateType = BeginStruct;
         aggregateInfo.sct.containedTypeBegin = d->m_signaturePosition;
-        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
         d->alignData(alignment);
         break;
@@ -2436,7 +2447,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             d->m_dataPositionBeforeVariant = d->m_dataPosition;
         }
 
-        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
 
         d->m_queuedData.reserve(16);
@@ -2505,7 +2515,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
 #endif
         }
 
-        d->m_aggregateStack.reserve(8);
         d->m_aggregateStack.push_back(aggregateInfo);
         break; }
     case EndDict:

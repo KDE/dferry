@@ -136,6 +136,12 @@ if (VALGRIND_INCLUDE_DIR)
    include_directories(${VALGRIND_INCLUDE_DIR})
 endif()
 
+ # for small_vector, optional; small_vector appeared in 1.58
+find_package(Boost 1.58)
+if (BOOST_FOUND)
+    add_definitions(-DHAVE_BOOST)
+endif()
+
 set(DFERCLIENT_SOURCES
     client/introspection.h)
 
