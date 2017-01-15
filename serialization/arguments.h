@@ -135,6 +135,7 @@ public:
     cstring signature() const;
     chunk data() const;
     const std::vector<int> &fileDescriptors() const;
+    bool isByteSwapped() const;
 
     static bool isStringValid(cstring string);
     static bool isObjectPathValid(cstring objectPath);

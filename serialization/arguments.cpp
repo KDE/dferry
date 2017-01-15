@@ -643,6 +643,11 @@ const std::vector<int> &Arguments::fileDescriptors() const
     return d->m_fileDescriptors;
 }
 
+bool Arguments::isByteSwapped() const
+{
+    return d->m_isByteSwapped;
+}
+
 static void printMaybeNilProlog(std::stringstream *out, const std::string &nestingPrefix, bool isNil,
                                 const char *typeName)
 {
