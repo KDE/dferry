@@ -152,10 +152,7 @@ public:
     Spinlock m_lock; // only one lock because things done with lock held are quick, and anyway you shouldn't
                      // be using one connection from multiple threads if you need best performance
 
-    // here we break the grouping by topic area to group together the variables protected by m_lock
-    // BEGIN variables protected by m_lock
-    uint32 m_sendSerial; // TODO handle recycling of serials
-    // END variables protected by m_lock
+    std::atomic<uint32> m_sendSerial;
 
     std::unordered_map<TransceiverPrivate *, CommutexPeer> m_secondaryThreadLinks;
     std::vector<CommutexPeer> m_unredeemedCommRefs; // for createCommRef() and the constructor from CommRef

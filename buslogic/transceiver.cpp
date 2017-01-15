@@ -294,8 +294,11 @@ int Transceiver::defaultReplyTimeout() const
 
 uint32 TransceiverPrivate::takeNextSerial()
 {
-    SpinLocker locker(&m_lock);
-    return m_sendSerial++;
+    uint32 ret;
+    do {
+        ret = m_sendSerial.fetch_add(1, std::memory_order_relaxed);
+    } while (unlikely(ret == 0));
+    return ret;
 }
 
 Error TransceiverPrivate::prepareSend(Message *msg)
