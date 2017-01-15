@@ -2931,6 +2931,21 @@ Arguments::IoState Arguments::Writer::currentAggregate() const
     return d->m_aggregateStack.back().aggregateType;
 }
 
+chunk Arguments::Writer::peekSerializedData() const
+{
+    chunk ret;
+    if (isValid() && m_state != InvalidData && d->m_nesting.total() == 0) {
+        ret.ptr = d->m_data;
+        ret.length = d->m_dataPosition;
+    }
+    return ret;
+}
+
+const std::vector<int> &Arguments::Writer::fileDescriptors() const
+{
+    return d->m_fileDescriptors;
+}
+
 void Arguments::Writer::writeBoolean(bool b)
 {
     m_u.Boolean = b;

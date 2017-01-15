@@ -363,6 +363,16 @@ public:
 
         void writePrimitiveArray(IoState type, chunk data);
 
+        // Return the current serialized data; if the current state of writing has any aggregates open
+        // OR is in an error state, return an empty chunk (instead of invalid serialized data).
+        // After (or before - this method is const!) an empty chunk is returned, you can find out why
+        // using state(), isValid(), and currentAggregate().
+        // The returned memory is only valid as long as the Writer is not mutated in any way!
+        // If successful, the returned data can be used together with currentSignature() and
+        // fileDescriptors() to construct a temporary Arguments as a strucrured view into the data.
+        chunk peekSerializedData() const;
+        const std::vector<int> &fileDescriptors() const;
+
 #ifdef WITH_DICT_ENTRY
         void beginDictEntry();
         void endDictEntry();
