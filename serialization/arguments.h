@@ -189,6 +189,7 @@ public:
         cstring stateString() const;
         bool isInsideEmptyArray() const;
         cstring currentSignature() const; // current signature, either main signature or current variant
+        uint32 currentSignaturePosition() const;
         cstring currentSingleCompleteTypeSignature() const;
         // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
         // WARNING: calling replaceData() invalidates copies (if any) of this Reader
@@ -321,6 +322,7 @@ public:
         cstring stateString() const;
         bool isInsideEmptyArray() const;
         cstring currentSignature() const; // current signature, either main signature or current variant
+        uint32 currentSignaturePosition() const;
 
         enum ArrayOption
         {

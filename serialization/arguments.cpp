@@ -1151,6 +1151,11 @@ cstring Arguments::Reader::currentSignature() const
     return d->m_signature;
 }
 
+uint32 Arguments::Reader::currentSignaturePosition() const
+{
+    return d->m_signaturePosition;
+}
+
 cstring Arguments::Reader::currentSingleCompleteTypeSignature() const
 {
     const uint32 startingLength = d->m_signature.length - d->m_signaturePosition;
@@ -2165,9 +2170,12 @@ bool Arguments::Writer::isInsideEmptyArray() const
 
 cstring Arguments::Writer::currentSignature() const
 {
-    // ### see comment in Reader::currentSignature
-    return cstring(d->m_signature.ptr,
-                   std::max(uint32(0), std::min(d->m_signature.length, d->m_signaturePosition)));
+    return d->m_signature;
+}
+
+uint32 Arguments::Writer::currentSignaturePosition() const
+{
+    return d->m_signaturePosition;
 }
 
 void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
