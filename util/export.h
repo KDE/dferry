@@ -38,13 +38,13 @@
 #else
 
 #ifdef dfer_EXPORTS
-#define DFERRY_EXPORT __attribute__ ((visibility ("protected")))
+#define DFERRY_EXPORT __attribute__ ((visibility ("default")))
 #else
 #define DFERRY_EXPORT __attribute__ ((visibility ("default")))
 #endif
 
 #ifdef dferclient_EXPORTS
-#define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("protected")))
+#define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("default")))
 #else
 #define DFERRYCLIENT_EXPORT __attribute__ ((visibility ("default")))
 #endif
