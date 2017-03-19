@@ -59,6 +59,8 @@ set(DFER_SOURCES
     events/platformtime.cpp
     events/timer.cpp
     serialization/arguments.cpp
+    serialization/argumentsreader.cpp
+    serialization/argumentswriter.cpp
     serialization/message.cpp
     util/error.cpp
     util/icompletionclient.cpp
