@@ -1089,7 +1089,7 @@ Arguments::Reader::Reader(const Reader &other)
      m_u(other.m_u)
 {
     if (other.d) {
-        d = new Private(*other.d);
+        d = new(allocCaches.readerPrivate.allocate()) Private(*other.d);
     }
 }
 
@@ -1110,8 +1110,9 @@ void Arguments::Reader::operator=(const Reader &other)
 
 Arguments::Reader::~Reader()
 {
-    delete d;
-    d = 0;
+    d->~Private();
+    allocCaches.readerPrivate.free(d);
+    d = nullptr;
 }
 
 void Arguments::Reader::beginRead()
