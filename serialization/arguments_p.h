@@ -67,19 +67,10 @@ enum {
 cstring printableState(Arguments::IoState state);
 bool parseSingleCompleteType(cstring *s, Nesting *nest);
 
-static constexpr byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
-inline constexpr byte alignmentLog2(uint32 alignment)
-{
-    // The following is not constexpr in C++14, and it hasn't triggered in ages
-    // assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
-    return alignLog[alignment];
-}
-
 inline bool isAligned(uint32 value, uint32 alignment)
 {
-    assert(alignment <= 8); // so zeroBits <= 3
-    const uint32 zeroBits = alignmentLog2(alignment);
-    return (value & (0x7u >> (3 - zeroBits))) == 0;
+    assert(alignment == 8 || alignment == 4 || alignment == 2 || alignment == 1);
+    return (value & (alignment - 1)) == 0;
 }
 
 const TypeInfo &typeInfo(char letterCode);

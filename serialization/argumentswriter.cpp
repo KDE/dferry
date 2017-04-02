@@ -10,6 +10,14 @@ enum {
     StructAlignment = 8
 };
 
+static constexpr byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
+inline constexpr byte alignmentLog2(uint32 alignment)
+{
+    // The following is not constexpr in C++14, and it hasn't triggered in ages
+    // assert(alignment <= 8 && (alignment < 2 || alignLog[alignment] != 0));
+    return alignLog[alignment];
+}
+
 class Arguments::Writer::Private
 {
 public:
