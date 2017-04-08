@@ -1,6 +1,9 @@
 #ifndef MALLOCCACHE_H
 #define MALLOCCACHE_H
 
+#include <cassert>
+#include <cstdlib>
+
 // no-op the cache, sometimes useful for debugging memory issues
 //#define MALLOCCACHE_PASSTHROUGH
 
