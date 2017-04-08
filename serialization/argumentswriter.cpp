@@ -279,11 +279,13 @@ void Arguments::Writer::operator=(const Writer &other)
 
 Arguments::Writer::~Writer()
 {
-    free(d->m_data);
-    d->m_data = nullptr;
-    d->~Private();
-    allocCache.free(d);
-    d = nullptr;
+    if (d) {
+        free(d->m_data);
+        d->m_data = nullptr;
+        d->~Private();
+        allocCache.free(d);
+        d = nullptr;
+    }
 }
 
 bool Arguments::Writer::isValid() const

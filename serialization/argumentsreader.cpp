@@ -128,9 +128,11 @@ void Arguments::Reader::operator=(const Reader &other)
 
 Arguments::Reader::~Reader()
 {
-    d->~Private();
-    allocCache.free(d);
-    d = nullptr;
+    if (d) {
+        d->~Private();
+        allocCache.free(d);
+        d = nullptr;
+    }
 }
 
 void Arguments::Reader::beginRead()
