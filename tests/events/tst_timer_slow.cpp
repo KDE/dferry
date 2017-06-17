@@ -28,6 +28,7 @@
 
 #include "../testutil.h"
 
+#include <cstring>
 #include <iostream>
 
 class BamPrinter : public ICompletionClient
@@ -229,6 +230,99 @@ static void testAddInTrigger()
     }
 }
 
+static void testReAddInTrigger()
+{
+    // - Add a timer
+    //   - Remove it
+    //   - Remove it, then add it
+    //   - Remove, add, remove
+    //   - Remove, add, remove, add
+    // - Check timer's isRunning() considering whether last action was add or remove
+    // - Check if the timer triggers next time or not, consistent with previous point
+
+
+    // Repeat the tests that include re-adding with "pointer aliased" timers, i.e. add a new timer created
+    // at the same memory location as the old one. That tests whether a known difficulty of the chosen
+    // implementation is handled correctly.
+
+    // Use the array to ensure we have pointer aliasing or no pointer aliasing
+    std::aligned_storage<sizeof(Timer)>::type timerStorage[2];
+    memset(timerStorage, 0, sizeof(timerStorage));
+
+    Timer *const timerArray = reinterpret_cast<Timer *>(timerStorage);
+
+    for (int i = 0; i < 2; i++) {
+        const bool withAliasing = i == 1;
+
+        for (int j = 0; j < 5; j++) { // j = number of add / remove ops
+            EventDispatcher dispatcher;
+
+            Timer *t = &timerArray[0];
+            bool removeTimer = false;
+            bool checkTrigger = false;
+            bool didTrigger = false;
+
+            CompletionFunc addRemove([&] (void * /*task*/) {
+                if (checkTrigger) {
+                    didTrigger = true;
+                    return;
+                }
+
+                for (int k = 0; k < j; k++) {
+                    removeTimer = (k & 1) == 0;
+                    if (removeTimer) {
+                        TEST(t->isRunning());
+                        t->~Timer();
+                        memset(t, 0, sizeof(Timer)); // ensure that it can't trigger - of course if Timer
+                                                     // relies on that we should find it in valgrind...
+                    } else {
+                        if (!withAliasing) {
+                            if (t == &timerArray[0]) {
+                                t = &timerArray[1];
+                            } else {
+                                t = &timerArray[0];
+                            }
+                        }
+                        new(t) Timer(&dispatcher);
+                        t->setCompletionClient(&addRemove);
+                        t->start(0);
+                        TEST(t->isRunning());
+                    }
+                }
+            });
+
+
+            Timer dummy1(&dispatcher);
+            dummy1.start(0);
+
+            new(t) Timer(&dispatcher);
+            t->start(0);
+
+            Timer dummy2(&dispatcher);
+            dummy2.start(0);
+
+            dispatcher.poll(); // this seems like a good idea for the test...
+
+            // run and test the add / remove sequence
+            t->setCompletionClient(&addRemove);
+            dispatcher.poll();
+
+            // Test that the timer triggers when it should. Triggering when it should not will likely
+            // cause a segfault or other error because the Timer's memory has been cleared.
+
+            checkTrigger = true;
+            dispatcher.poll();
+            TEST(didTrigger != removeTimer);
+
+            // clean up
+            if (!removeTimer) {
+                t->~Timer();
+            }
+            memset(timerStorage, 0, sizeof(timerStorage));
+        }
+    }
+}
+
 static void testTriggerOnlyOncePerDispatch()
 {
     EventDispatcher dispatcher;
@@ -349,6 +443,7 @@ int main(int, char *[])
     testAccuracy();
     testDeleteInTrigger();
     testAddInTrigger();
+    testReAddInTrigger();
     testTriggerOnlyOncePerDispatch();
     testReEnableNonRepeatingInTrigger();
     std::cout << "Passed!\n";

@@ -170,10 +170,18 @@ void EventDispatcherPrivate::notifyClientForWriting(FileDescriptor fd)
 
 int EventDispatcherPrivate::timeToFirstDueTimer() const
 {
-    if (m_timers.empty()) {
+    multimap<uint64, Timer*>::const_iterator it = m_timers.cbegin();
+    if (it == m_timers.cend()) {
         return -1;
     }
-    uint64 nextTimeout = (*m_timers.cbegin()).first >> 10;
+    if (it->second == nullptr) {
+        // this is the dead entry of the currently triggered, and meanwhile removed timer
+        if (++it == m_timers.cend()) {
+            return -1;
+        }
+    }
+
+    uint64 nextTimeout = it->first >> 10;
     uint64 currentTime = PlatformTime::monotonicMsecs();
 
     if (currentTime >= nextTimeout) {
@@ -192,10 +200,6 @@ uint EventDispatcherPrivate::nextTimerSerial()
 
 void EventDispatcherPrivate::addTimer(Timer *timer)
 {
-    if (timer == m_triggeredTimer) {
-        m_isTriggeredTimerPendingRemoval = false;
-        return;
-    }
     if (timer->m_tag == 0) {
         timer->m_tag = nextTimerSerial();
     }
@@ -212,7 +216,7 @@ void EventDispatcherPrivate::addTimer(Timer *timer)
     //
     //     note: m_triggeredTimer.dueTime < m_triggerTime is well possible; if ==, the additional
     //           condition applies that timerAddedInTrigger().serial >= m_triggeredTimer.serial;
-    //           we ignore this and do it conservative and less complicated.
+    //           we ignore this and do it conservatively and less complicated.
     //           (the additional condition comes from serials as keys and that each "slot" in multimap with
     //           the same keys is a list where new entries are back-inserted)
     //
@@ -221,9 +225,9 @@ void EventDispatcherPrivate::addTimer(Timer *timer)
     //     its due time to occur within this triggerDueTimers() iteration, it is supposed to trigger ASAP
     //     anyway. This disturbs the order of triggering a little compared to the usual, but all
     //     timeouts are properly respected - the next event loop iteration is guaranteed to trigger
-    //     timers at times strictly greater-equal than this iteration ;)
-    if (m_triggeredTimer && dueTime == m_triggerTime) {
-        dueTime = (m_triggeredTimer->m_tag >> 10) - 1;
+    //     timers at times strictly greater-equal than this iteration (time goes only one way) ;)
+    if (m_triggerTime && dueTime == m_triggerTime) {
+        dueTime = m_triggerTime - 1;
     }
     timer->m_tag = (dueTime << 10) + (timer->m_tag & s_maxTimerSerial);
 
@@ -234,17 +238,34 @@ void EventDispatcherPrivate::removeTimer(Timer *timer)
 {
     assert(timer->m_tag != 0);
 
-    if (timer == m_triggeredTimer) {
+    // We cannot toggle m_isTriggeredTimerPendingRemoval back and forth, we can only set it once.
+    // Because after the timer has been removed once, the next time we see the same pointer value,
+    // it could be an entirely different timer. Consider this:
+    // delete timer1; // calls removeTimer()
+    // Timer *timer2 = new Timer(); // accidentally gets same memory address as timer1
+    // timer2->start(...);
+    // timer2->stop(); // timer == m_triggeredTimer, uh oh
+    // The last line does not necessarily cause a problem, but just don't be excessively clever.
+    // On the other hand, not special-casing the currently triggered timer after it has been marked
+    // for removal once is fine.  In case it  is re-added, it gets a new map entry in addTimer()
+    // and from then on it can be handled like any other timer.
+    bool removingTriggeredTimer = false;
+    if (!m_isTriggeredTimerPendingRemoval && timer == m_triggeredTimer) {
         // using this variable, we can avoid dereferencing m_triggeredTimer should it have been
         // deleted while triggered
         m_isTriggeredTimerPendingRemoval = true;
-        return;
+        removingTriggeredTimer = true;
     }
 
     auto iterRange = m_timers.equal_range(timer->m_tag);
     for (; iterRange.first != iterRange.second; ++iterRange.first) {
         if (iterRange.first->second == timer) {
-            m_timers.erase(iterRange.first);
+            if (!removingTriggeredTimer) {
+                m_timers.erase(iterRange.first);
+            } else {
+                // mark it as dead for query methods such as timeToFirstDueTimer()
+                iterRange.first->second = nullptr;
+            }
             return;
         }
     }
