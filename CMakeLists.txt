@@ -57,6 +57,7 @@ set(DFER_SOURCES
     connection/stringtools.cpp
     events/event.cpp
     events/eventdispatcher.cpp
+    events/foreigneventloopintegrator.cpp
     events/ieventpoller.cpp
     events/iioeventclient.cpp
     events/platformtime.cpp
@@ -81,6 +82,7 @@ set(DFER_PUBLIC_HEADERS
     buslogic/transceiver.h
     client/introspection.h
     events/eventdispatcher.h
+    events/foreigneventloopintegrator.h
     events/timer.h
     serialization/message.h
     serialization/arguments.h

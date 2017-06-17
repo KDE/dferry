@@ -70,6 +70,8 @@ public:
     friend class Timer;
     void addTimer(Timer *timer);
     void removeTimer(Timer *timer);
+    // for ForeignEventLoopIntegrator (calls into it, not called from it)
+    void maybeSetTimeoutForIntegrator();
     // for Transceiver
     // this is similar to interrupt(), but doesn't make poll() return false and will call
     // m_transceiverToNotify() -> processQueuedEvents()
@@ -78,6 +80,7 @@ public:
     void processAuxEvents();
 
     IEventPoller *m_poller = nullptr;
+    ForeignEventLoopIntegrator *m_integrator = nullptr;
     std::unordered_map<FileDescriptor, IioEventClient*> m_ioClients;
 
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set

@@ -33,6 +33,7 @@
 #endif
 
 #include "event.h"
+#include "foreigneventloopintegrator.h"
 #include "ieventpoller.h"
 #include "iioeventclient.h"
 #include "platformtime.h"
@@ -59,6 +60,13 @@ EventDispatcher::EventDispatcher()
 #endif
 }
 
+EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
+   : d(new EventDispatcherPrivate)
+{
+    d->m_integrator = integrator;
+    d->m_poller = integrator->connectToDispatcher(this);
+}
+
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
     for (const pair<FileDescriptor, IioEventClient*> &fdCon : m_ioClients) {
@@ -70,7 +78,11 @@ EventDispatcherPrivate::~EventDispatcherPrivate()
         dt.second->m_isRunning = false;
     }
 
-    delete m_poller;
+    if (m_integrator) {
+        delete m_integrator; // owns the poller (its private class!) and deletes it
+    } else {
+        delete m_poller;
+    }
 }
 
 EventDispatcher::~EventDispatcher()
@@ -232,6 +244,7 @@ void EventDispatcherPrivate::addTimer(Timer *timer)
     timer->m_tag = (dueTime << 10) + (timer->m_tag & s_maxTimerSerial);
 
     m_timers.emplace(timer->m_tag, timer);
+    maybeSetTimeoutForIntegrator();
 }
 
 void EventDispatcherPrivate::removeTimer(Timer *timer)
@@ -266,10 +279,18 @@ void EventDispatcherPrivate::removeTimer(Timer *timer)
                 // mark it as dead for query methods such as timeToFirstDueTimer()
                 iterRange.first->second = nullptr;
             }
+            maybeSetTimeoutForIntegrator();
             return;
         }
     }
     assert(false); // the timer should never request a remove when it has not been added
+}
+
+void EventDispatcherPrivate::maybeSetTimeoutForIntegrator()
+{
+    if (m_integrator) {
+        m_integrator->watchTimeout(timeToFirstDueTimer());
+    }
 }
 
 void EventDispatcherPrivate::triggerDueTimers()
@@ -316,6 +337,7 @@ void EventDispatcherPrivate::triggerDueTimers()
         }
     }
     m_triggerTime = 0;
+    maybeSetTimeoutForIntegrator();
 }
 
 void EventDispatcherPrivate::queueEvent(std::unique_ptr<Event> evt)
