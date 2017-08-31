@@ -709,8 +709,9 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         if (d->insideVariant()) {
             d->m_queuedData.push_back(Private::QueuedDataInfo(1, Private::QueuedDataInfo::ArrayLengthEndMark));
         } else {
-            basic::writeUint32(d->m_data + aggregateInfo.arr.lengthFieldPosition,
-                               d->m_dataPosition - arrayDataStart);
+            const uint32 arrayLength = d->m_dataPosition - arrayDataStart;
+            VALID_IF(arrayLength <= SpecMaxArrayLength, Error::ArrayOrDictTooLong);
+            basic::writeUint32(d->m_data + aggregateInfo.arr.lengthFieldPosition, arrayLength);
         }
         d->m_aggregateStack.pop_back();
         break; }

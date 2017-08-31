@@ -36,29 +36,43 @@ enum {
 static void test_payloadLengths()
 {
     const uint32 maxInt32Count = SpecMaxArrayLength / sizeof(uint32);
-    {
-        Arguments::Writer writer;
-        writer.beginArray();
-        for (uint32 i = 0; i < maxInt32Count; i++) {
-            writer.writeUint32(i);
+    for (int i = 0; i < 2; i++) {
+        const bool withVariant = i == 1;
+        {
+            Arguments::Writer writer;
+            if (withVariant) {
+                writer.beginVariant();
+            }
+            writer.beginArray();
+            for (uint32 j = 0; j < maxInt32Count; j++) {
+                writer.writeUint32(j);
+            }
+            writer.endArray();
+            if (withVariant) {
+                TEST(writer.state() != Arguments::InvalidData);
+                writer.endVariant();
+            }
+            Arguments arg = writer.finish();
+            TEST(writer.state() == Arguments::Finished);
         }
-        writer.endArray();
-        Arguments arg = writer.finish();
-        TEST(writer.state() == Arguments::Finished);
-    }
-    {
-        Arguments::Writer writer;
-        writer.beginArray();
-        for (uint32 i = 0; i < maxInt32Count + 1; i++) {
-            writer.writeUint32(i);
+        {
+            Arguments::Writer writer;
+            if (withVariant) {
+                writer.beginVariant();
+            }
+            writer.beginArray();
+            for (uint32 j = 0; j < maxInt32Count + 1; j++) {
+                writer.writeUint32(j);
+            }
+            writer.endArray();
+            if (withVariant) {
+                TEST(writer.state() != Arguments::InvalidData);
+                writer.endVariant();
+            }
+            TEST(writer.state() == Arguments::InvalidData);
         }
-        writer.endArray();
-        // The goal of the next check is to ensure that bevior doesn't change by accident, even
-        // though the behavior may be dubious. Because it is dubious, it may still get changed.
-        TEST(writer.state() != Arguments::InvalidData);
-        Arguments arg = writer.finish();
-        TEST(writer.state() == Arguments::InvalidData);
     }
+
     // Note: No need to test dicts, they are implemented pretty much like arrays regarding limits
 
     // The following two tests are overspecific to the implementation - it can only "guess" the full final
