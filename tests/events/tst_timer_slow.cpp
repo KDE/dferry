@@ -323,37 +323,37 @@ static void testReAddInTrigger()
     }
 }
 
+// Test that all 0 msec timers trigger equally often regardless how long their triggered handler takes
 static void testTriggerOnlyOncePerDispatch()
 {
     EventDispatcher dispatcher;
     int dispatchCounter = 0;
-    int noWorkCounter1 = 0;
-    int noWorkCounter2 = 0;
+    int triggerCounter1 = 0;
+    int triggerCounter2 = 0;
     int hardWorkCounter = 0;
 
-    Timer t1(&dispatcher);
-    t1.setRunning(true);
+    Timer counter1Timer(&dispatcher);
+    counter1Timer.setRunning(true);
 
-    Timer t2(&dispatcher);
-    t2.setRunning(true);
+    Timer hardWorkTimer(&dispatcher);
+    hardWorkTimer.setRunning(true);
 
-    Timer t3(&dispatcher);
-    t3.setRunning(true);
+    Timer counter2Timer(&dispatcher);
+    counter2Timer.setRunning(true);
 
-    CompletionFunc noWorkCounter([&noWorkCounter1, &noWorkCounter2, &dispatchCounter, &t1, &t3] (void *task)
-    {
-        if (task == &t1) {
-            TEST(noWorkCounter1 == dispatchCounter);
-            noWorkCounter1++;
+    CompletionFunc countTriggers([&triggerCounter1, &triggerCounter2, &dispatchCounter,
+                                  &counter1Timer, &counter2Timer] (void *task) {
+        if (task == &counter1Timer) {
+            TEST(triggerCounter1 == dispatchCounter);
+            triggerCounter1++;
         } else {
-            TEST(task == &t3);
-            TEST(noWorkCounter2 == dispatchCounter);
-            noWorkCounter2++;
+            TEST(task == &counter2Timer);
+            TEST(triggerCounter2 == dispatchCounter);
+            triggerCounter2++;
         }
     });
-    t1.setCompletionClient(&noWorkCounter);
-    t3.setCompletionClient(&noWorkCounter);
-
+    counter1Timer.setCompletionClient(&countTriggers);
+    counter2Timer.setCompletionClient(&countTriggers);
 
     CompletionFunc hardWorker([&hardWorkCounter, &dispatchCounter] (void * /*task*/)
     {
@@ -365,7 +365,7 @@ static void testTriggerOnlyOncePerDispatch()
         } while (PlatformTime::monotonicMsecs() < startTime + 10);
         hardWorkCounter++;
     });
-    t2.setCompletionClient(&hardWorker);
+    hardWorkTimer.setCompletionClient(&hardWorker);
 
     EventDispatcherInterruptor interruptor(&dispatcher, 200);
 
@@ -373,8 +373,8 @@ static void testTriggerOnlyOncePerDispatch()
         dispatchCounter++;
     }
 
-    TEST(noWorkCounter1 == dispatchCounter || noWorkCounter1 == dispatchCounter - 1);
-    TEST(noWorkCounter2 == dispatchCounter || noWorkCounter2 == dispatchCounter - 1);
+    TEST(triggerCounter1 == dispatchCounter || triggerCounter1 == dispatchCounter - 1);
+    TEST(triggerCounter2 == dispatchCounter || triggerCounter2 == dispatchCounter - 1);
     TEST(hardWorkCounter == dispatchCounter || hardWorkCounter == dispatchCounter - 1);
 }
 
