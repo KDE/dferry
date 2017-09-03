@@ -578,12 +578,12 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->alignData(alignment);
         break;
     case EndStruct:
-        d->m_nesting.endParen();
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndStructHere);
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginStruct &&
                  d->m_signaturePosition > aggregateInfo.sct.containedTypeBegin + 1,
                  Error::EmptyStruct); // empty structs are not allowed
+        d->m_nesting.endParen();
         d->m_aggregateStack.pop_back();
         break;
 
@@ -614,10 +614,10 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_dataPosition = newDataPosition;
         break; }
     case EndVariant: {
-        d->m_nesting.endVariant();
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndVariantHere);
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == BeginVariant, Error::CannotEndVariantHere);
+        d->m_nesting.endVariant();
         if (likely(!d->m_nilArrayNesting)) {
             // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
@@ -673,16 +673,17 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     case EndDict:
     case EndArray: {
         const bool isDict = newState == EndDict;
-        if (isDict) {
-            d->m_nesting.endParen();
-        }
-        d->m_nesting.endArray();
+
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndArrayHere);
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray),
                  Error::CannotEndArrayOrDictHere);
         VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1),
                  Error::TooFewTypesInArrayOrDict);
+        if (isDict) {
+            d->m_nesting.endParen();
+        }
+        d->m_nesting.endArray();
 
         // array data starts (and in empty arrays ends) at the first array element position *after alignment*
         const uint32 contentAlign = isDict ? 8

@@ -1886,6 +1886,38 @@ static void test_fileDescriptors()
 #endif
 }
 
+static void test_closeWrongAggregate()
+{
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 4; j++) {
+            Arguments::Writer writer;
+            switch (i % 4) {
+            case 0: writer.beginStruct(); break;
+            case 1: writer.beginVariant(); break;
+            case 2: writer.beginArray(); break;
+            case 3: writer.beginDict(); break;
+            }
+
+            if (i < 4) {
+                writer.writeByte(123);
+                if (i == 3) {
+                    writer.writeByte(123); // value for dict
+                }
+            }
+
+            switch (j) {
+            case 0: writer.endStruct(); break;
+            case 1: writer.endVariant(); break;
+            case 2: writer.endArray(); break;
+            case 3: writer.endDict(); break;
+            }
+
+            const bool isValid = writer.state() != Arguments::InvalidData;
+            TEST(isValid == (i == j));
+        }
+    }
+}
+
 // TODO: test where we compare data and signature lengths of all combinations of zero/nonzero array
 //       length and long/short type signature, to make sure that the signature is written but not
 //       any data if the array is zero-length.
@@ -1912,6 +1944,8 @@ int main(int, char *[])
 
     // TODO (maybe): specific tests for begin/endDictEntry() for both Reader and Writer.
 
-    // TODO many more misuse tests for Writer and maybe some for Reader
+    // TODO more misuse tests for Writer and maybe some for Reader
+    test_closeWrongAggregate();
+
     std::cout << "Passed!\n";
 }
