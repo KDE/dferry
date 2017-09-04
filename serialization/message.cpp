@@ -856,7 +856,6 @@ std::vector<byte> Message::save()
         return ret;
     }
     if (!d->m_buffer.length && !d->serialize()) {
-        // TODO report error?
         return ret;
     }
     ret.reserve(d->m_buffer.length);
@@ -914,7 +913,7 @@ void Message::load(const std::vector<byte> &data)
 bool MessagePrivate::requiredHeadersPresent()
 {
     m_error = checkRequiredHeaders();
-    return m_error.isError();
+    return !m_error.isError();
 }
 
 Error MessagePrivate::checkRequiredHeaders() const
@@ -944,6 +943,7 @@ Error MessagePrivate::checkRequiredHeaders() const
         if (!m_varHeaders.hasStringHeader(Message::MethodHeader)) {
             return Error::MessageMethod;
         }
+        break;
 
     case Message::ErrorMessage:
         // required: ErrorNameHeader, ReplySerialHeader
@@ -956,6 +956,7 @@ Error MessagePrivate::checkRequiredHeaders() const
         if (!m_varHeaders.hasIntHeader(Message::ReplySerialHeader) ) {
             return Error::MessageReplySerial;
         }
+        break;
 
     case Message::InvalidMessage:
     default:
