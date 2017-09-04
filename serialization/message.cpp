@@ -1094,8 +1094,9 @@ bool MessagePrivate::serialize()
     m_bodyLength = m_mainArguments.data().length;
     const uint32 messageLength = m_headerLength + m_bodyLength;
 
-    if (messageLength > s_maxMessageLength) {
-        return false; // TODO set error ArgumentsTooLong? is this the correct error code, and if so should it be renamed?
+    if (messageLength > Arguments::MaxMessageLength) {
+        m_error.setCode(Error::ArgumentsTooLong);
+        return false;
     }
 
     reserveBuffer(messageLength);
