@@ -51,7 +51,14 @@ public:
 
     enum
     {
-        MaxSignatureLength = 255
+        MaxSignatureLength = 255,
+        MaxArrayLength = 1 << 26, // 64 MiB
+        MaxMessageLength = 1 << 27 // 128 MiB
+        // MaxMessageLength applies to a full Message (and it IS checked in Message when the message is
+        // complete), which also implies a max size for Arguments. Instead of working out the exact minimum
+        // size of the header part of a Message (which depends on too many variables), just allow the max
+        // Message length as max Arguments length.
+        // The way the limit is defined in the spec seems tied a bit too closely to the design of libdbus-1...
     };
 
     enum IoState

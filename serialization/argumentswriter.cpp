@@ -35,7 +35,7 @@ public:
     Private(const Private &other);
     void operator=(const Private &other);
 
-    void reserveData(uint32 size)
+    void reserveData(uint32 size, IoState *state)
     {
         if (likely(size <= m_dataCapacity)) {
             return;
@@ -49,6 +49,20 @@ public:
         m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
         m_signature.ptr += m_data - oldDataPointer;
         m_dataCapacity = newCapacity;
+
+        // Here, we trade off getting an ArgumentsTooLong error as early as possible for fewer
+        // conditional branches in the hot path. Because only the final message length has a well-defined
+        // limit, and Arguments doesn't, a precise check has limited usefulness anwyay. This is just
+        // a sanity check and out of bounds access / overflow protection.
+
+        // In most cases, callers do not need to check for errors: Very large single arguments are
+        // already rejected, and we actually allocate the too large buffer to prevent out-of-bounds
+        // access. Any following writing API calls will then cleanly abort due to m_state == InvalidData.
+        // ### Callers DO need to check m_state before possibly overwriting it, hiding the error!
+        if (newCapacity > Arguments::MaxMessageLength * 3) {
+            *state = InvalidData;
+            m_error.setCode(Error::ArgumentsTooLong);
+        }
     }
 
     bool insideVariant()
@@ -320,7 +334,7 @@ uint32 Arguments::Writer::currentSignaturePosition() const
 
 void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
 {
-    d->reserveData(d->m_dataPosition + (alignAndSize << 1));
+    d->reserveData(d->m_dataPosition + (alignAndSize << 1), &m_state);
     zeroPad(d->m_data, alignAndSize, &d->m_dataPosition);
 
     switch(type) {
@@ -381,7 +395,7 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
                  Error::InvalidSignature);
     }
 
-    d->reserveData(d->m_dataPosition + (lengthPrefixSize << 1) + m_u.String.length + 1);
+    d->reserveData(d->m_dataPosition + (lengthPrefixSize << 1) + m_u.String.length + 1, &m_state);
 
     zeroPad(d->m_data, lengthPrefixSize, &d->m_dataPosition);
 
@@ -606,7 +620,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_queuedData.push_back(Private::QueuedDataInfo(1, Private::QueuedDataInfo::VariantSignature));
 
         const uint32 newDataPosition = d->m_dataPosition + Private::SignatureReservedSpace;
-        d->reserveData(newDataPosition);
+        d->reserveData(newDataPosition, &m_state);
         // allocate new signature in the data buffer, reserve one byte for length prefix
         d->m_signature.ptr = reinterpret_cast<char *>(d->m_data) + d->m_dataPosition + 1;
         d->m_signature.length = 0;
@@ -651,7 +665,10 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
 
-        d->reserveData(d->m_dataPosition + (sizeof(uint32) << 1));
+        d->reserveData(d->m_dataPosition + (sizeof(uint32) << 1), &m_state);
+        if (m_state == InvalidData) {
+            break; // should be excessive length error from reserveData - do not unset error state
+        }
         zeroPad(d->m_data, sizeof(uint32), &d->m_dataPosition);
         basic::writeUint32(d->m_data + d->m_dataPosition, 0);
         aggregateInfo.arr.lengthFieldPosition = d->m_dataPosition;
@@ -711,7 +728,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             d->m_queuedData.push_back(Private::QueuedDataInfo(1, Private::QueuedDataInfo::ArrayLengthEndMark));
         } else {
             const uint32 arrayLength = d->m_dataPosition - arrayDataStart;
-            VALID_IF(arrayLength <= SpecMaxArrayLength, Error::ArrayOrDictTooLong);
+            VALID_IF(arrayLength <= Arguments::MaxArrayLength, Error::ArrayOrDictTooLong);
             basic::writeUint32(d->m_data + aggregateInfo.arr.lengthFieldPosition, arrayLength);
         }
         d->m_aggregateStack.pop_back();
@@ -843,7 +860,7 @@ void Arguments::Writer::writeVariantForMessageHeader(char sig)
     d->m_signature.length = 4;
     d->m_signaturePosition = 4;
 
-    d->reserveData(d->m_dataPosition + 3);
+    d->reserveData(d->m_dataPosition + 3, &m_state);
     d->m_data[d->m_dataPosition++] = 1;
     d->m_data[d->m_dataPosition++] = sig;
     d->m_data[d->m_dataPosition++] = 0;
@@ -878,15 +895,21 @@ static char letterForPrimitiveIoState(Arguments::IoState ios)
 void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);
-    if (letterCode == 'c' || data.length > SpecMaxArrayLength) {
+    if (letterCode == 'c') {
         m_state = InvalidData;
         d->m_error.setCode(Error::NotPrimitiveType);
         return;
     }
+    if (data.length > Arguments::MaxArrayLength) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ArrayOrDictTooLong);
+        return;
+    }
 
     const TypeInfo elementType = typeInfo(letterCode);
-
     if (!isAligned(data.length, elementType.alignment)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::CannotEndArrayOrDictHere);
         return;
     }
 
@@ -897,7 +920,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
     advanceState(cstring(&letterCode, /*length*/ 1), elementType.state());
 
     if (!data.length) {
-        // oh! a nil array.
+        // oh! a nil array (which is valid)
         endArray();
         return;
     }
@@ -910,7 +933,7 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
     }
 
     // append the payload
-    d->reserveData(d->m_dataPosition + data.length);
+    d->reserveData(d->m_dataPosition + data.length, &m_state);
     d->appendBulkData(data);
 
     endArray();
@@ -953,7 +976,7 @@ Arguments Arguments::Writer::finish()
     // why bother doing it accurately when the real check with full information comes later anyway?
     bool success = true;
     const uint32 dataSize = d->m_dataPosition - Private::SignatureReservedSpace;
-    if (success && dataSize > SpecMaxMessageLength) {
+    if (success && dataSize > Arguments::MaxMessageLength) {
         success = false;
         d->m_error.setCode(Error::ArgumentsTooLong);
     }
@@ -1050,7 +1073,7 @@ void Arguments::Writer::flushQueuedData()
                 // just put the now known array length in front of the array
                 const ArrayLengthField al = lengthFieldStack.back();
                 const uint32 arrayLength = outPos - al.dataStartPosition;
-                if (arrayLength > SpecMaxArrayLength) {
+                if (arrayLength > Arguments::MaxArrayLength) {
                     m_state = InvalidData;
                     d->m_error.setCode(Error::ArrayOrDictTooLong);
                     i = count + 1; // break out of the loop

@@ -56,14 +56,6 @@ struct Nesting
     uint32 variant;
 };
 
-// Maximum message length is a good upper bound for maximum Arguments data length. In order to limit
-// excessive memory consumption in error cases and prevent integer overflow exploits, enforce a maximum
-// data length already in Arguments.
-enum {
-    SpecMaxArrayLength = 67108864, // 64 MiB
-    SpecMaxMessageLength = 134217728 // 128 MiB
-};
-
 cstring printableState(Arguments::IoState state);
 bool parseSingleCompleteType(cstring *s, Nesting *nest);
 

@@ -30,6 +30,7 @@
 #include "testutil.h"
 #include "transceiver.h"
 
+#include <cstring>
 #include <iostream>
 
 using namespace std;
@@ -99,6 +100,38 @@ void testBasic(const ConnectionInfo &clientConnection)
     }
 }
 
+void testMessageLength()
+{
+    static const uint32 bufferSize = Arguments::MaxArrayLength + 1024;
+    byte *buffer = static_cast<byte *>(malloc(bufferSize));
+    memset(buffer, 0, bufferSize);
+    for (int i = 0; i < 2; i++) {
+        const bool makeTooLong = i == 1;
+
+        Arguments::Writer writer;
+        writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, Arguments::MaxArrayLength));
+
+        // Our minimal Message is going to have the following variable headers (in that order):
+        // Array: 4 byte length prefix
+        // PathHeader: 4 byte length prefix
+        // MethodHeader: 4 byte length prefix
+        // SignatureHeader: 1 byte length prefix
+
+        // This is VERY tedious to calculate, so let's just take it as an experimentally determined value
+        uint32 left = Arguments::MaxMessageLength - Arguments::MaxArrayLength - 72;
+        if (makeTooLong) {
+            left += 1;
+        }
+        writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, left));
+
+        Message msg = Message::createCall("/a", "x");
+        msg.setSerial(1);
+        msg.setArguments(writer.finish());
+        std::vector<byte> saved = msg.save();
+        TEST(msg.error().isError() == makeTooLong);
+    }
+}
+
 int main(int, char *[])
 {
     test_signatureHeader();
@@ -119,6 +152,8 @@ int main(int, char *[])
         clientConnection.setRole(ConnectionInfo::Role::Client);
         testBasic(clientConnection);
     }
+
+    testMessageLength();
 
     // TODO testSaveLoad();
     // TODO testDeepCopy();

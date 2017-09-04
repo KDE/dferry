@@ -274,7 +274,7 @@ void Arguments::Reader::doReadString(uint32 lengthPrefixSize)
     } else {
         stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
                                           d->m_args->d->m_isByteSwapped);
-        VALID_IF(stringLength + 1 < SpecMaxArrayLength, Error::MalformedMessageData);
+        VALID_IF(stringLength + 1 < Arguments::MaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
     if (unlikely(d->m_dataPosition + stringLength > d->m_data.length)) {
@@ -468,7 +468,7 @@ void Arguments::Reader::advanceState()
                 goto out_needMoreData;
             }
             arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
-            VALID_IF(arrayLength <= SpecMaxArrayLength, Error::MalformedMessageData);
+            VALID_IF(arrayLength <= Arguments::MaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
         }
 

@@ -669,7 +669,6 @@ const Arguments &Message::arguments() const
 
 static const uint32 s_properFixedHeaderLength = 12;
 static const uint32 s_extendedFixedHeaderLength = 16;
-static const uint32 s_maxMessageLength = 134217728;
 
 #ifndef DFERRY_SERDES_ONLY
 void MessagePrivate::receive(IConnection *conn)
@@ -991,7 +990,7 @@ bool MessagePrivate::deserializeFixedHeaders()
     m_headerLength = align(unpaddedHeaderLength, 8);
     m_headerPadding = m_headerLength - unpaddedHeaderLength;
 
-    return m_headerLength + m_bodyLength <= s_maxMessageLength;
+    return m_headerLength + m_bodyLength <= Arguments::MaxMessageLength;
 }
 
 bool MessagePrivate::deserializeVariableHeaders()

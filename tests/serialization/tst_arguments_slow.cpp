@@ -25,17 +25,12 @@
 
 #include "../testutil.h"
 
+#include <cstring>
 #include <iostream>
 
-// ### should probably be officially exposed by the API
-enum {
-    SpecMaxArrayLength = 67108864, // 64 MiB
-    SpecMaxMessageLength = 134217728 // 128 MiB
-};
-
-static void test_payloadLengths()
+static void test_arrayLength()
 {
-    const uint32 maxInt32Count = SpecMaxArrayLength / sizeof(uint32);
+    const uint32 maxInt32Count = Arguments::MaxArrayLength / sizeof(uint32);
     for (int i = 0; i < 2; i++) {
         const bool withVariant = i == 1;
         {
@@ -109,8 +104,84 @@ static void test_payloadLengths()
     }
 }
 
+static void test_argumentsLength()
+{
+    static const uint32 bufferSize = Arguments::MaxArrayLength + 1024;
+    byte *buffer = static_cast<byte *>(malloc(bufferSize));
+    memset(buffer, 0, bufferSize);
+
+    // Gross max length violations should be caught early
+    for (int i = 0; i < 2; i++) {
+        const bool withVariant = i == 1;
+
+        Arguments::Writer writer;
+        for (int j = 0; j < 4; j++) {
+            if (withVariant) {
+                writer.beginVariant();
+                writer.beginStruct();
+            }
+            writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, Arguments::MaxArrayLength));
+            if (j == 1) {
+                // Now just over max size. Require the length check in Writer to be lenient before
+                // finish() - that is expected of the current implementation.
+                if (withVariant) {
+                    for (int k = 0; k <= j; k++) {
+                        writer.endStruct();
+                        writer.endVariant();
+                    }
+                }
+                Arguments::Writer writer2(writer);
+                TEST(writer2.state() != Arguments::InvalidData);
+                writer2.finish();
+                TEST(writer2.state() == Arguments::InvalidData);
+            }
+        }
+        TEST(writer.state() == Arguments::InvalidData);
+    }
+
+    // Test message size exactly at maximum and exactly 1 byte over
+    for (int i = 0; i < 4; i++) {
+        const bool makeTooLong = i & 1;
+        const bool withVariant = i & 2;
+
+        Arguments::Writer writer;
+        // note: Arguments does not count Arguments::signature() length towards length
+        uint32 left = Arguments::MaxMessageLength;
+        writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, Arguments::MaxArrayLength));
+        left -= 2 * sizeof(uint32) + Arguments::MaxArrayLength; // sizeof(uint32): array length field
+        if (withVariant) {
+            left -= 3; // variant signature "s", no alignment before next element
+        }
+        writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, left - 4));
+        // Now there are exactly 4 bytes left to MaxMessageLength
+
+        TEST(writer.state() != Arguments::InvalidData);
+
+        if (withVariant) {
+            writer.beginVariant();
+        }
+        // Write a signature because it requires no alignment and its size can be anything from 2 to 257
+        if (makeTooLong) {
+            writer.writeSignature(cstring("xxx")); // + one byte length prefix + null terminator = 5 bytes
+        } else {
+            writer.writeSignature(cstring("xx"));
+        }
+        if (withVariant) {
+            writer.endVariant();
+        }
+        TEST(writer.state() != Arguments::InvalidData);
+        writer.finish();
+        if (makeTooLong) {
+            TEST(writer.state() == Arguments::InvalidData);
+        } else {
+            TEST(writer.state() == Arguments::Finished);
+        }
+    }
+}
+
 int main(int, char *[])
 {
-    test_payloadLengths();
+    test_arrayLength();
+    test_argumentsLength();
     std::cout << "Passed!\n";
 }
