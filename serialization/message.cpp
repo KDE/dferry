@@ -358,7 +358,9 @@ void Message::setCall(const string &path, const string &interface, const string 
 
 void Message::setCall(const string &path, const string &method)
 {
-    setCall(path, string(), method);
+    setType(MethodCallMessage);
+    setPath(path);
+    setMethod(method);
 }
 
 void Message::setReplyTo(const Message &call)
