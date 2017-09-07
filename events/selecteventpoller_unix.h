@@ -39,11 +39,6 @@ public:
     IEventPoller::InterruptAction poll(int timeout) override;
     void interrupt(IEventPoller::InterruptAction) override;
 
-    // TODO figure out how to handle plugging into other event loops in the general case;
-    //      there seems to be some single-fd mechanism available on most platforms and where
-    //      there isn't, a list of descriptors (propagate only changes?) should work
-    FileDescriptor pollDescriptor() const;
-
     // reimplemented from IEventPoller
     void addIoEventClient(IioEventClient *ioc) override;
     void removeIoEventClient(IioEventClient *ioc) override;

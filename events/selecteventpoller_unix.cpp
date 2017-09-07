@@ -132,11 +132,6 @@ void SelectEventPoller::interrupt(IEventPoller::InterruptAction action)
     write(m_interruptPipe[1], &buf, 1);
 }
 
-FileDescriptor SelectEventPoller::pollDescriptor() const
-{
-    return -1; // HACK! what are we going to do about this?
-}
-
 void SelectEventPoller::addIoEventClient(IioEventClient *ioc)
 {
     // The main select specific part of registration is in setReadWriteInterest().

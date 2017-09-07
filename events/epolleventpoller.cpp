@@ -104,11 +104,6 @@ void EpollEventPoller::interrupt(IEventPoller::InterruptAction action)
     write(m_interruptPipe[1], &buf, 1);
 }
 
-FileDescriptor EpollEventPoller::pollDescriptor() const
-{
-    return m_epollFd;
-}
-
 void EpollEventPoller::addIoEventClient(IioEventClient *ioc)
 {
     struct epoll_event epevt;
