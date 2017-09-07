@@ -26,7 +26,7 @@
 
 #ifdef __linux__
 #include "epolleventpoller.h"
-#elif _WIN32
+#elif defined _WIN32
 #include "selecteventpoller_win32.h"
 #else
 #include "selecteventpoller_unix.h"

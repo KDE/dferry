@@ -363,7 +363,7 @@ void ConnectionInfo::Private::fetchSessionBusInfo()
             }
         }
     }
-#elif defined(_WIN32)
+#elif defined _WIN32
     line = sessionBusAddressFromShm();
 //#error see dbus-sysdeps-win.c, _dbus_get_autolaunch_shm and CreateMutexA / WaitForSingleObject in its callers
 #endif // no #else <some error>, some platform might not have a session bus
