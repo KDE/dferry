@@ -347,6 +347,9 @@ bool Arguments::Writer::isInsideEmptyArray() const
 
 cstring Arguments::Writer::currentSignature() const
 {
+    // A signature must be null-terminated to be valid.
+    // We're only overwriting uninitialized memory, no need to undo that later.
+    d->m_signature.ptr[d->m_signature.length] = '\0';
     return d->m_signature;
 }
 
@@ -1150,8 +1153,8 @@ chunk Arguments::Writer::peekSerializedData() const
 {
     chunk ret;
     if (isValid() && m_state != InvalidData && d->m_nesting.total() == 0) {
-        ret.ptr = d->m_data;
-        ret.length = d->m_dataPosition;
+        ret.ptr = d->m_data + Private::SignatureReservedSpace;
+        ret.length = d->m_dataPosition - Private::SignatureReservedSpace;
     }
     return ret;
 }
