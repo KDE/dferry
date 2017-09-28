@@ -31,6 +31,9 @@ if (WIN32)
     set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 else()
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+    set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR}) # add libdfer install dir to rpath
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE) # add Qt (etc.) dir to rpath, if necessary
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/buslogic
