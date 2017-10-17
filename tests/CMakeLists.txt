@@ -9,7 +9,7 @@ set(TESTUTIL_HEADERS
 add_library(testutil SHARED ${TESTUTIL_SOURCES} ${TESTUTIL_HEADERS})
 target_compile_definitions(testutil PRIVATE -DBUILDING_TESTUTIL)
 
-add_subdirectory(buslogic)
-add_subdirectory(client)
-add_subdirectory(events)
 add_subdirectory(serialization)
+add_subdirectory(events)
+add_subdirectory(connection)
+add_subdirectory(client)
