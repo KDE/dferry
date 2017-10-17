@@ -32,7 +32,9 @@ class ForeignEventLoopIntegrator;
 class DFERRY_EXPORT EventDispatcher
 {
 public:
+#ifndef DFERRY_NO_NATIVE_POLL
     EventDispatcher();
+#endif
     EventDispatcher(ForeignEventLoopIntegrator *integrator);
     ~EventDispatcher();
     EventDispatcher(EventDispatcher &other) = delete;

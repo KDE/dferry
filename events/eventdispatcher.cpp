@@ -24,12 +24,14 @@
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
 
+#ifndef DFERRY_NO_NATIVE_POLL
 #ifdef __linux__
 #include "epolleventpoller.h"
 #elif defined _WIN32
 #include "selecteventpoller_win32.h"
 #else
 #include "selecteventpoller_unix.h"
+#endif
 #endif
 
 #include "event.h"
@@ -49,6 +51,7 @@
 
 using namespace std;
 
+#ifndef DFERRY_NO_NATIVE_POLL
 EventDispatcher::EventDispatcher()
    : d(new EventDispatcherPrivate)
 {
@@ -59,6 +62,7 @@ EventDispatcher::EventDispatcher()
     d->m_poller = new SelectEventPoller(this);
 #endif
 }
+#endif
 
 EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
    : d(new EventDispatcherPrivate)
