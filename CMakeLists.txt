@@ -95,7 +95,6 @@ set(DFER_PUBLIC_HEADERS
 
 set(DFER_PRIVATE_HEADERS
     buslogic/authclient.h
-    connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
     connection/ipserver.h
