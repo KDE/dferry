@@ -30,7 +30,7 @@
 
 class IMessageReceiver;
 class Message;
-class Transceiver;
+class Connection;
 class PendingReplyPrivate;
 
 class DFERRY_EXPORT PendingReply
@@ -72,7 +72,7 @@ public:
     void dumpState(); // H4X
 
 private:
-    friend class Transceiver;
+    friend class Connection;
     PendingReply(PendingReplyPrivate *priv); // PendingReplies make no sense to construct "free-standing"
     PendingReplyPrivate *d;
 };

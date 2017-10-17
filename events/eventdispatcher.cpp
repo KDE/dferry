@@ -39,7 +39,7 @@
 #include "ieventpoller.h"
 #include "iioeventlistener.h"
 #include "platformtime.h"
-#include "transceiver_p.h"
+#include "connection_p.h"
 #include "timer.h"
 
 #include <algorithm>
@@ -111,7 +111,7 @@ bool EventDispatcher::poll(int timeout)
 
     if (interrupAction == IEventPoller::Stop) {
         return false;
-    } else if (interrupAction == IEventPoller::ProcessAuxEvents && d->m_transceiverToNotify) {
+    } else if (interrupAction == IEventPoller::ProcessAuxEvents && d->m_connectionToNotify) {
         d->processAuxEvents();
     }
     d->triggerDueTimers();
@@ -363,9 +363,9 @@ void EventDispatcherPrivate::processAuxEvents()
         SpinLocker locker(&m_queuedEventsLock);
         std::swap(events, m_queuedEvents);
     }
-    if (m_transceiverToNotify) {
+    if (m_connectionToNotify) {
         for (const std::unique_ptr<Event> &evt : events) {
-            m_transceiverToNotify->processEvent(evt.get());
+            m_connectionToNotify->processEvent(evt.get());
         }
     }
 }

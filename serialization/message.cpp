@@ -694,7 +694,7 @@ void MessagePrivate::send(ITransport *transport)
     if (!m_buffer.length && !serialize()) {
         std::cerr << "MessagePrivate::send() Error A.\n";
         // m_error.setCode();
-        // notifyCompletionListener(); would call into Transceiver, but it's easier for Transceiver to handle
+        // notifyCompletionListener(); would call into Connection, but it's easier for Connection to handle
         //                             the error from non-callback code, directly in the caller of send().
         return;
     }

@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef TRANSCEIVER_P_H
-#define TRANSCEIVER_P_H
+#ifndef CONNECTION_P_H
+#define CONNECTION_P_H
 
-#include "transceiver.h"
+#include "connection.h"
 
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
@@ -42,48 +42,48 @@ class ITransport;
 class ClientConnectedHandler;
 
 /*
- How to handle destruction of connected Transceivers
+ How to handle destruction of connected Connections
 
- Main thread transceiver destroyed: Need to
+ Main thread connection destroyed: Need to
  - "cancel" registered PendingReplies from other threads
    (I guess also own ones, we're not doing that, I think...)
  - Make sure that other threads stop calling us because that's going to be a memory error when
    our instance has been deleted
 
- Secondary thread Transceiver destroyed: Need to
+ Secondary thread Connection destroyed: Need to
   - "cancel" PendingReplies registered in main thread
   - unregister from main thread as receiver of spontaneous messages because receiving events about
     it is going to be a memory error when our instance has been deleted
 
  Problem areas:
-  - destroying a Transceiver with a locked lock (locked from another thread, obviously)
+  - destroying a Connection with a locked lock (locked from another thread, obviously)
     - can solved by "thoroughly" disconnecting from everything before destruction
-  - deadlocks / locking order - preliminary solution: always main Transceiver first, then secondary
+  - deadlocks / locking order - preliminary solution: always main Connection first, then secondary
     - what about the lock in EventDispatcher?
-  - blocking: secondary blocking (as in waiting for an event - both Transceivers wait on *locks* of
+  - blocking: secondary blocking (as in waiting for an event - both Connections wait on *locks* of
     the other) on main is okay, it does that all the time anyway. main blocking on secondary is
     probably (not sure) not okay.
 
  Let's define some invariants:
-  - When a Transceiver is destroyed, all its PendingReply instances must have been  detached
-    (completed with or without error) or destroyed. "Its" means sent through that Transceiver's
-    send() method, not when a PendingReply is using the connection of the Transceiver but send()
-    was called on the Transceiver of another thread.
-  - When a master and a secondary transceiver try to communicate in any way, and the other party
+  - When a Connection is destroyed, all its PendingReply instances must have been  detached
+    (completed with or without error) or destroyed. "Its" means sent through that Connection's
+    send() method, not when a PendingReply is using the connection of the Connection but send()
+    was called on the Connection of another thread.
+  - When a master and a secondary connection try to communicate in any way, and the other party
     has been destroyed, communication will fail gracefully and there will be no crash or undefined
     behavior. Any pending replies that cannot finish successfully anymore will finish with an
     LocalDisconnect error.
  */
 
-class TransceiverPrivate : public ICompletionListener
+class ConnectionPrivate : public ICompletionListener
 {
 public:
-    static TransceiverPrivate *get(Transceiver *t) { return t->d; }
+    static ConnectionPrivate *get(Connection *t) { return t->d; }
 
-    TransceiverPrivate(EventDispatcher *dispatcher);
+    ConnectionPrivate(EventDispatcher *dispatcher);
     void close();
 
-    void authAndHello(Transceiver *parent);
+    void authAndHello(Connection *parent);
     void handleHelloReply();
     void handleClientConnected();
 
@@ -98,9 +98,9 @@ public:
 
     void unregisterPendingReply(PendingReplyPrivate *p);
     void cancelAllPendingReplies();
-    void discardPendingRepliesForSecondaryThread(TransceiverPrivate *t);
+    void discardPendingRepliesForSecondaryThread(ConnectionPrivate *t);
 
-    // For cross-thread communication between thread Transceivers. We could have a more complete event
+    // For cross-thread communication between thread Connections. We could have a more complete event
     // system, but there is currently no need, so keep it simple and limited.
     void processEvent(Event *evt); // called from thread-local EventDispatcher
 
@@ -117,9 +117,9 @@ public:
 
     std::deque<Message> m_sendQueue; // waiting to be sent
 
-    // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver
+    // only one of them can be non-null. exception: in the main thread, m_mainThreadConnection
     // equals this, so that the main thread knows it's the main thread and not just a thread-local
-    // transceiver.
+    // connection.
     ITransport *m_transport;
 
     HelloReceiver *m_helloReceiver;
@@ -136,12 +136,12 @@ public:
     {
     public:
         PendingReplyRecord(PendingReplyPrivate *pr) : isForSecondaryThread(false), ptr(pr) {}
-        PendingReplyRecord(TransceiverPrivate *tp) : isForSecondaryThread(true), ptr(tp) {}
+        PendingReplyRecord(ConnectionPrivate *tp) : isForSecondaryThread(true), ptr(tp) {}
 
         PendingReplyPrivate *asPendingReply() const
             { return isForSecondaryThread ? nullptr : static_cast<PendingReplyPrivate *>(ptr); }
-        TransceiverPrivate *asTransceiver() const
-            { return isForSecondaryThread ? static_cast<TransceiverPrivate *>(ptr) : nullptr; }
+        ConnectionPrivate *asConnection() const
+            { return isForSecondaryThread ? static_cast<ConnectionPrivate *>(ptr) : nullptr; }
 
     private:
         bool isForSecondaryThread;
@@ -154,11 +154,11 @@ public:
 
     std::atomic<uint32> m_sendSerial;
 
-    std::unordered_map<TransceiverPrivate *, CommutexPeer> m_secondaryThreadLinks;
+    std::unordered_map<ConnectionPrivate *, CommutexPeer> m_secondaryThreadLinks;
     std::vector<CommutexPeer> m_unredeemedCommRefs; // for createCommRef() and the constructor from CommRef
 
-    TransceiverPrivate *m_mainThreadTransceiver;
+    ConnectionPrivate *m_mainThreadConnection;
     CommutexPeer m_mainThreadLink;
 };
 
-#endif // TRANSCEIVER_P_H
+#endif // CONNECTION_P_H

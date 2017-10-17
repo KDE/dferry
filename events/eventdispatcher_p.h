@@ -42,7 +42,7 @@ class IEventPoller;
 class Message;
 class PendingReplyPrivate;
 class Timer;
-class TransceiverPrivate;
+class ConnectionPrivate;
 
 // note that the main purpose of EventDispatcher so far is dispatching I/O events; dispatching Event
 // instances is secondary
@@ -72,9 +72,9 @@ public:
     void removeTimer(Timer *timer);
     // for ForeignEventLoopIntegrator (calls into it, not called from it)
     void maybeSetTimeoutForIntegrator();
-    // for Transceiver
+    // for Connection
     // this is similar to interrupt(), but doesn't make poll() return false and will call
-    // m_transceiverToNotify() -> processQueuedEvents()
+    // m_connectionToNotify() -> processQueuedEvents()
     void wakeForEvents();
     void queueEvent(std::unique_ptr<Event> evt); // safe to call from any thread
     void processAuxEvents();
@@ -95,8 +95,8 @@ public:
     // a client called from trigger()
     Timer *m_triggeredTimer = nullptr;
     bool m_isTriggeredTimerPendingRemoval = false;
-    // for inter thread event delivery to Transceiver
-    TransceiverPrivate *m_transceiverToNotify = nullptr;
+    // for inter thread event delivery to Connection
+    ConnectionPrivate *m_connectionToNotify = nullptr;
 
     Spinlock m_queuedEventsLock;
     std::vector<std::unique_ptr<Event>> m_queuedEvents;

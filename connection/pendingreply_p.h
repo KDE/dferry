@@ -30,7 +30,7 @@
 #include "timer.h"
 
 class PendingReply;
-class TransceiverPrivate;
+class ConnectionPrivate;
 
 class PendingReplyPrivate : public ICompletionListener
 {
@@ -46,7 +46,7 @@ public:
         }
     }
 
-    // for Transceiver
+    // for Connection
     void handleReceived(Message *reply);
     void handleError(Error error);
     // for m_replyTimeout
@@ -54,9 +54,9 @@ public:
 
     PendingReply *m_owner;
     union {
-        TransceiverPrivate *transceiver;
+        ConnectionPrivate *connection;
         Message *reply;
-    } m_transceiverOrReply;
+    } m_connectionOrReply;
     void *m_cookie;
     Timer m_replyTimeout;
     IMessageReceiver *m_receiver;

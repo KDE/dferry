@@ -30,7 +30,7 @@
 #include "eventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"
-#include "transceiver.h"
+#include "connection.h"
 
 EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
 {
@@ -46,7 +46,7 @@ EavesdropperThread::~EavesdropperThread()
 {
     m_dispatcher->interrupt();
     m_thread.wait();
-    delete m_transceiver;
+    delete m_connection;
     delete m_dispatcher;
 }
 
@@ -67,8 +67,8 @@ void EavesdropperThread::run()
     m_timer.start();
     m_dispatcher = new EventDispatcher;
 
-    m_transceiver = new Transceiver(m_dispatcher, ConnectAddress::Bus::Session);
-    m_transceiver->setSpontaneousMessageReceiver(this);
+    m_connection = new Connection(m_dispatcher, ConnectAddress::Bus::Session);
+    m_connection->setSpontaneousMessageReceiver(this);
     {
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {
@@ -78,11 +78,11 @@ void EavesdropperThread::run()
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            m_transceiver->sendNoReply(createEavesdropMessage(messageType[i]));
+            m_connection->sendNoReply(createEavesdropMessage(messageType[i]));
         }
     }
 
-    Q_ASSERT(m_transceiver->isConnected());
+    Q_ASSERT(m_connection->isConnected());
 
     while (m_dispatcher->poll()) {
     }

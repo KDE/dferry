@@ -36,25 +36,19 @@ else()
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE) # add Qt (etc.) dir to rpath, if necessary
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/buslogic
-                    ${CMAKE_SOURCE_DIR}/client
+include_directories(${CMAKE_SOURCE_DIR}/client
                     ${CMAKE_SOURCE_DIR}/connection
                     ${CMAKE_SOURCE_DIR}/events
                     ${CMAKE_SOURCE_DIR}/serialization
+                    ${CMAKE_SOURCE_DIR}/transport
                     ${CMAKE_SOURCE_DIR}/util)
 
 set(DFER_SOURCES
-    buslogic/authclient.cpp
-    buslogic/connectaddress.cpp
-    buslogic/imessagereceiver.cpp
-    buslogic/pendingreply.cpp
-    buslogic/transceiver.cpp
-    connection/ipserver.cpp
-    connection/ipsocket.cpp
-    connection/iserver.cpp
-    connection/itransport.cpp
-    connection/itransportlistener.cpp
-    connection/stringtools.cpp
+    connection/authclient.cpp
+    connection/connectaddress.cpp
+    connection/connection.cpp
+    connection/imessagereceiver.cpp
+    connection/pendingreply.cpp
     events/event.cpp
     events/eventdispatcher.cpp
     events/foreigneventloopintegrator.cpp
@@ -66,20 +60,26 @@ set(DFER_SOURCES
     serialization/argumentsreader.cpp
     serialization/argumentswriter.cpp
     serialization/message.cpp
+    transport/ipserver.cpp
+    transport/ipsocket.cpp
+    transport/iserver.cpp
+    transport/itransport.cpp
+    transport/itransportlistener.cpp
+    transport/stringtools.cpp
     util/error.cpp
     util/icompletionlistener.cpp
     util/types.cpp)
 if (UNIX)
     list(APPEND DFER_SOURCES
-        connection/localserver.cpp
-        connection/localsocket.cpp)
+        transport/localserver.cpp
+        transport/localsocket.cpp)
 endif()
 
 set(DFER_PUBLIC_HEADERS
-    buslogic/connectaddress.h
-    buslogic/imessagereceiver.h
-    buslogic/pendingreply.h
-    buslogic/transceiver.h
+    connection/connectaddress.h
+    connection/connection.h
+    connection/imessagereceiver.h
+    connection/pendingreply.h
     client/introspection.h
     events/eventdispatcher.h
     events/foreigneventloopintegrator.h
@@ -94,23 +94,23 @@ set(DFER_PUBLIC_HEADERS
     util/valgrind-noop.h)
 
 set(DFER_PRIVATE_HEADERS
-    buslogic/authclient.h
-    connection/ipserver.h
-    connection/ipsocket.h
-    connection/iserver.h
-    connection/itransport.h
-    connection/itransportlistener.h
-    connection/platform.h
-    connection/stringtools.h
+    connection/authclient.h
     events/event.h
     events/ieventpoller.h
     events/iioeventlistener.h
     events/platformtime.h
-    serialization/basictypeio.h)
+    serialization/basictypeio.h
+    transport/ipserver.h
+    transport/ipsocket.h
+    transport/iserver.h
+    transport/itransport.h
+    transport/itransportlistener.h
+    transport/platform.h
+    transport/stringtools.h)
 if (UNIX)
     list(APPEND DFER_PRIVATE_HEADERS
-         connection/localserver.h
-         connection/localsocket.h)
+         transport/localserver.h
+         transport/localsocket.h)
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     list(APPEND DFER_SOURCES events/epolleventpoller.cpp)

@@ -28,7 +28,7 @@
 #include "message.h"
 #include "pendingreply.h"
 #include "stringtools.h"
-#include "transceiver.h"
+#include "connection.h"
 
 #include "../testutil.h"
 
@@ -50,7 +50,7 @@ static const char *pongPayload = "<- J. Random Pong";
 class PongSender : public IMessageReceiver
 {
 public:
-    Transceiver *m_transceiver;
+    Connection *m_connection;
 
     void handleSpontaneousMessageReceived(Message ping) override
     {
@@ -75,22 +75,22 @@ public:
             pong.setArguments(writer.finish());
 
             std::cout << "\n\nSending pong!\n\n";
-            Error replyError = m_transceiver->sendNoReply(std::move(pong));
+            Error replyError = m_connection->sendNoReply(std::move(pong));
             TEST(!replyError.isError());
 
-            m_transceiver->eventDispatcher()->interrupt();
+            m_connection->eventDispatcher()->interrupt();
         }
     }
 };
 
-static void pongThreadRun(Transceiver::CommRef mainTransceiverRef, std::atomic<bool> *pongThreadReady)
+static void pongThreadRun(Connection::CommRef mainConnectionRef, std::atomic<bool> *pongThreadReady)
 {
     std::cout << " Pong thread starting!\n";
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, std::move(mainTransceiverRef));
+    Connection trans(&eventDispatcher, std::move(mainConnectionRef));
 
     PongSender pongSender;
-    pongSender.m_transceiver = &trans;
+    pongSender.m_connection = &trans;
 
     trans.setSpontaneousMessageReceiver(&pongSender);
 
@@ -132,7 +132,7 @@ public:
 static void testPingPong()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> pongThreadReady(false);
     std::thread pongThread(pongThreadRun, trans.createCommRef(), &pongThreadReady);
@@ -186,16 +186,16 @@ public:
     }
 };
 
-static void timeoutThreadRun(Transceiver::CommRef mainTransceiverRef, std::atomic<bool> *done)
+static void timeoutThreadRun(Connection::CommRef mainConnectionRef, std::atomic<bool> *done)
 {
-    // TODO v turn this into proper documentation in Transceiver
-    // Open a Transceiver "slaved" to the other Transceiver - it runs its own event loop in this thread
-    // and has message I/O handled by the Transceiver in the "master" thread through message passing.
+    // TODO v turn this into proper documentation in Connection
+    // Open a Connection "slaved" to the other Connection - it runs its own event loop in this thread
+    // and has message I/O handled by the Connection in the "master" thread through message passing.
     // The main purpose of that is to use just one DBus connection per application( module), which is often
     // more convenient for client programmers and brings some limited ordering guarantees.
     std::cout << " Other thread starting!\n";
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, std::move(mainTransceiverRef));
+    Connection trans(&eventDispatcher, std::move(mainConnectionRef));
     while (!trans.uniqueName().length()) {
         eventDispatcher.poll();
     }
@@ -216,7 +216,7 @@ static void timeoutThreadRun(Transceiver::CommRef mainTransceiverRef, std::atomi
 static void testThreadedTimeout()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> done(false);
     std::thread timeoutThread(timeoutThreadRun, trans.createCommRef(), &done);

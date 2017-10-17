@@ -27,7 +27,7 @@
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"
-#include "transceiver.h"
+#include "connection.h"
 
 #include <iostream>
 #include <string>
@@ -86,9 +86,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    Transceiver transceiver(&dispatcher, bus);
+    Connection connection(&dispatcher, bus);
     ReplyPrinter receiver;
-    transceiver.setSpontaneousMessageReceiver(&receiver);
+    connection.setSpontaneousMessageReceiver(&receiver);
     {
         static const int messageTypeCount = 4;
         const char *messageType[messageTypeCount] = {
@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
             "error"
         };
         for (int i = 0; i < messageTypeCount; i++) {
-            transceiver.sendNoReply(createEavesdropMessage(messageType[i]));
+            connection.sendNoReply(createEavesdropMessage(messageType[i]));
         }
     }
 

@@ -32,7 +32,7 @@
 class EavesdropperModel;
 class EventDispatcher;
 class Message;
-class Transceiver;
+class Connection;
 
 // This is a separate thread mainly for accurate timestamps. If this was running in the main
 // thread, GUI and other processing would delay the calls to messageReceived() and therefore
@@ -58,7 +58,7 @@ private:
     QThread m_thread;
     QElapsedTimer m_timer;
     EventDispatcher *m_dispatcher;
-    Transceiver *m_transceiver;
+    Connection *m_connection;
 };
 
 #endif // EAVESDROPPERTHREAD_H

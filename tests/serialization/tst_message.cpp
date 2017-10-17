@@ -28,7 +28,7 @@
 #include "imessagereceiver.h"
 #include "message.h"
 #include "testutil.h"
-#include "transceiver.h"
+#include "connection.h"
 
 #include <cstring>
 #include <iostream>
@@ -62,10 +62,10 @@ public:
     void handleSpontaneousMessageReceived(Message msg) override
     {
         cout << msg.prettyPrint();
-        m_transceiver->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
-        //m_transceiver->eventDispatcher()->interrupt();
+        m_connection->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
+        //m_connection->eventDispatcher()->interrupt();
     }
-    Transceiver *m_transceiver;
+    Connection *m_connection;
 };
 
 // used during implementation, is supposed to not crash and be valgrind-clean afterwards
@@ -76,25 +76,25 @@ void testBasic(const ConnectAddress &clientAddress)
     ConnectAddress serverAddress = clientAddress;
     serverAddress.setRole(ConnectAddress::Role::Server);
 
-    Transceiver serverTransceiver(&dispatcher, serverAddress);
-    cout << "Created server transceiver. " << &serverTransceiver << endl;
-    Transceiver clientTransceiver(&dispatcher, clientAddress);
-    cout << "Created client transceiver. " << &clientTransceiver << endl;
+    Connection serverConnection(&dispatcher, serverAddress);
+    cout << "Created server connection. " << &serverConnection << endl;
+    Connection clientConnection(&dispatcher, clientAddress);
+    cout << "Created client connection. " << &clientConnection << endl;
 
     PrintAndReplyClient printAndReplyClient;
-    printAndReplyClient.m_transceiver = &serverTransceiver;
-    serverTransceiver.setSpontaneousMessageReceiver(&printAndReplyClient);
+    printAndReplyClient.m_connection = &serverConnection;
+    serverConnection.setSpontaneousMessageReceiver(&printAndReplyClient);
 
     PrintAndTerminateClient printAndTerminateClient;
     printAndTerminateClient.m_eventDispatcher = &dispatcher;
-    clientTransceiver.setSpontaneousMessageReceiver(&printAndTerminateClient);
+    clientConnection.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
     Arguments::Writer writer;
     writer.writeString("couch");
     msg.setArguments(writer.finish());
 
-    clientTransceiver.sendNoReply(move(msg));
+    clientConnection.sendNoReply(move(msg));
 
     while (dispatcher.poll()) {
     }

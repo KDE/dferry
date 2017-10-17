@@ -6,9 +6,9 @@
 #include <string>
 
 class Commutex;
-class TransceiverPrivate;
+class ConnectionPrivate;
 
-// these are exclusively sent from and to Transceiver instances so far, nevertheless it seems logical
+// these are exclusively sent from and to Connection instances so far, nevertheless it seems logical
 // to dispatch events in EventDispatcher, what with the name...
 struct Event
 {
@@ -19,9 +19,9 @@ struct Event
         PendingReplySuccess,
         PendingReplyFailure,
         PendingReplyCancel, // 5
-        MainTransceiverDisconnect,
-        SecondaryTransceiverConnect,
-        SecondaryTransceiverDisconnect,
+        MainConnectionDisconnect,
+        SecondaryConnectionConnect,
+        SecondaryConnectionDisconnect,
         UniqueNameReceived
     };
 
@@ -41,7 +41,7 @@ struct SendMessageWithPendingReplyEvent : public Event
 {
     SendMessageWithPendingReplyEvent() : Event(Event::SendMessageWithPendingReply) {}
     Message message;
-    TransceiverPrivate *transceiver;
+    ConnectionPrivate *connection;
 };
 
 struct SpontaneousMessageReceivedEvent : public Event
@@ -69,23 +69,23 @@ struct PendingReplyCancelEvent : public Event
     uint32 serial;
 };
 
-struct MainTransceiverDisconnectEvent : public Event
+struct MainConnectionDisconnectEvent : public Event
 {
-    MainTransceiverDisconnectEvent() : Event(Event::MainTransceiverDisconnect) {}
+    MainConnectionDisconnectEvent() : Event(Event::MainConnectionDisconnect) {}
     // no additiona3 data members - we could also just use Event
 };
 
-struct SecondaryTransceiverConnectEvent : public Event
+struct SecondaryConnectionConnectEvent : public Event
 {
-    SecondaryTransceiverConnectEvent() : Event(Event::SecondaryTransceiverConnect) {}
-    TransceiverPrivate *transceiver;
+    SecondaryConnectionConnectEvent() : Event(Event::SecondaryConnectionConnect) {}
+    ConnectionPrivate *connection;
     Commutex *id;
 };
 
-struct SecondaryTransceiverDisconnectEvent : public Event
+struct SecondaryConnectionDisconnectEvent : public Event
 {
-    SecondaryTransceiverDisconnectEvent() : Event(Event::SecondaryTransceiverDisconnect) {}
-    TransceiverPrivate *transceiver;
+    SecondaryConnectionDisconnectEvent() : Event(Event::SecondaryConnectionDisconnect) {}
+    ConnectionPrivate *connection;
 };
 
 struct UniqueNameReceivedEvent : public Event

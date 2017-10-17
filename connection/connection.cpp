@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "transceiver.h"
-#include "transceiver_p.h"
+#include "connection.h"
+#include "connection_p.h"
 
 #include "arguments.h"
 #include "authclient.h"
@@ -55,7 +55,7 @@ public:
     }
 
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
-    TransceiverPrivate *m_parent;
+    ConnectionPrivate *m_parent;
 };
 
 class ClientConnectedHandler : public ICompletionListener
@@ -72,10 +72,10 @@ public:
     }
 
     IServer *m_server;
-    TransceiverPrivate *m_parent;
+    ConnectionPrivate *m_parent;
 };
 
-TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
+ConnectionPrivate::ConnectionPrivate(EventDispatcher *dispatcher)
    : m_state(Unconnected),
      m_client(nullptr),
      m_receivingMessage(nullptr),
@@ -86,20 +86,20 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
      m_authClient(nullptr),
      m_defaultTimeout(25000),
      m_sendSerial(1),
-     m_mainThreadTransceiver(nullptr)
+     m_mainThreadConnection(nullptr)
 {
 }
 
-Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
-   : d(new TransceiverPrivate(dispatcher))
+Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
+   : d(new ConnectionPrivate(dispatcher))
 {
     d->m_connectAddress = ca;
     assert(d->m_eventDispatcher);
-    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_transceiverToNotify = d;
+    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
     if (ca.bus() == ConnectAddress::Bus::None || ca.socketType() == ConnectAddress::SocketType::None ||
         ca.role() == ConnectAddress::Role::None) {
-        cerr << "\nTransceiver: connection constructor Exit A\n\n";
+        cerr << "\nConnection: connection constructor Exit A\n\n";
         return;
     }
 
@@ -112,9 +112,9 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
             d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
             d->m_clientConnectedHandler->m_parent = d;
 
-            d->m_state = TransceiverPrivate::ServerWaitingForClient;
+            d->m_state = ConnectionPrivate::ServerWaitingForClient;
         } else {
-            cerr << "Transceiver constructor: bus server not supported.\n";
+            cerr << "Connection constructor: bus server not supported.\n";
             // state stays at Unconnected
         }
     } else {
@@ -122,48 +122,48 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
         d->m_transport->setEventDispatcher(dispatcher);
         if (ca.bus() == ConnectAddress::Bus::Session || ca.bus() == ConnectAddress::Bus::System) {
             d->authAndHello(this);
-            d->m_state = TransceiverPrivate::Authenticating;
+            d->m_state = ConnectionPrivate::Authenticating;
         } else if (ca.bus() == ConnectAddress::Bus::PeerToPeer) {
             d->receiveNextMessage();
-            d->m_state = TransceiverPrivate::Connected;
+            d->m_state = ConnectionPrivate::Connected;
         }
     }
 }
 
-Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef)
-   : d(new TransceiverPrivate(dispatcher))
+Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
+   : d(new ConnectionPrivate(dispatcher))
 {
-    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_transceiverToNotify = d;
+    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
-    d->m_mainThreadLink = std::move(mainTransceiverRef.commutex);
+    d->m_mainThreadLink = std::move(mainConnectionRef.commutex);
     CommutexLocker locker(&d->m_mainThreadLink);
     assert(locker.hasLock());
     Commutex *const id = d->m_mainThreadLink.id();
     if (!id) {
         assert(false);
-        cerr << "\nTransceiver: slave constructor Exit A\n\n";
+        cerr << "\nConnection: slave constructor Exit A\n\n";
         return; // stay in Unconnected state
     }
 
     // TODO how do we handle m_state?
 
-    d->m_mainThreadTransceiver = mainTransceiverRef.transceiver;
-    TransceiverPrivate *mainD = d->m_mainThreadTransceiver;
+    d->m_mainThreadConnection = mainConnectionRef.connection;
+    ConnectionPrivate *mainD = d->m_mainThreadConnection;
 
     // get the current values - if we got them from e.g. the CommRef they could be outdated
     // and we don't want to wait for more event ping-pong
     SpinLocker mainLocker(&mainD->m_lock);
     d->m_connectAddress = mainD->m_connectAddress;
 
-    // register with the main Transceiver
-    SecondaryTransceiverConnectEvent *evt = new SecondaryTransceiverConnectEvent();
-    evt->transceiver = d;
+    // register with the main Connection
+    SecondaryConnectionConnectEvent *evt = new SecondaryConnectionConnectEvent();
+    evt->connection = d;
     evt->id = id;
     EventDispatcherPrivate::get(mainD->m_eventDispatcher)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
 }
 
-Transceiver::~Transceiver()
+Connection::~Connection()
 {
     d->close();
 
@@ -176,17 +176,17 @@ Transceiver::~Transceiver()
     d = nullptr;
 }
 
-void TransceiverPrivate::close()
+void ConnectionPrivate::close()
 {
     // Can't be main and secondary at the main time - it could be made to work, but what for?
-    assert(m_secondaryThreadLinks.empty() || !m_mainThreadTransceiver);
+    assert(m_secondaryThreadLinks.empty() || !m_mainThreadConnection);
 
-    if (m_mainThreadTransceiver) {
+    if (m_mainThreadConnection) {
         CommutexUnlinker unlinker(&m_mainThreadLink);
         if (unlinker.hasLock()) {
-            SecondaryTransceiverDisconnectEvent *evt = new SecondaryTransceiverDisconnectEvent();
-            evt->transceiver = this;
-            EventDispatcherPrivate::get(m_mainThreadTransceiver->m_eventDispatcher)
+            SecondaryConnectionDisconnectEvent *evt = new SecondaryConnectionDisconnectEvent();
+            evt->connection = this;
+            EventDispatcherPrivate::get(m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
     }
@@ -199,7 +199,7 @@ void TransceiverPrivate::close()
             CommutexUnlinker unlinker(&it->second, false);
             if (unlinker.willSucceed()) {
                 if (unlinker.hasLock()) {
-                    MainTransceiverDisconnectEvent *evt = new MainTransceiverDisconnectEvent();
+                    MainConnectionDisconnectEvent *evt = new MainConnectionDisconnectEvent();
                     EventDispatcherPrivate::get(it->first->m_eventDispatcher)
                         ->queueEvent(std::unique_ptr<Event>(evt));
                 }
@@ -213,10 +213,10 @@ void TransceiverPrivate::close()
 
     cancelAllPendingReplies();
 
-    EventDispatcherPrivate::get(m_eventDispatcher)->m_transceiverToNotify = nullptr;
+    EventDispatcherPrivate::get(m_eventDispatcher)->m_connectionToNotify = nullptr;
 }
 
-void TransceiverPrivate::authAndHello(Transceiver *parent)
+void ConnectionPrivate::authAndHello(Connection *parent)
 {
     m_authClient = new AuthClient(m_transport);
     m_authClient->setCompletionListener(this);
@@ -236,7 +236,7 @@ void TransceiverPrivate::authAndHello(Transceiver *parent)
     m_helloReceiver->m_parent = this;
 }
 
-void TransceiverPrivate::handleHelloReply()
+void ConnectionPrivate::handleHelloReply()
 {
     if (!m_helloReceiver->m_helloReply.hasNonErrorReply()) {
         delete m_helloReceiver;
@@ -269,7 +269,7 @@ void TransceiverPrivate::handleHelloReply()
     m_state = Connected;
 }
 
-void TransceiverPrivate::handleClientConnected()
+void ConnectionPrivate::handleClientConnected()
 {
     m_transport = m_clientConnectedHandler->m_server->takeNextClient();
     delete m_clientConnectedHandler;
@@ -282,17 +282,17 @@ void TransceiverPrivate::handleClientConnected()
     m_state = Connected;
 }
 
-void Transceiver::setDefaultReplyTimeout(int msecs)
+void Connection::setDefaultReplyTimeout(int msecs)
 {
     d->m_defaultTimeout = msecs;
 }
 
-int Transceiver::defaultReplyTimeout() const
+int Connection::defaultReplyTimeout() const
 {
     return d->m_defaultTimeout;
 }
 
-uint32 TransceiverPrivate::takeNextSerial()
+uint32 ConnectionPrivate::takeNextSerial()
 {
     uint32 ret;
     do {
@@ -301,17 +301,17 @@ uint32 TransceiverPrivate::takeNextSerial()
     return ret;
 }
 
-Error TransceiverPrivate::prepareSend(Message *msg)
+Error ConnectionPrivate::prepareSend(Message *msg)
 {
-    if (!m_mainThreadTransceiver) {
+    if (!m_mainThreadConnection) {
         msg->setSerial(takeNextSerial());
     } else {
-        // we take a serial from the other Transceiver and then serialize locally in order to keep the CPU
+        // we take a serial from the other Connection and then serialize locally in order to keep the CPU
         // expense of serialization local, even though it's more complicated than doing everything in the
-        // other thread / Transceiver.
+        // other thread / Connection.
         CommutexLocker locker(&m_mainThreadLink);
         if (locker.hasLock()) {
-            msg->setSerial(m_mainThreadTransceiver->takeNextSerial());
+            msg->setSerial(m_mainThreadConnection->takeNextSerial());
         } else {
             return Error::LocalDisconnect;
         }
@@ -324,18 +324,18 @@ Error TransceiverPrivate::prepareSend(Message *msg)
     return Error::NoError;
 }
 
-void TransceiverPrivate::sendPreparedMessage(Message msg)
+void ConnectionPrivate::sendPreparedMessage(Message msg)
 {
     MessagePrivate *const mpriv = MessagePrivate::get(&msg);
     mpriv->setCompletionListener(this);
     m_sendQueue.push_back(std::move(msg));
-    if (m_state == TransceiverPrivate::Connected && m_sendQueue.size() == 1) {
+    if (m_state == ConnectionPrivate::Connected && m_sendQueue.size() == 1) {
         // first in queue, don't wait for some other event to trigger sending
         mpriv->send(m_transport);
     }
 }
 
-PendingReply Transceiver::send(Message m, int timeoutMsecs)
+PendingReply Connection::send(Message m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
         timeoutMsecs = d->m_defaultTimeout;
@@ -344,12 +344,12 @@ PendingReply Transceiver::send(Message m, int timeoutMsecs)
     Error error = d->prepareSend(&m);
 
     PendingReplyPrivate *pendingPriv = new PendingReplyPrivate(d->m_eventDispatcher, timeoutMsecs);
-    pendingPriv->m_transceiverOrReply.transceiver = d;
+    pendingPriv->m_connectionOrReply.connection = d;
     pendingPriv->m_receiver = nullptr;
     pendingPriv->m_serial = m.serial();
 
-    // even if we're handing off I/O to a main Transceiver, keep a record because that simplifies
-    // aborting all pending replies when we disconnect from the main Transceiver, no matter which
+    // even if we're handing off I/O to a main Connection, keep a record because that simplifies
+    // aborting all pending replies when we disconnect from the main Connection, no matter which
     // side initiated the disconnection.
     d->m_pendingReplies.emplace(m.serial(), pendingPriv);
 
@@ -360,15 +360,15 @@ PendingReply Transceiver::send(Message m, int timeoutMsecs)
         pendingPriv->m_error = error;
         pendingPriv->m_replyTimeout.start(0);
     } else {
-        if (!d->m_mainThreadTransceiver) {
+        if (!d->m_mainThreadConnection) {
             d->sendPreparedMessage(std::move(m));
         } else {
             CommutexLocker locker(&d->m_mainThreadLink);
             if (locker.hasLock()) {
                 std::unique_ptr<SendMessageWithPendingReplyEvent> evt(new SendMessageWithPendingReplyEvent);
                 evt->message = std::move(m);
-                evt->transceiver = d;
-                EventDispatcherPrivate::get(d->m_mainThreadTransceiver->m_eventDispatcher)
+                evt->connection = d;
+                EventDispatcherPrivate::get(d->m_mainThreadConnection->m_eventDispatcher)
                     ->queueEvent(std::move(evt));
             } else {
                 pendingPriv->m_error = Error::LocalDisconnect;
@@ -379,7 +379,7 @@ PendingReply Transceiver::send(Message m, int timeoutMsecs)
     return PendingReply(pendingPriv);
 }
 
-Error Transceiver::sendNoReply(Message m)
+Error Connection::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
@@ -392,14 +392,14 @@ Error Transceiver::sendNoReply(Message m)
     // going through an event loop iteration, handleCompletion would be called and expects the message to
     // be in the queue
 
-    if (!d->m_mainThreadTransceiver) {
+    if (!d->m_mainThreadConnection) {
         d->sendPreparedMessage(std::move(m));
     } else {
         CommutexLocker locker(&d->m_mainThreadLink);
         if (locker.hasLock()) {
             std::unique_ptr<SendMessageEvent> evt(new SendMessageEvent);
             evt->message = std::move(m);
-            EventDispatcherPrivate::get(d->m_mainThreadTransceiver->m_eventDispatcher)
+            EventDispatcherPrivate::get(d->m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::move(evt));
         } else {
             return Error::LocalDisconnect;
@@ -408,37 +408,37 @@ Error Transceiver::sendNoReply(Message m)
     return Error::NoError;
 }
 
-ConnectAddress Transceiver::connectAddress() const
+ConnectAddress Connection::connectAddress() const
 {
     return d->m_connectAddress;
 }
 
-std::string Transceiver::uniqueName() const
+std::string Connection::uniqueName() const
 {
     return d->m_uniqueName;
 }
 
-bool Transceiver::isConnected() const
+bool Connection::isConnected() const
 {
     return d->m_transport && d->m_transport->isOpen();
 }
 
-EventDispatcher *Transceiver::eventDispatcher() const
+EventDispatcher *Connection::eventDispatcher() const
 {
     return d->m_eventDispatcher;
 }
 
-IMessageReceiver *Transceiver::spontaneousMessageReceiver() const
+IMessageReceiver *Connection::spontaneousMessageReceiver() const
 {
     return d->m_client;
 }
 
-void Transceiver::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
+void Connection::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
 {
     d->m_client = receiver;
 }
 
-void TransceiverPrivate::handleCompletion(void *task)
+void ConnectionPrivate::handleCompletion(void *task)
 {
     switch (m_state) {
     case Authenticating: {
@@ -483,9 +483,9 @@ void TransceiverPrivate::handleCompletion(void *task)
                             ->queueEvent(std::unique_ptr<Event>(evt));
                         ++it;
                     } else {
-                        TransceiverPrivate *transceiver = it->first;
+                        ConnectionPrivate *connection = it->first;
                         it = m_secondaryThreadLinks.erase(it);
-                        discardPendingRepliesForSecondaryThread(transceiver);
+                        discardPendingRepliesForSecondaryThread(connection);
                         delete evt;
                     }
                 }
@@ -500,7 +500,7 @@ void TransceiverPrivate::handleCompletion(void *task)
     };
 }
 
-bool TransceiverPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
+bool ConnectionPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
 {
     if (receivedMessage->type() != Message::MethodReturnMessage &&
         receivedMessage->type() != Message::ErrorMessage) {
@@ -517,19 +517,19 @@ bool TransceiverPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
         assert(!pr->m_isFinished);
         pr->handleReceived(receivedMessage);
     } else {
-        // forward to other thread's Transceiver
-        TransceiverPrivate *transceiver = it->second.asTransceiver();
+        // forward to other thread's Connection
+        ConnectionPrivate *connection = it->second.asConnection();
         m_pendingReplies.erase(it);
-        assert(transceiver);
+        assert(connection);
         PendingReplySuccessEvent *evt = new PendingReplySuccessEvent;
         evt->reply = std::move(*receivedMessage);
         delete receivedMessage;
-        EventDispatcherPrivate::get(transceiver->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
+        EventDispatcherPrivate::get(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
     }
     return true;
 }
 
-void TransceiverPrivate::receiveNextMessage()
+void ConnectionPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
     MessagePrivate *const mpriv = MessagePrivate::get(m_receivingMessage);
@@ -537,21 +537,21 @@ void TransceiverPrivate::receiveNextMessage()
     mpriv->receive(m_transport);
 }
 
-void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)
+void ConnectionPrivate::unregisterPendingReply(PendingReplyPrivate *p)
 {
-    if (m_mainThreadTransceiver) {
+    if (m_mainThreadConnection) {
         CommutexLocker otherLocker(&m_mainThreadLink);
         if (otherLocker.hasLock()) {
             PendingReplyCancelEvent *evt = new PendingReplyCancelEvent;
             evt->serial = p->m_serial;
-            EventDispatcherPrivate::get(m_mainThreadTransceiver->m_eventDispatcher)
+            EventDispatcherPrivate::get(m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
     }
 #ifndef NDEBUG
     auto it = m_pendingReplies.find(p->m_serial);
     assert(it != m_pendingReplies.end());
-    if (!m_mainThreadTransceiver) {
+    if (!m_mainThreadConnection) {
         assert(it->second.asPendingReply());
         assert(it->second.asPendingReply() == p);
     }
@@ -559,7 +559,7 @@ void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)
     m_pendingReplies.erase(p->m_serial);
 }
 
-void TransceiverPrivate::cancelAllPendingReplies()
+void ConnectionPrivate::cancelAllPendingReplies()
 {
     // No locking because we should have no connections to other threads anymore at this point.
     // No const iteration followed by container clear because that has different semantics - many
@@ -576,10 +576,10 @@ void TransceiverPrivate::cancelAllPendingReplies()
     }
 }
 
-void TransceiverPrivate::discardPendingRepliesForSecondaryThread(TransceiverPrivate *transceiver)
+void ConnectionPrivate::discardPendingRepliesForSecondaryThread(ConnectionPrivate *connection)
 {
     for (auto it = m_pendingReplies.begin() ; it != m_pendingReplies.end(); ) {
-        if (it->second.asTransceiver() == transceiver) {
+        if (it->second.asConnection() == connection) {
             it = m_pendingReplies.erase(it);
             // notification and deletion are handled on the event's source thread
         } else {
@@ -588,9 +588,9 @@ void TransceiverPrivate::discardPendingRepliesForSecondaryThread(TransceiverPriv
     }
 }
 
-void TransceiverPrivate::processEvent(Event *evt)
+void ConnectionPrivate::processEvent(Event *evt)
 {
-    // cerr << "TransceiverPrivate::processEvent() with event type " << evt->type << std::endl;
+    // cerr << "ConnectionPrivate::processEvent() with event type " << evt->type << std::endl;
 
     switch (evt->type) {
     case Event::SendMessage:
@@ -599,7 +599,7 @@ void TransceiverPrivate::processEvent(Event *evt)
 
     case Event::SendMessageWithPendingReply: {
         SendMessageWithPendingReplyEvent *pre = static_cast<SendMessageWithPendingReplyEvent *>(evt);
-        m_pendingReplies.emplace(pre->message.serial(), pre->transceiver);
+        m_pendingReplies.emplace(pre->message.serial(), pre->connection);
         sendPreparedMessage(std::move(pre->message));
         break;
     }
@@ -633,13 +633,13 @@ void TransceiverPrivate::processEvent(Event *evt)
         m_pendingReplies.erase(static_cast<PendingReplyCancelEvent *>(evt)->serial);
         break;
 
-    case Event::SecondaryTransceiverConnect: {
-        SecondaryTransceiverConnectEvent *sce = static_cast<SecondaryTransceiverConnectEvent *>(evt);
+    case Event::SecondaryConnectionConnect: {
+        SecondaryConnectionConnectEvent *sce = static_cast<SecondaryConnectionConnectEvent *>(evt);
 
         const auto it = find_if(m_unredeemedCommRefs.begin(), m_unredeemedCommRefs.end(),
                             [sce](const CommutexPeer &item) { return item.id() == sce->id; } );
         assert(it != m_unredeemedCommRefs.end());
-        const auto emplaced = m_secondaryThreadLinks.emplace(sce->transceiver, std::move(*it)).first;
+        const auto emplaced = m_secondaryThreadLinks.emplace(sce->connection, std::move(*it)).first;
         m_unredeemedCommRefs.erase(it);
 
         // "welcome package" - it's done (only) as an event to avoid locking order issues
@@ -647,28 +647,28 @@ void TransceiverPrivate::processEvent(Event *evt)
         if (locker.hasLock()) {
             UniqueNameReceivedEvent *evt = new UniqueNameReceivedEvent;
             evt->uniqueName = m_uniqueName;
-            EventDispatcherPrivate::get(sce->transceiver->m_eventDispatcher)
+            EventDispatcherPrivate::get(sce->connection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
 
         break;
     }
 
-    case Event::SecondaryTransceiverDisconnect: {
-        SecondaryTransceiverDisconnectEvent *sde = static_cast<SecondaryTransceiverDisconnectEvent *>(evt);
+    case Event::SecondaryConnectionDisconnect: {
+        SecondaryConnectionDisconnectEvent *sde = static_cast<SecondaryConnectionDisconnectEvent *>(evt);
         // delete our records to make sure we don't call into it in the future!
-        const auto found = m_secondaryThreadLinks.find(sde->transceiver);
+        const auto found = m_secondaryThreadLinks.find(sde->connection);
         if (found == m_secondaryThreadLinks.end()) {
             // looks like we've noticed the disappearance of the other thread earlier
             return;
         }
         m_secondaryThreadLinks.erase(found);
-        discardPendingRepliesForSecondaryThread(sde->transceiver);
+        discardPendingRepliesForSecondaryThread(sde->connection);
         break;
     }
-    case Event::MainTransceiverDisconnect:
+    case Event::MainConnectionDisconnect:
         // since the main thread *sent* us the event, it already knows to drop all our PendingReplies
-        m_mainThreadTransceiver = nullptr;
+        m_mainThreadConnection = nullptr;
         cancelAllPendingReplies();
         break;
 
@@ -680,11 +680,11 @@ void TransceiverPrivate::processEvent(Event *evt)
     }
 }
 
-Transceiver::CommRef Transceiver::createCommRef()
+Connection::CommRef Connection::createCommRef()
 {
     // TODO this is a good time to clean up "dead" CommRefs, where the counterpart was destroyed.
     CommRef ret;
-    ret.transceiver = d;
+    ret.connection = d;
     pair<CommutexPeer, CommutexPeer> link = CommutexPeer::createLink();
     {
         SpinLocker mainLocker(&d->m_lock);

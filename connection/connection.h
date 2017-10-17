@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef TRANSCEIVER_H
-#define TRANSCEIVER_H
+#ifndef CONNECTION_H
+#define CONNECTION_H
 
 #include "commutex.h"
 #include "types.h"
@@ -30,14 +30,14 @@
 #include <string>
 
 class ConnectAddress;
+class ConnectionPrivate;
 class Error;
 class EventDispatcher;
 class IMessageReceiver;
 class Message;
 class PendingReply;
-class TransceiverPrivate;
 
-class DFERRY_EXPORT Transceiver
+class DFERRY_EXPORT Connection
 {
 public:
     enum ThreadAffinity
@@ -46,23 +46,23 @@ public:
         ThreadLocalConnection
     };
 
-    // Reference for passing to another thread; it guarantees that the target Transceiver
+    // Reference for passing to another thread; it guarantees that the target Connection
     // either exists or not, but is not currently being destroyed. Yes, the data is all private.
     class CommRef
     {
-        friend class Transceiver;
-        TransceiverPrivate *transceiver;
+        friend class Connection;
+        ConnectionPrivate *connection;
         CommutexPeer commutex;
     };
 
     // for connecting to the session or system bus
-    Transceiver(EventDispatcher *dispatcher, const ConnectAddress &connectAddress);
-    // for reusing the connection of a Transceiver in another thread
-    Transceiver(EventDispatcher *dispatcher, CommRef otherTransceiver);
+    Connection(EventDispatcher *dispatcher, const ConnectAddress &connectAddress);
+    // for reusing the connection of a Connection in another thread
+    Connection(EventDispatcher *dispatcher, CommRef otherConnection);
 
-    ~Transceiver();
-    Transceiver(Transceiver &other) = delete;
-    Transceiver &operator=(Transceiver &other) = delete;
+    ~Connection();
+    Connection(Connection &other) = delete;
+    Connection &operator=(Connection &other) = delete;
 
     CommRef createCommRef();
 
@@ -95,8 +95,8 @@ public:
     void setSpontaneousMessageReceiver(IMessageReceiver *receiver);
 
 private:
-    friend class TransceiverPrivate;
-    TransceiverPrivate *d;
+    friend class ConnectionPrivate;
+    ConnectionPrivate *d;
 };
 
-#endif // TRANSCEIVER_H
+#endif // CONNECTION_H

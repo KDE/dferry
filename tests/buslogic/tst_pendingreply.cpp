@@ -27,7 +27,7 @@
 #include "imessagereceiver.h"
 #include "message.h"
 #include "pendingreply.h"
-#include "transceiver.h"
+#include "connection.h"
 
 #include "../testutil.h"
 
@@ -65,7 +65,7 @@ public:
 static void testBusAddress(bool waitForConnected)
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     Message msg;
     addressMessageToBus(&msg);
@@ -109,7 +109,7 @@ public:
 static void testTimeout()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     // finish creating the connection; we need to know our own name so we can send the message to
     // ourself so we can make sure that there will be no reply :)

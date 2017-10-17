@@ -25,8 +25,8 @@
 #include "pendingreply_p.h"
 
 #include "imessagereceiver.h"
-#include "transceiver.h"
-#include "transceiver_p.h"
+#include "connection.h"
+#include "connection_p.h"
 
 #include <cassert>
 #include <iostream>
@@ -42,12 +42,12 @@ PendingReply::~PendingReply()
         return;
     }
     if (!d->m_isFinished) {
-        if (d->m_transceiverOrReply.transceiver) {
-            d->m_transceiverOrReply.transceiver->unregisterPendingReply(d);
+        if (d->m_connectionOrReply.connection) {
+            d->m_connectionOrReply.connection->unregisterPendingReply(d);
         }
     } else {
-        if (d->m_transceiverOrReply.reply) {
-            delete d->m_transceiverOrReply.reply;
+        if (d->m_connectionOrReply.reply) {
+            delete d->m_connectionOrReply.reply;
         }
     }
     delete d;
@@ -88,8 +88,8 @@ PendingReply &PendingReply::operator=(PendingReply &&other)
 void PendingReplyPrivate::handleReceived(Message *reply)
 {
     m_isFinished = true;
-    // Transceiver has already unregistered us because it knows this reply is done
-    m_transceiverOrReply.reply = reply;
+    // Connection has already unregistered us because it knows this reply is done
+    m_connectionOrReply.reply = reply;
     m_replyTimeout.stop();
     if (m_receiver) {
         m_receiver->handlePendingReplyFinished(m_owner);
@@ -100,7 +100,7 @@ void PendingReply::dumpState()
 {
     std::cerr << "PendingReply::dumpState() " << d << '\n';
     if (d) {
-        std::cerr << d->m_owner << " " << d->m_transceiverOrReply.reply << " " << d->m_serial << " "
+        std::cerr << d->m_owner << " " << d->m_connectionOrReply.reply << " " << d->m_serial << " "
                   << int(d->m_error.code()) << " " /* << d->m_reply->type() */ << '\n';
     }
 }
@@ -155,16 +155,16 @@ IMessageReceiver *PendingReply::receiver() const
 
 const Message *PendingReply::reply() const
 {
-    return d->m_isFinished ? d->m_transceiverOrReply.reply : nullptr;
+    return d->m_isFinished ? d->m_connectionOrReply.reply : nullptr;
 }
 
 Message PendingReply::takeReply()
 {
     Message reply;
     if (d->m_isFinished) {
-        reply = std::move(*d->m_transceiverOrReply.reply);
-        delete d->m_transceiverOrReply.reply;
-        d->m_transceiverOrReply.reply = nullptr;
+        reply = std::move(*d->m_connectionOrReply.reply);
+        delete d->m_connectionOrReply.reply;
+        d->m_connectionOrReply.reply = nullptr;
     }
     return reply;
 }
@@ -175,9 +175,9 @@ void PendingReplyPrivate::handleCompletion(void *task)
     (void) task;
     assert(!m_isFinished);
     // if a reply comes after the timout, it's too late and the reply is probably served as a spontaneous
-    // message by Transceiver
-    if (m_transceiverOrReply.transceiver) {
-        m_transceiverOrReply.transceiver->unregisterPendingReply(this);
+    // message by Connection
+    if (m_connectionOrReply.connection) {
+        m_connectionOrReply.connection->unregisterPendingReply(this);
     }
     handleError(Error::Timeout);
 }
@@ -191,7 +191,7 @@ void PendingReplyPrivate::handleError(Error error)
         m_error = error;
     }
     m_isFinished = true;
-    m_transceiverOrReply.reply = nullptr;
+    m_connectionOrReply.reply = nullptr;
     if (m_receiver) {
         m_receiver->handlePendingReplyFinished(m_owner);
     }
