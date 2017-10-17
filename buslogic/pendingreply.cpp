@@ -85,14 +85,14 @@ PendingReply &PendingReply::operator=(PendingReply &&other)
     return *this;
 }
 
-void PendingReplyPrivate::notifyDone(Message *reply)
+void PendingReplyPrivate::handleReceived(Message *reply)
 {
     m_isFinished = true;
     // Transceiver has already unregistered us because it knows this reply is done
     m_transceiverOrReply.reply = reply;
     m_replyTimeout.stop();
     if (m_receiver) {
-        m_receiver->pendingReplyFinished(m_owner);
+        m_receiver->handlePendingReplyFinished(m_owner);
     }
 }
 
@@ -169,7 +169,7 @@ Message PendingReply::takeReply()
     return reply;
 }
 
-void PendingReplyPrivate::notifyCompletion(void *task)
+void PendingReplyPrivate::handleCompletion(void *task)
 {
     assert(task == &m_replyTimeout);
     (void) task;
@@ -179,10 +179,10 @@ void PendingReplyPrivate::notifyCompletion(void *task)
     if (m_transceiverOrReply.transceiver) {
         m_transceiverOrReply.transceiver->unregisterPendingReply(this);
     }
-    doErrorCompletion(Error::Timeout);
+    handleError(Error::Timeout);
 }
 
-void PendingReplyPrivate::doErrorCompletion(Error error)
+void PendingReplyPrivate::handleError(Error error)
 {
     // When there is an error before or during sending, we already have an error, and the timeout it set to
     // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
@@ -193,6 +193,6 @@ void PendingReplyPrivate::doErrorCompletion(Error error)
     m_isFinished = true;
     m_transceiverOrReply.reply = nullptr;
     if (m_receiver) {
-        m_receiver->pendingReplyFinished(m_owner);
+        m_receiver->handlePendingReplyFinished(m_owner);
     }
 }

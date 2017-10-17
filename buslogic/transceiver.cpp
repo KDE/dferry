@@ -47,7 +47,7 @@ using namespace std;
 class HelloReceiver : public IMessageReceiver
 {
 public:
-    void pendingReplyFinished(PendingReply *pr) override
+    void handlePendingReplyFinished(PendingReply *pr) override
     {
         assert(pr == &m_helloReply);
         (void) pr;
@@ -66,7 +66,7 @@ public:
         delete m_server;
     }
 
-    void notifyCompletion(void *) override
+    void handleCompletion(void *) override
     {
         m_parent->handleClientConnected();
     }
@@ -389,7 +389,7 @@ Error Transceiver::sendNoReply(Message m)
     }
 
     // pass ownership to the send queue now because if the IO system decided to send the message without
-    // going through an event loop iteration, notifyCompletion would be called and expects the message to
+    // going through an event loop iteration, handleCompletion would be called and expects the message to
     // be in the queue
 
     if (!d->m_mainThreadTransceiver) {
@@ -438,7 +438,7 @@ void Transceiver::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
     d->m_client = receiver;
 }
 
-void TransceiverPrivate::notifyCompletion(void *task)
+void TransceiverPrivate::handleCompletion(void *task)
 {
     switch (m_state) {
     case Authenticating: {
@@ -470,7 +470,7 @@ void TransceiverPrivate::notifyCompletion(void *task)
 
             if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {
-                    m_client->spontaneousMessageReceived(Message(move(*receivedMessage)));
+                    m_client->handleSpontaneousMessageReceived(Message(move(*receivedMessage)));
                 }
                 // dispatch to other threads listening to spontaneous messages, if any
                 for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
@@ -515,7 +515,7 @@ bool TransceiverPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
     if (PendingReplyPrivate *pr = it->second.asPendingReply()) {
         m_pendingReplies.erase(it);
         assert(!pr->m_isFinished);
-        pr->notifyDone(receivedMessage);
+        pr->handleReceived(receivedMessage);
     } else {
         // forward to other thread's Transceiver
         TransceiverPrivate *transceiver = it->second.asTransceiver();
@@ -571,7 +571,7 @@ void TransceiverPrivate::cancelAllPendingReplies()
         PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
         it = m_pendingReplies.erase(it);
         if (pendingPriv) { // if from this thread
-            pendingPriv->doErrorCompletion(Error::LocalDisconnect);
+            pendingPriv->handleError(Error::LocalDisconnect);
         }
     }
 }
@@ -606,7 +606,7 @@ void TransceiverPrivate::processEvent(Event *evt)
     case Event::SpontaneousMessageReceived:
         if (m_client) {
             SpontaneousMessageReceivedEvent *smre = static_cast<SpontaneousMessageReceivedEvent *>(evt);
-            m_client->spontaneousMessageReceived(Message(move(smre->message)));
+            m_client->handleSpontaneousMessageReceived(Message(move(smre->message)));
         }
         break;
 
@@ -624,7 +624,7 @@ void TransceiverPrivate::processEvent(Event *evt)
         }
         PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
         m_pendingReplies.erase(it);
-        pendingPriv->doErrorCompletion(prfe->m_error);
+        pendingPriv->handleError(prfe->m_error);
         break;
     }
 

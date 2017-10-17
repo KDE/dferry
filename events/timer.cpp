@@ -148,7 +148,7 @@ void Timer::trigger()
     bool alive = true;
     m_reentrancyGuard = &alive;
     if (m_completionClient) {
-        m_completionClient->notifyCompletion(this);
+        m_completionClient->handleCompletion(this);
     }
     // if we we've been destroyed, we don't touch the member variable
     if (alive) {

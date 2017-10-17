@@ -70,7 +70,7 @@ LocalServer::~LocalServer()
     close();
 }
 
-void LocalServer::notifyRead()
+void LocalServer::handleCanRead()
 {
     setEventDispatcher(nullptr);
     int connFd = accept(m_listenFd, nullptr, nullptr);
@@ -81,11 +81,11 @@ void LocalServer::notifyRead()
 
     m_incomingConnections.push_back(new LocalSocket(connFd));
     if (m_newConnectionClient) {
-        m_newConnectionClient->notifyCompletion(this);
+        m_newConnectionClient->handleCompletion(this);
     }
 }
 
-void LocalServer::notifyWrite()
+void LocalServer::handleCanWrite()
 {
     // We never registered this to be called, so...
     assert(false);

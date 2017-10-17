@@ -36,7 +36,7 @@ class BamPrinter : public ICompletionClient
 public:
     BamPrinter(const char *customMessage, uint64 startTime)
        : m_customMessage(customMessage), m_startTime(startTime) {}
-    void notifyCompletion(void *task) override
+    void handleCompletion(void *task) override
     {
         uint64 timeDiff = PlatformTime::monotonicMsecs() - m_startTime;
         std::cout << "BAM " << task << ' ' << timeDiff << ' ' << m_customMessage << " #" << m_counter++ << '\n';
@@ -97,7 +97,7 @@ public:
     AccuracyTester()
        : m_lastTriggerTime(PlatformTime::monotonicMsecs())
     {}
-    void notifyCompletion(void *task) override
+    void handleCompletion(void *task) override
     {
         Timer *timer = reinterpret_cast<Timer *>(task);
         uint64 currentTime = PlatformTime::monotonicMsecs();
@@ -151,7 +151,7 @@ public:
         m_ttl.setCompletionClient(this);
         m_ttl.setRunning(true);
     }
-    void notifyCompletion(void * /*task*/) override
+    void handleCompletion(void * /*task*/) override
     {
         m_ttl.eventDispatcher()->interrupt();
         m_ttl.setRunning(false);

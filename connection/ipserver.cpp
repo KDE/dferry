@@ -82,7 +82,7 @@ IpServer::~IpServer()
     close();
 }
 
-void IpServer::notifyRead()
+void IpServer::handleCanRead()
 {
     setEventDispatcher(nullptr);
     FileDescriptor connFd = accept(m_listenFd, nullptr, nullptr);
@@ -95,11 +95,11 @@ void IpServer::notifyRead()
 #endif
     m_incomingConnections.push_back(new IpSocket(connFd));
     if (m_newConnectionClient) {
-        m_newConnectionClient->notifyCompletion(this);
+        m_newConnectionClient->handleCompletion(this);
     }
 }
 
-void IpServer::notifyWrite()
+void IpServer::handleCanWrite()
 {
     // We never registered this to be called, so...
     assert(false);

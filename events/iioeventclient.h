@@ -41,8 +41,8 @@ public:
 
 protected:
     friend class EventDispatcherPrivate;
-    virtual void notifyRead() = 0;
-    virtual void notifyWrite() = 0;
+    virtual void handleCanRead() = 0;
+    virtual void handleCanWrite() = 0;
 };
 
 #endif // IIOEVENTCLIENT_H

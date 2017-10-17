@@ -49,7 +49,7 @@ public:
     void close() override;
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
-    void notifyRead() override;
+    void handleCanRead() override;
     // end IConnection
 
     LocalSocket() = delete;

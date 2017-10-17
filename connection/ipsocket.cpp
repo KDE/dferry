@@ -226,10 +226,10 @@ FileDescriptor IpSocket::fileDescriptor() const
     return m_fd;
 }
 
-void IpSocket::notifyRead()
+void IpSocket::handleCanRead()
 {
     if (availableBytesForReading()) {
-        IConnection::notifyRead();
+        IConnection::handleCanRead();
     } else {
         // This should really only happen in error cases! ### TODO test?
         close();

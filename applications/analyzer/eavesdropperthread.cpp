@@ -90,7 +90,7 @@ void EavesdropperThread::run()
     m_thread.quit();
 }
 
-void EavesdropperThread::spontaneousMessageReceived(Message message)
+void EavesdropperThread::handleSpontaneousMessageReceived(Message message)
 {
     emit messageReceived(new Message(std::move(message)), m_timer.nsecsElapsed());
 }

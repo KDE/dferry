@@ -69,11 +69,11 @@ bool IConnectionClient::writeNotificationEnabled() const
     return m_writeNotificationEnabled;
 }
 
-void IConnectionClient::notifyConnectionReadyRead()
+void IConnectionClient::handleConnectionCanRead()
 {
 }
 
-void IConnectionClient::notifyConnectionReadyWrite()
+void IConnectionClient::handleConnectionCanWrite()
 {
 }
 

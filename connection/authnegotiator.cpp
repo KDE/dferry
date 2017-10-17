@@ -93,14 +93,14 @@ void AuthNegotiator::setCompletionClient(ICompletionClient *client)
     m_completionClient = client;
 }
 
-void AuthNegotiator::notifyConnectionReadyRead()
+void AuthNegotiator::handleConnectionCanRead()
 {
     bool wasFinished = isFinished();
     while (!isFinished() && readLine()) {
         advanceState();
     }
     if (isFinished() && !wasFinished && m_completionClient) {
-        m_completionClient->notifyCompletion(this);
+        m_completionClient->handleCompletion(this);
     }
 }
 

@@ -85,8 +85,8 @@ public:
     MessagePrivate(const MessagePrivate &other, Message *parent);
     ~MessagePrivate();
 
-    void notifyConnectionReadyRead() override;
-    void notifyConnectionReadyWrite() override;
+    void handleConnectionCanRead() override;
+    void handleConnectionCanWrite() override;
 
     // IConnection is non-public API, so these make no sense in the public interface
     void receive(IConnection *connection); // fills in this message from connection

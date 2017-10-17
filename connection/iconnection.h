@@ -66,8 +66,8 @@ public:
 protected:
     friend class EventDispatcher;
     // IioEventClient
-    void notifyRead() override;
-    void notifyWrite() override;
+    void handleCanRead() override;
+    void handleCanWrite() override;
 
     bool m_supportsFileDescriptors;
 

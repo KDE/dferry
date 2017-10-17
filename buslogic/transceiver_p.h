@@ -92,7 +92,7 @@ public:
     Error prepareSend(Message *msg);
     void sendPreparedMessage(Message msg);
 
-    void notifyCompletion(void *task) override;
+    void handleCompletion(void *task) override;
     bool maybeDispatchToPendingReply(Message *m);
     void receiveNextMessage();
 

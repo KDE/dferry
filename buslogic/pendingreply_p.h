@@ -47,10 +47,10 @@ public:
     }
 
     // for Transceiver
-    void notifyDone(Message *reply);
-    void doErrorCompletion(Error error);
+    void handleReceived(Message *reply);
+    void handleError(Error error);
     // for m_replyTimeout
-    void notifyCompletion(void *task) override;
+    void handleCompletion(void *task) override;
 
     PendingReply *m_owner;
     union {

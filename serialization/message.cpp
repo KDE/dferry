@@ -721,11 +721,11 @@ void MessagePrivate::setCompletionClient(ICompletionClient *client)
 void MessagePrivate::notifyCompletionClient()
 {
     if (m_completionClient) {
-        m_completionClient->notifyCompletion(m_message);
+        m_completionClient->handleCompletion(m_message);
     }
 }
 
-void MessagePrivate::notifyConnectionReadyRead()
+void MessagePrivate::handleConnectionCanRead()
 {
     if (m_state != Deserializing) {
         return;
@@ -800,7 +800,7 @@ void MessagePrivate::notifyConnectionReadyRead()
     }
 }
 
-void MessagePrivate::notifyConnectionReadyWrite()
+void MessagePrivate::handleConnectionCanWrite()
 {
     if (m_state != Serializing) {
         return;

@@ -153,12 +153,12 @@ void EventDispatcherPrivate::notifyClientForReading(FileDescriptor fd)
 {
     unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
     if (it != m_ioClients.end()) {
-        it->second->notifyRead();
+        it->second->handleCanRead();
     } else {
 
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
-        // set and disconnected in its notifyRead() or notifyWrite() implementation
+        // set and disconnected in its handleCanRead() or handleCanWrite() implementation
         std::cerr << "EventDispatcherPrivate::notifyClientForReading(): unhandled file descriptor "
                   <<  fd << ".\n";
 #endif
@@ -169,11 +169,11 @@ void EventDispatcherPrivate::notifyClientForWriting(FileDescriptor fd)
 {
     unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
     if (it != m_ioClients.end()) {
-        it->second->notifyWrite();
+        it->second->handleCanWrite();
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
-        // set and disconnected in its notifyRead() or notifyWrite() implementation
+        // set and disconnected in its handleCanRead() or handleCanWrite() implementation
         std::cerr << "EventDispatcherPrivate::notifyClientForWriting(): unhandled file descriptor "
                   <<  fd << ".\n";
 #endif

@@ -48,7 +48,7 @@ static void test_signatureHeader()
 class PrintAndTerminateClient : public IMessageReceiver
 {
 public:
-    void spontaneousMessageReceived(Message msg) override
+    void handleSpontaneousMessageReceived(Message msg) override
     {
         cout << msg.prettyPrint();
         m_eventDispatcher->interrupt();
@@ -59,7 +59,7 @@ public:
 class PrintAndReplyClient : public IMessageReceiver
 {
 public:
-    void spontaneousMessageReceived(Message msg) override
+    void handleSpontaneousMessageReceived(Message msg) override
     {
         cout << msg.prettyPrint();
         m_transceiver->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));

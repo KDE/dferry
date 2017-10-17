@@ -42,8 +42,8 @@ public:
 
     FileDescriptor fileDescriptor() const override;
 
-    void notifyRead() override;
-    void notifyWrite() override;
+    void handleCanRead() override;
+    void handleCanWrite() override;
 
 private:
     int m_listenFd;

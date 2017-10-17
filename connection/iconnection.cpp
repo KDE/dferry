@@ -135,21 +135,21 @@ EventDispatcher *IConnection::eventDispatcher() const
     return m_eventDispatcher;
 }
 
-void IConnection::notifyRead()
+void IConnection::handleCanRead()
 {
     for (IConnectionClient *client : m_clients) {
         if (client->readNotificationEnabled()) {
-            client->notifyConnectionReadyRead();
+            client->handleConnectionCanRead();
             break;
         }
     }
 }
 
-void IConnection::notifyWrite()
+void IConnection::handleCanWrite()
 {
     for (IConnectionClient *client : m_clients) {
         if (client->writeNotificationEnabled()) {
-            client->notifyConnectionReadyWrite();
+            client->handleConnectionCanWrite();
             break;
         }
     }

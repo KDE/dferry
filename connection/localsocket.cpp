@@ -297,10 +297,10 @@ int LocalSocket::fileDescriptor() const
     return m_fd;
 }
 
-void LocalSocket::notifyRead()
+void LocalSocket::handleCanRead()
 {
     if (availableBytesForReading()) {
-        IConnection::notifyRead();
+        IConnection::handleCanRead();
     } else {
         // This should really only happen in error cases! ### TODO test?
         close();

@@ -40,7 +40,7 @@ public:
     explicit AuthNegotiator(IConnection *connection);
 
     // reimplemented from IConnectionClient
-    virtual void notifyConnectionReadyRead();
+    virtual void handleConnectionCanRead();
 
     bool isFinished() const;
     bool isAuthenticated() const;

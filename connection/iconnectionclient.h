@@ -40,8 +40,8 @@ public:
 
     // public mainly for testing purposes - only call if you know what you're doing
     // no-op default implementations are provided so you only need to reimplement what you need
-    virtual void notifyConnectionReadyRead();
-    virtual void notifyConnectionReadyWrite();
+    virtual void handleConnectionCanRead();
+    virtual void handleConnectionCanWrite();
 
 protected:
     IConnection *connection() const; // returns m_connection

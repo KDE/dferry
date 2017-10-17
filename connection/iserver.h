@@ -55,7 +55,7 @@ public:
 
 protected:
     friend class EventDispatcher;
-    // notifyRead() and notifyWrite() from IioEventClient stay pure virtual
+    // handleCanRead() and handleCanWrite() from IioEventClient stay pure virtual
 
     std::deque<IConnection *> m_incomingConnections;
     ICompletionClient *m_newConnectionClient;
