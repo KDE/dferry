@@ -28,8 +28,6 @@
 
 #include <string>
 
-class IConnectionListener;
-
 class LocalSocket : public IConnection
 {
 public:
@@ -58,7 +56,6 @@ public:
 
 private:
     friend class IEventLoop;
-    friend class IConnectionListener;
 
     int m_fd;
 };

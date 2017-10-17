@@ -28,7 +28,6 @@
 
 #include <string>
 
-class IConnectionListener;
 class ConnectAddress;
 
 class IpSocket : public IConnection
@@ -57,7 +56,6 @@ public:
 
 private:
     friend class IEventLoop;
-    friend class IConnectionListener;
 
     FileDescriptor m_fd;
 };
