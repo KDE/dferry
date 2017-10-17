@@ -23,7 +23,7 @@
 
 #include "iserver.h"
 
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "eventdispatcher_p.h"
 #include "iconnection.h"
 #include "ipserver.h"
@@ -47,21 +47,21 @@ IServer::~IServer()
 }
 
 //static
-IServer *IServer::create(const ConnectionInfo &ci)
+IServer *IServer::create(const ConnectAddress &ca)
 {
-    if (ci.bus() != ConnectionInfo::Bus::PeerToPeer) {
+    if (ca.bus() != ConnectAddress::Bus::PeerToPeer) {
         return nullptr;
     }
 
-    switch (ci.socketType()) {
+    switch (ca.socketType()) {
 #ifdef __unix__
-    case ConnectionInfo::SocketType::Unix:
-        return new LocalServer(ci.path());
-    case ConnectionInfo::SocketType::AbstractUnix:
-        return new LocalServer(std::string(1, '\0') + ci.path());
+    case ConnectAddress::SocketType::Unix:
+        return new LocalServer(ca.path());
+    case ConnectAddress::SocketType::AbstractUnix:
+        return new LocalServer(std::string(1, '\0') + ca.path());
 #endif
-    case ConnectionInfo::SocketType::Ip:
-        return new IpServer(ci);
+    case ConnectAddress::SocketType::Ip:
+        return new IpServer(ca);
     default:
         return nullptr;
     }

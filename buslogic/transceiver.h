@@ -29,7 +29,7 @@
 
 #include <string>
 
-class ConnectionInfo;
+class ConnectAddress;
 class Error;
 class EventDispatcher;
 class IMessageReceiver;
@@ -56,7 +56,7 @@ public:
     };
 
     // for connecting to the session or system bus
-    Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &connectionInfo);
+    Transceiver(EventDispatcher *dispatcher, const ConnectAddress &connectAddress);
     // for reusing the connection of a Transceiver in another thread
     Transceiver(EventDispatcher *dispatcher, CommRef otherTransceiver);
 
@@ -81,7 +81,7 @@ public:
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
     Error sendNoReply(Message m);
 
-    ConnectionInfo connectionInfo() const;
+    ConnectAddress connectAddress() const;
     std::string uniqueName() const;
     bool isConnected() const;
 

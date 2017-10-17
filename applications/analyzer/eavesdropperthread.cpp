@@ -24,7 +24,7 @@
 #include "eavesdropperthread.h"
 
 #include "arguments.h"
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "eavesdroppermodel.h"
 #include "error.h"
 #include "eventdispatcher.h"
@@ -67,7 +67,7 @@ void EavesdropperThread::run()
     m_timer.start();
     m_dispatcher = new EventDispatcher;
 
-    m_transceiver = new Transceiver(m_dispatcher, ConnectionInfo::Bus::Session);
+    m_transceiver = new Transceiver(m_dispatcher, ConnectAddress::Bus::Session);
     m_transceiver->setSpontaneousMessageReceiver(this);
     {
         static const int messageTypeCount = 4;

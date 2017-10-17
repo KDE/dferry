@@ -22,7 +22,7 @@
 */
 
 #include "arguments.h"
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "error.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
@@ -69,16 +69,16 @@ public:
 };
 
 // used during implementation, is supposed to not crash and be valgrind-clean afterwards
-void testBasic(const ConnectionInfo &clientConnection)
+void testBasic(const ConnectAddress &clientAddress)
 {
     EventDispatcher dispatcher;
 
-    ConnectionInfo serverConnection = clientConnection;
-    serverConnection.setRole(ConnectionInfo::Role::Server);
+    ConnectAddress serverAddress = clientAddress;
+    serverAddress.setRole(ConnectAddress::Role::Server);
 
-    Transceiver serverTransceiver(&dispatcher, serverConnection);
+    Transceiver serverTransceiver(&dispatcher, serverAddress);
     cout << "Created server transceiver. " << &serverTransceiver << endl;
-    Transceiver clientTransceiver(&dispatcher, clientConnection);
+    Transceiver clientTransceiver(&dispatcher, clientAddress);
     cout << "Created client transceiver. " << &clientTransceiver << endl;
 
     PrintAndReplyClient printAndReplyClient;
@@ -137,20 +137,20 @@ int main(int, char *[])
     test_signatureHeader();
 #ifdef __linux__
     {
-        ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
-        clientConnection.setSocketType(ConnectionInfo::SocketType::AbstractUnix);
-        clientConnection.setRole(ConnectionInfo::Role::Client);
-        clientConnection.setPath("dferry.Test.Message");
-        testBasic(clientConnection);
+        ConnectAddress clientAddress(ConnectAddress::Bus::PeerToPeer);
+        clientAddress.setSocketType(ConnectAddress::SocketType::AbstractUnix);
+        clientAddress.setRole(ConnectAddress::Role::Client);
+        clientAddress.setPath("dferry.Test.Message");
+        testBasic(clientAddress);
     }
 #endif
     // TODO: SocketType::Unix works on any Unix-compatible OS, but we'll need to construct a path
     {
-        ConnectionInfo clientConnection(ConnectionInfo::Bus::PeerToPeer);
-        clientConnection.setSocketType(ConnectionInfo::SocketType::Ip);
-        clientConnection.setPort(6800);
-        clientConnection.setRole(ConnectionInfo::Role::Client);
-        testBasic(clientConnection);
+        ConnectAddress clientAddress(ConnectAddress::Bus::PeerToPeer);
+        clientAddress.setSocketType(ConnectAddress::SocketType::Ip);
+        clientAddress.setPort(6800);
+        clientAddress.setRole(ConnectAddress::Role::Client);
+        testBasic(clientAddress);
     }
 
     testMessageLength();

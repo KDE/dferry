@@ -26,7 +26,7 @@
 
 #include "transceiver.h"
 
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "eventdispatcher_p.h"
 #include "icompletionclient.h"
 #include "spinlock.h"
@@ -126,7 +126,7 @@ public:
     ClientConnectedHandler *m_clientConnectedHandler;
 
     EventDispatcher *m_eventDispatcher;
-    ConnectionInfo m_connectionInfo;
+    ConnectAddress m_connectAddress;
     std::string m_uniqueName;
     AuthNegotiator *m_authNegotiator;
 

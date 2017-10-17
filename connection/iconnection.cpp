@@ -27,7 +27,7 @@
 #include "eventdispatcher_p.h"
 #include "iconnectionclient.h"
 #include "ipsocket.h"
-#include "connectioninfo.h"
+#include "connectaddress.h"
 
 #ifdef __unix__
 #include "localsocket.h"
@@ -156,16 +156,16 @@ void IConnection::handleCanWrite()
 }
 
 //static
-IConnection *IConnection::create(const ConnectionInfo &ci)
+IConnection *IConnection::create(const ConnectAddress &ci)
 {
     switch (ci.socketType()) {
 #ifdef __unix__
-        case ConnectionInfo::SocketType::Unix:
+        case ConnectAddress::SocketType::Unix:
         return new LocalSocket(ci.path());
-    case ConnectionInfo::SocketType::AbstractUnix:
+    case ConnectAddress::SocketType::AbstractUnix:
         return new LocalSocket(string(1, '\0') + ci.path());
 #endif
-    case ConnectionInfo::SocketType::Ip:
+    case ConnectAddress::SocketType::Ip:
         return new IpSocket(ci);
     default:
         assert(false);

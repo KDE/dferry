@@ -23,7 +23,7 @@
 
 #include "ipserver.h"
 
-#include "connectioninfo.h"
+#include "connectaddress.h"
 
 #include "icompletionclient.h"
 #include "ipsocket.h"
@@ -43,10 +43,10 @@
 
 #include <iostream>
 
-IpServer::IpServer(const ConnectionInfo &ci)
+IpServer::IpServer(const ConnectAddress &ca)
    : m_listenFd(-1)
 {
-    assert(ci.socketType() == ConnectionInfo::SocketType::Ip);
+    assert(ca.socketType() == ConnectAddress::SocketType::Ip);
 
     const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
     if (!isValidFileDescriptor(fd)) {
@@ -59,7 +59,7 @@ IpServer::IpServer(const ConnectionInfo &ci)
 #endif
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(ci.port());
+    addr.sin_port = htons(ca.port());
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     bool ok = bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;

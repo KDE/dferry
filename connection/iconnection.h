@@ -30,7 +30,7 @@
 
 #include <vector>
 
-class ConnectionInfo;
+class ConnectAddress;
 class EventDispatcher;
 class IConnectionClient;
 class SelectEventPoller;
@@ -61,7 +61,7 @@ public:
     EventDispatcher *eventDispatcher() const override;
 
     // factory method - creates a suitable subclass to connect to address
-    static IConnection *create(const ConnectionInfo &connectionInfo);
+    static IConnection *create(const ConnectAddress &connectAddress);
 
 protected:
     friend class EventDispatcher;

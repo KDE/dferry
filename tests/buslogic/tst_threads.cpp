@@ -22,7 +22,7 @@
 */
 
 #include "arguments.h"
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"
@@ -132,7 +132,7 @@ public:
 static void testPingPong()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
+    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> pongThreadReady(false);
     std::thread pongThread(pongThreadRun, trans.createCommRef(), &pongThreadReady);
@@ -216,7 +216,7 @@ static void timeoutThreadRun(Transceiver::CommRef mainTransceiverRef, std::atomi
 static void testThreadedTimeout()
 {
     EventDispatcher eventDispatcher;
-    Transceiver trans(&eventDispatcher, ConnectionInfo::Bus::Session);
+    Transceiver trans(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> done(false);
     std::thread timeoutThread(timeoutThreadRun, trans.createCommRef(), &done);

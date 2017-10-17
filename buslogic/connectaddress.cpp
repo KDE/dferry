@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "connectioninfo.h"
+#include "connectaddress.h"
 
 #include "stringtools.h"
 
@@ -217,33 +217,33 @@ static string sessionBusAddressFromShm()
 #endif
 
 
-class ConnectionInfo::Private
+class ConnectAddress::Private
 {
 public:
     Private()
-       : m_bus(ConnectionInfo::Bus::None),
-         m_socketType(ConnectionInfo::SocketType::None),
-         m_role(ConnectionInfo::Role::None),
+       : m_bus(ConnectAddress::Bus::None),
+         m_socketType(ConnectAddress::SocketType::None),
+         m_role(ConnectAddress::Role::None),
          m_port(-1)
     {}
 
     void fetchSessionBusInfo();
     void parseSessionBusInfo(std::string info);
 
-    ConnectionInfo::Bus m_bus;
-    ConnectionInfo::SocketType m_socketType;
-    ConnectionInfo::Role m_role;
+    ConnectAddress::Bus m_bus;
+    ConnectAddress::SocketType m_socketType;
+    ConnectAddress::Role m_role;
     std::string m_path;
     int m_port;
     std::string m_guid;
 };
 
-ConnectionInfo::ConnectionInfo()
+ConnectAddress::ConnectAddress()
    : d(new Private)
 {
 }
 
-ConnectionInfo::ConnectionInfo(Bus bus)
+ConnectAddress::ConnectAddress(Bus bus)
    : d(new Private)
 {
     d->m_bus = bus;
@@ -265,12 +265,12 @@ ConnectionInfo::ConnectionInfo(Bus bus)
     }
 }
 
-ConnectionInfo::ConnectionInfo(const ConnectionInfo &other)
+ConnectAddress::ConnectAddress(const ConnectAddress &other)
    : d(new Private(*other.d))
 {
 }
 
-ConnectionInfo &ConnectionInfo::operator=(const ConnectionInfo &other)
+ConnectAddress &ConnectAddress::operator=(const ConnectAddress &other)
 {
     if (this != &other) {
         *d = *other.d;
@@ -278,69 +278,69 @@ ConnectionInfo &ConnectionInfo::operator=(const ConnectionInfo &other)
     return *this;
 }
 
-ConnectionInfo::~ConnectionInfo()
+ConnectAddress::~ConnectAddress()
 {
     delete d;
     d = nullptr;
 }
 
-void ConnectionInfo::setBus(Bus bus)
+void ConnectAddress::setBus(Bus bus)
 {
     d->m_bus = bus;
 }
 
-ConnectionInfo::Bus ConnectionInfo::bus() const
+ConnectAddress::Bus ConnectAddress::bus() const
 {
     return d->m_bus;
 }
 
-void ConnectionInfo::setSocketType(SocketType socketType)
+void ConnectAddress::setSocketType(SocketType socketType)
 {
     d->m_socketType = socketType;
 }
 
-ConnectionInfo::SocketType ConnectionInfo::socketType() const
+ConnectAddress::SocketType ConnectAddress::socketType() const
 {
     return d->m_socketType;
 }
 
-void ConnectionInfo::setRole(Role role)
+void ConnectAddress::setRole(Role role)
 {
     d->m_role = role;
 }
 
-ConnectionInfo::Role ConnectionInfo::role() const
+ConnectAddress::Role ConnectAddress::role() const
 {
     return d->m_role;
 }
 
-void ConnectionInfo::setPath(const std::string &path)
+void ConnectAddress::setPath(const std::string &path)
 {
     d->m_path = path;
 }
 
-string ConnectionInfo::path() const
+string ConnectAddress::path() const
 {
     return d->m_path;
 }
 
-void ConnectionInfo::setPort(int port)
+void ConnectAddress::setPort(int port)
 {
     d->m_port = port;
 }
 
-int ConnectionInfo::port() const
+int ConnectAddress::port() const
 {
     return d->m_port;
 }
 
-string ConnectionInfo::guid() const
+string ConnectAddress::guid() const
 {
     return d->m_guid;
 }
 
 
-void ConnectionInfo::Private::fetchSessionBusInfo()
+void ConnectAddress::Private::fetchSessionBusInfo()
 {
     string line;
 #ifdef __unix__
@@ -370,7 +370,7 @@ void ConnectionInfo::Private::fetchSessionBusInfo()
     parseSessionBusInfo(line);
 }
 
-void ConnectionInfo::Private::parseSessionBusInfo(string info)
+void ConnectAddress::Private::parseSessionBusInfo(string info)
 {
     // typical input on Linux: "unix:abstract=/tmp/dbus-BrYfzr7UIv,guid=6c79b601925e949a9fe0c9ea565d80e8"
     // Windows: "tcp:host=localhost,port=64707,family=ipv4,guid=11ec225ce5f514366eec72f10000011d"

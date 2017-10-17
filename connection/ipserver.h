@@ -28,12 +28,12 @@
 
 #include <string>
 
-class ConnectionInfo;
+class ConnectAddress;
 
 class IpServer : public IServer
 {
 public:
-    IpServer(const ConnectionInfo &ci);
+    IpServer(const ConnectAddress &ca);
     ~IpServer();
 
     bool isListening() const override;

@@ -23,7 +23,7 @@
 
 #include "ipsocket.h"
 
-#include "connectioninfo.h"
+#include "connectaddress.h"
 
 #ifdef __unix__
 #include <netinet/in.h>
@@ -51,10 +51,10 @@ static const int maxFds = 12;
 
 using namespace std;
 
-IpSocket::IpSocket(const ConnectionInfo &ci)
+IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
 {
-    assert(ci.socketType() == ConnectionInfo::SocketType::Ip);
+    assert(ca.socketType() == ConnectAddress::SocketType::Ip);
 #ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
@@ -71,7 +71,7 @@ IpSocket::IpSocket(const ConnectionInfo &ci)
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(ci.port());
+    addr.sin_port = htons(ca.port());
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     bool ok = connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;

@@ -22,7 +22,7 @@
 */
 
 #include "arguments.h"
-#include "connectioninfo.h"
+#include "connectaddress.h"
 #include "error.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
@@ -69,16 +69,16 @@ int main(int argc, char *argv[])
 {
     EventDispatcher dispatcher;
 
-    ConnectionInfo::Bus bus = ConnectionInfo::Bus::Session;
+    ConnectAddress::Bus bus = ConnectAddress::Bus::Session;
     for (int i = 1; i < argc; i++) {
         string s = argv[i];
         if (s == "--help") {
             printHelp();
             exit(0);
         } else if (s == "--system-bus") {
-            bus = ConnectionInfo::Bus::System;
+            bus = ConnectAddress::Bus::System;
         } else if (s == "--session-bus") {
-            bus = ConnectionInfo::Bus::Session;
+            bus = ConnectAddress::Bus::Session;
         } else {
             std::cerr << "Unknown option \"" << s << "\".\n";
             printHelp();

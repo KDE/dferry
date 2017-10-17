@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef CONNECTIONINFO_H
-#define CONNECTIONINFO_H
+#ifndef CONNECTADDRESS_H
+#define CONNECTADDRESS_H
 
 #include "export.h"
 
@@ -31,7 +31,7 @@
 // I think we don't need to bother with subclasses, which will add boilerplate
 // while on the other hand all-in-one isn't particularly easy to misuse.
 
-class DFERRY_EXPORT ConnectionInfo
+class DFERRY_EXPORT ConnectAddress
 {
 public:
     enum class Bus : unsigned char
@@ -61,12 +61,12 @@ public:
         Server
     };
 
-    ConnectionInfo();
+    ConnectAddress();
     // Intentionally not explicit; it resolves the details of a bus address
-    ConnectionInfo(Bus bus);
-    ConnectionInfo(const ConnectionInfo &other);
-    ConnectionInfo &operator=(const ConnectionInfo &other);
-    ~ConnectionInfo();
+    ConnectAddress(Bus bus);
+    ConnectAddress(const ConnectAddress &other);
+    ConnectAddress &operator=(const ConnectAddress &other);
+    ~ConnectAddress();
 
     void setBus(Bus bus);
     Bus bus() const;
@@ -92,4 +92,4 @@ private:
     Private *d;
 };
 
-#endif // CONNECTIONINFO_H
+#endif // CONNECTADDRESS_H

@@ -30,7 +30,7 @@
 
 #include <deque>
 
-class ConnectionInfo;
+class ConnectAddress;
 class EventDispatcher;
 class IConnection;
 class ICompletionClient;
@@ -51,7 +51,7 @@ public:
     virtual void setEventDispatcher(EventDispatcher *ed) override;
     virtual EventDispatcher *eventDispatcher() const override;
 
-    static IServer *create(const ConnectionInfo &connectionInfo);
+    static IServer *create(const ConnectAddress &connectAddress);
 
 protected:
     friend class EventDispatcher;

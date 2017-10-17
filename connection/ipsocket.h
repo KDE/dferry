@@ -29,13 +29,13 @@
 #include <string>
 
 class IConnectionListener;
-class ConnectionInfo;
+class ConnectAddress;
 
 class IpSocket : public IConnection
 {
 public:
     // Connect to local socket at socketFilePath
-    IpSocket(const ConnectionInfo &ci);
+    IpSocket(const ConnectAddress &ca);
     // Use an already open file descriptor
     IpSocket(FileDescriptor fd);
 

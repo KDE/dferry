@@ -44,7 +44,7 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/util)
 
 set(DFER_SOURCES
-    buslogic/connectioninfo.cpp
+    buslogic/connectaddress.cpp
     buslogic/imessagereceiver.cpp
     buslogic/pendingreply.cpp
     buslogic/transceiver.cpp
@@ -76,7 +76,7 @@ if (UNIX)
 endif()
 
 set(DFER_PUBLIC_HEADERS
-    buslogic/connectioninfo.h
+    buslogic/connectaddress.h
     buslogic/imessagereceiver.h
     buslogic/pendingreply.h
     buslogic/transceiver.h

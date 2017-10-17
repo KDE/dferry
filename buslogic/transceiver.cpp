@@ -90,24 +90,24 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
 {
 }
 
-Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
+Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
    : d(new TransceiverPrivate(dispatcher))
 {
-    d->m_connectionInfo = ci;
+    d->m_connectAddress = ca;
     assert(d->m_eventDispatcher);
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_transceiverToNotify = d;
 
-    if (ci.bus() == ConnectionInfo::Bus::None || ci.socketType() == ConnectionInfo::SocketType::None ||
-        ci.role() == ConnectionInfo::Role::None) {
+    if (ca.bus() == ConnectAddress::Bus::None || ca.socketType() == ConnectAddress::SocketType::None ||
+        ca.role() == ConnectAddress::Role::None) {
         cerr << "\nTransceiver: connection constructor Exit A\n\n";
         return;
     }
 
-    if (ci.role() == ConnectionInfo::Role::Server) {
-        if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
+    if (ca.role() == ConnectAddress::Role::Server) {
+        if (ca.bus() == ConnectAddress::Bus::PeerToPeer) {
             // this sets up a server that will be destroyed after accepting exactly one connection
             d->m_clientConnectedHandler = new ClientConnectedHandler;
-            d->m_clientConnectedHandler->m_server = IServer::create(ci);
+            d->m_clientConnectedHandler->m_server = IServer::create(ca);
             d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
             d->m_clientConnectedHandler->m_server->setNewConnectionClient(d->m_clientConnectedHandler);
             d->m_clientConnectedHandler->m_parent = d;
@@ -118,12 +118,12 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectionInfo &ci)
             // state stays at Unconnected
         }
     } else {
-        d->m_connection = IConnection::create(ci);
+        d->m_connection = IConnection::create(ca);
         d->m_connection->setEventDispatcher(dispatcher);
-        if (ci.bus() == ConnectionInfo::Bus::Session || ci.bus() == ConnectionInfo::Bus::System) {
+        if (ca.bus() == ConnectAddress::Bus::Session || ca.bus() == ConnectAddress::Bus::System) {
             d->authAndHello(this);
             d->m_state = TransceiverPrivate::Authenticating;
-        } else if (ci.bus() == ConnectionInfo::Bus::PeerToPeer) {
+        } else if (ca.bus() == ConnectAddress::Bus::PeerToPeer) {
             d->receiveNextMessage();
             d->m_state = TransceiverPrivate::Connected;
         }
@@ -153,7 +153,7 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, CommRef mainTransceiverRef
     // get the current values - if we got them from e.g. the CommRef they could be outdated
     // and we don't want to wait for more event ping-pong
     SpinLocker mainLocker(&mainD->m_lock);
-    d->m_connectionInfo = mainD->m_connectionInfo;
+    d->m_connectAddress = mainD->m_connectAddress;
 
     // register with the main Transceiver
     SecondaryTransceiverConnectEvent *evt = new SecondaryTransceiverConnectEvent();
@@ -408,9 +408,9 @@ Error Transceiver::sendNoReply(Message m)
     return Error::NoError;
 }
 
-ConnectionInfo Transceiver::connectionInfo() const
+ConnectAddress Transceiver::connectAddress() const
 {
-    return d->m_connectionInfo;
+    return d->m_connectAddress;
 }
 
 std::string Transceiver::uniqueName() const
