@@ -111,7 +111,7 @@ What do on Windows:
   It is obtained from a shared memory segment with a well-known name, and the liveness
   of the server process is checked using a mutex AFAIU.
 - Read 16 bytes from the nonce file, the credentials for the planned TCP connection
-- Implement the nonce-data dialog in AuthNegotiator / something it can use
+- Implement the nonce-data dialog in AuthClient / something it can use
 */
 static string hashOfInstallRoot()
 {

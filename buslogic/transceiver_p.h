@@ -35,7 +35,7 @@
 #include <unordered_map>
 #include <vector>
 
-class AuthNegotiator;
+class AuthClient;
 class HelloReceiver;
 class IConnection;
 class IMessageReceiver;
@@ -128,7 +128,7 @@ public:
     EventDispatcher *m_eventDispatcher;
     ConnectAddress m_connectAddress;
     std::string m_uniqueName;
-    AuthNegotiator *m_authNegotiator;
+    AuthClient *m_authClient;
 
     int m_defaultTimeout;
 

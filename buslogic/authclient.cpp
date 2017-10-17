@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "authnegotiator.h"
+#include "authclient.h"
 
 #include "icompletionclient.h"
 #include "iconnection.h"
@@ -45,11 +45,11 @@
 
 using namespace std;
 
-AuthNegotiator::AuthNegotiator(IConnection *connection)
+AuthClient::AuthClient(IConnection *connection)
    : m_state(InitialState),
      m_completionClient(nullptr)
 {
-    cerr << "AuthNegotiator constructing\n";
+    cerr << "AuthClient constructing\n";
     connection->addClient(this);
     setReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
@@ -78,22 +78,22 @@ AuthNegotiator::AuthNegotiator(IConnection *connection)
     m_state = ExpectOkState;
 }
 
-bool AuthNegotiator::isFinished() const
+bool AuthClient::isFinished() const
 {
     return m_state >= AuthenticationFailedState;
 }
 
-bool AuthNegotiator::isAuthenticated() const
+bool AuthClient::isAuthenticated() const
 {
     return m_state == AuthenticatedState;
 }
 
-void AuthNegotiator::setCompletionClient(ICompletionClient *client)
+void AuthClient::setCompletionClient(ICompletionClient *client)
 {
     m_completionClient = client;
 }
 
-void AuthNegotiator::handleConnectionCanRead()
+void AuthClient::handleConnectionCanRead()
 {
     bool wasFinished = isFinished();
     while (!isFinished() && readLine()) {
@@ -104,7 +104,7 @@ void AuthNegotiator::handleConnectionCanRead()
     }
 }
 
-bool AuthNegotiator::readLine()
+bool AuthClient::readLine()
 {
     // don't care about performance here, this doesn't run often or process much data
     if (isEndOfLine()) {
@@ -123,13 +123,13 @@ bool AuthNegotiator::readLine()
     return false;
 }
 
-bool AuthNegotiator::isEndOfLine() const
+bool AuthClient::isEndOfLine() const
 {
     return m_line.length() >= 2 &&
            m_line[m_line.length() - 2] == '\r' && m_line[m_line.length() - 1] == '\n';
 }
 
-void AuthNegotiator::advanceState()
+void AuthClient::advanceState()
 {
     // TODO authentication ping-pong done *properly* (grammar / some simple state machine),
     //      but hey, this works for now!

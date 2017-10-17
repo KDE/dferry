@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef AUTHNEGOTIATOR_H
-#define AUTHNEGOTIATOR_H
+#ifndef AUTHCLIENT_H
+#define AUTHCLIENT_H
 
 #include "iconnectionclient.h"
 
@@ -34,10 +34,10 @@
 
 class ICompletionClient;
 
-class AuthNegotiator : public IConnectionClient
+class AuthClient : public IConnectionClient
 {
 public:
-    explicit AuthNegotiator(IConnection *connection);
+    explicit AuthClient(IConnection *connection);
 
     // reimplemented from IConnectionClient
     virtual void handleConnectionCanRead();

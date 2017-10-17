@@ -25,7 +25,7 @@
 #include "transceiver_p.h"
 
 #include "arguments.h"
-#include "authnegotiator.h"
+#include "authclient.h"
 #include "event.h"
 #include "eventdispatcher_p.h"
 #include "icompletionclient.h"
@@ -83,7 +83,7 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
      m_helloReceiver(nullptr),
      m_clientConnectedHandler(nullptr),
      m_eventDispatcher(dispatcher),
-     m_authNegotiator(nullptr),
+     m_authClient(nullptr),
      m_defaultTimeout(25000),
      m_sendSerial(1),
      m_mainThreadTransceiver(nullptr)
@@ -168,7 +168,7 @@ Transceiver::~Transceiver()
     d->close();
 
     delete d->m_connection;
-    delete d->m_authNegotiator;
+    delete d->m_authClient;
     delete d->m_helloReceiver;
     delete d->m_receivingMessage;
 
@@ -218,8 +218,8 @@ void TransceiverPrivate::close()
 
 void TransceiverPrivate::authAndHello(Transceiver *parent)
 {
-    m_authNegotiator = new AuthNegotiator(m_connection);
-    m_authNegotiator->setCompletionClient(this);
+    m_authClient = new AuthClient(m_connection);
+    m_authClient->setCompletionClient(this);
 
     // Announce our presence to the bus and have it send some introductory information of its own
     Message hello;
@@ -442,9 +442,9 @@ void TransceiverPrivate::handleCompletion(void *task)
 {
     switch (m_state) {
     case Authenticating: {
-        assert(task == m_authNegotiator);
-        delete m_authNegotiator;
-        m_authNegotiator = nullptr;
+        assert(task == m_authClient);
+        delete m_authClient;
+        m_authClient = nullptr;
         // cout << "Authenticated.\n";
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
         MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
@@ -455,7 +455,7 @@ void TransceiverPrivate::handleCompletion(void *task)
     }
     case AwaitingUniqueName: // the code path for this only diverges in the PendingReply callback
     case Connected: {
-        assert(!m_authNegotiator);
+        assert(!m_authClient);
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
             //cout << "Sent message.\n";
             m_sendQueue.pop_front();

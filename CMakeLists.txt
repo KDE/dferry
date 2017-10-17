@@ -44,11 +44,11 @@ include_directories(${CMAKE_SOURCE_DIR}/buslogic
                     ${CMAKE_SOURCE_DIR}/util)
 
 set(DFER_SOURCES
+    buslogic/authclient.cpp
     buslogic/connectaddress.cpp
     buslogic/imessagereceiver.cpp
     buslogic/pendingreply.cpp
     buslogic/transceiver.cpp
-    connection/authnegotiator.cpp
     connection/iconnection.cpp
     connection/iconnectionclient.cpp
     connection/ipserver.cpp
@@ -94,7 +94,7 @@ set(DFER_PUBLIC_HEADERS
     util/valgrind-noop.h)
 
 set(DFER_PRIVATE_HEADERS
-    connection/authnegotiator.h
+    buslogic/authclient.h
     connection/iauthmechanism.h
     connection/iconnection.h
     connection/iconnectionclient.h
