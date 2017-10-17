@@ -25,7 +25,7 @@
 
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "platformtime.h"
 
 #include <algorithm>
@@ -34,7 +34,7 @@
 
 Timer::Timer(EventDispatcher *dispatcher)
    : m_eventDispatcher(dispatcher),
-     m_completionClient(0),
+     m_completionListener(0),
      m_reentrancyGuard(0),
      m_interval(0),
      m_isRunning(false),
@@ -147,8 +147,8 @@ void Timer::trigger()
     // we need this. Also in similar event-driven classes - here is how I think it should be done...
     bool alive = true;
     m_reentrancyGuard = &alive;
-    if (m_completionClient) {
-        m_completionClient->handleCompletion(this);
+    if (m_completionListener) {
+        m_completionListener->handleCompletion(this);
     }
     // if we we've been destroyed, we don't touch the member variable
     if (alive) {
@@ -157,14 +157,14 @@ void Timer::trigger()
     }
 }
 
-void Timer::setCompletionClient(ICompletionClient *client)
+void Timer::setCompletionListener(ICompletionListener *client)
 {
-    m_completionClient = client;
+    m_completionListener = client;
 }
 
-ICompletionClient *Timer::completionClient() const
+ICompletionListener *Timer::completionClient() const
 {
-    return m_completionClient;
+    return m_completionListener;
 }
 
 EventDispatcher *Timer::eventDispatcher() const

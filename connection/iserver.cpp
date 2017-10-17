@@ -25,7 +25,7 @@
 
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
-#include "iconnection.h"
+#include "itransport.h"
 #include "ipserver.h"
 #ifdef __unix__
 #include "localserver.h"
@@ -34,14 +34,14 @@
 #include <string>
 
 IServer::IServer()
-   : m_newConnectionClient(nullptr),
+   : m_newConnectionListener(nullptr),
      m_eventDispatcher(nullptr)
 {
 }
 
 IServer::~IServer()
 {
-    for (IConnection *c : m_incomingConnections) {
+    for (ITransport *c : m_incomingConnections) {
         delete c;
     }
 }
@@ -67,19 +67,19 @@ IServer *IServer::create(const ConnectAddress &ca)
     }
 }
 
-IConnection *IServer::takeNextConnection()
+ITransport *IServer::takeNextClient()
 {
     if (m_incomingConnections.empty()) {
         return nullptr;
     }
-    IConnection *ret = m_incomingConnections.front();
+    ITransport *ret = m_incomingConnections.front();
     m_incomingConnections.pop_front();
     return ret;
 }
 
-void IServer::setNewConnectionClient(ICompletionClient *client)
+void IServer::setNewConnectionListener(ICompletionListener *listener)
 {
-    m_newConnectionClient = client;
+    m_newConnectionListener = listener;
 }
 
 void IServer::setEventDispatcher(EventDispatcher *ed)
@@ -89,12 +89,12 @@ void IServer::setEventDispatcher(EventDispatcher *ed)
     }
     if (m_eventDispatcher) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->removeIoEventClient(this);
+        ep->removeIoEventListener(this);
     }
     m_eventDispatcher = ed;
     if (m_eventDispatcher) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->addIoEventClient(this);
+        ep->addIoEventListener(this);
         ep->setReadWriteInterest(this, true, false);
     }
 }

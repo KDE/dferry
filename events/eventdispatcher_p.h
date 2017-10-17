@@ -37,7 +37,7 @@
 #include <vector>
 
 struct Event;
-class IioEventClient;
+class IioEventListener;
 class IEventPoller;
 class Message;
 class PendingReplyPrivate;
@@ -57,15 +57,15 @@ public:
     uint nextTimerSerial();
     void triggerDueTimers();
 
-    // for IioEventClient
-    friend class IioEventClient;
-    bool addIoEventClient(IioEventClient *ioc);
-    bool removeIoEventClient(IioEventClient *ioc);
-    void setReadWriteInterest(IioEventClient *ioc, bool read, bool write);
+    // for IioEventListener
+    friend class IioEventListener;
+    bool addIoEventListener(IioEventListener *iol);
+    bool removeIoEventListener(IioEventListener *iol);
+    void setReadWriteInterest(IioEventListener *iol, bool read, bool write);
     // for IEventPoller
     friend class IEventPoller;
-    void notifyClientForReading(FileDescriptor fd);
-    void notifyClientForWriting(FileDescriptor fd);
+    void notifyListenerForReading(FileDescriptor fd);
+    void notifyListenerForWriting(FileDescriptor fd);
     // for Timer
     friend class Timer;
     void addTimer(Timer *timer);
@@ -81,7 +81,7 @@ public:
 
     IEventPoller *m_poller = nullptr;
     ForeignEventLoopIntegrator *m_integrator = nullptr;
-    std::unordered_map<FileDescriptor, IioEventClient*> m_ioClients;
+    std::unordered_map<FileDescriptor, IioEventListener*> m_ioListeners;
 
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set
     uint m_lastTimerSerial = s_maxTimerSerial;

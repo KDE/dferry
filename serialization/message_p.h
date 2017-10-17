@@ -28,11 +28,11 @@
 
 #include "arguments.h"
 #include "error.h"
-#include "iconnectionclient.h"
+#include "itransportlistener.h"
 
 #include <type_traits>
 
-class ICompletionClient;
+class ICompletionListener;
 
 class VarHeaderStorage {
 public:
@@ -76,7 +76,7 @@ public:
     uint32 m_headerPresenceBitmap = 0;
 };
 
-class MessagePrivate : public IConnectionClient
+class MessagePrivate : public ITransportListener
 {
 public:
     static MessagePrivate *get(Message *m) { return m->d; }
@@ -85,15 +85,15 @@ public:
     MessagePrivate(const MessagePrivate &other, Message *parent);
     ~MessagePrivate();
 
-    void handleConnectionCanRead() override;
-    void handleConnectionCanWrite() override;
+    void handleTransportCanRead() override;
+    void handleTransportCanWrite() override;
 
-    // IConnection is non-public API, so these make no sense in the public interface
-    void receive(IConnection *connection); // fills in this message from connection
-    void send(IConnection *connection); // sends this message over connection
+    // ITransport is non-public API, so these make no sense in the public interface
+    void receive(ITransport *transport); // fills in this message from transport
+    void send(ITransport *transport); // sends this message over transport
     // for receive or send completion (it should be clear which because receiving and sending can't
     // happen simultaneously)
-    void setCompletionClient(ICompletionClient *client);
+    void setCompletionListener(ICompletionListener *listener);
 
     bool requiredHeadersPresent();
     Error checkRequiredHeaders() const;
@@ -106,7 +106,7 @@ public:
     void clearBuffer();
     void reserveBuffer(uint32 newSize);
 
-    void notifyCompletionClient();
+    void notifyCompletionListener();
 
     Message *m_message;
     chunk m_buffer;
@@ -141,7 +141,7 @@ public:
 
     VarHeaderStorage m_varHeaders;
 
-    ICompletionClient *m_completionClient;
+    ICompletionListener *m_completionListener;
 };
 
 #endif // MESSAGE_P_H

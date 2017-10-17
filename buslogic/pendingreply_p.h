@@ -25,14 +25,14 @@
 #define PENDINGREPLY_P_H
 
 #include "error.h"
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "message.h"
 #include "timer.h"
 
 class PendingReply;
 class TransceiverPrivate;
 
-class PendingReplyPrivate : public ICompletionClient
+class PendingReplyPrivate : public ICompletionListener
 {
 public:
     PendingReplyPrivate(EventDispatcher *dispatcher, int timeout)
@@ -41,7 +41,7 @@ public:
     {
         if (timeout >= 0) {
             m_replyTimeout.setRepeating(false);
-            m_replyTimeout.setCompletionClient(this);
+            m_replyTimeout.setCompletionListener(this);
             m_replyTimeout.start(timeout);
         }
     }

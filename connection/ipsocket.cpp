@@ -229,7 +229,7 @@ FileDescriptor IpSocket::fileDescriptor() const
 void IpSocket::handleCanRead()
 {
     if (availableBytesForReading()) {
-        IConnection::handleCanRead();
+        ITransport::handleCanRead();
     } else {
         // This should really only happen in error cases! ### TODO test?
         close();

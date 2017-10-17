@@ -24,13 +24,13 @@
 #ifndef IPSOCKET_H
 #define IPSOCKET_H
 
-#include "iconnection.h"
+#include "itransport.h"
 
 #include <string>
 
 class ConnectAddress;
 
-class IpSocket : public IConnection
+class IpSocket : public ITransport
 {
 public:
     // Connect to local socket at socketFilePath
@@ -40,7 +40,7 @@ public:
 
     ~IpSocket();
 
-    // pure virtuals from IConnection
+    // pure virtuals from ITransport
     uint32 write(chunk data) override;
     uint32 availableBytesForReading() override;
     chunk read(byte *buffer, uint32 maxSize) override;
@@ -48,7 +48,7 @@ public:
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
     void handleCanRead() override;
-    // end IConnection
+    // end ITransport
 
     IpSocket() = delete;
     IpSocket(const IpSocket &) = delete;

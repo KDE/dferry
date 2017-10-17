@@ -24,7 +24,7 @@
 #include "epolleventpoller.h"
 
 #include "eventdispatcher_p.h"
-#include "iconnection.h"
+#include "iioeventlistener.h"
 
 #include <sys/epoll.h>
 #include <fcntl.h>
@@ -71,7 +71,7 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
         struct epoll_event *evt = results + i;
         if (evt->events & EPOLLIN) {
             if (evt->data.fd != m_interruptPipe[0]) {
-                EventDispatcherPrivate::get(m_dispatcher)->notifyClientForReading(evt->data.fd);
+                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForReading(evt->data.fd);
             } else {
                 // interrupt; read bytes from pipe to clear buffers and get the interrupt type
                 ret = IEventPoller::ProcessAuxEvents;
@@ -89,7 +89,7 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
             }
         }
         if (evt->events & EPOLLOUT) {
-            EventDispatcherPrivate::get(m_dispatcher)->notifyClientForWriting(evt->data.fd);
+            EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForWriting(evt->data.fd);
         }
     }
     return ret;
@@ -104,27 +104,27 @@ void EpollEventPoller::interrupt(IEventPoller::InterruptAction action)
     write(m_interruptPipe[1], &buf, 1);
 }
 
-void EpollEventPoller::addIoEventClient(IioEventClient *ioc)
+void EpollEventPoller::addIoEventListener(IioEventListener *iol)
 {
     struct epoll_event epevt;
     epevt.events = 0;
     epevt.data.u64 = 0; // clear high bits in the union
-    epevt.data.fd = ioc->fileDescriptor();
-    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, ioc->fileDescriptor(), &epevt);
+    epevt.data.fd = iol->fileDescriptor();
+    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, iol->fileDescriptor(), &epevt);
 }
 
-void EpollEventPoller::removeIoEventClient(IioEventClient *ioc)
+void EpollEventPoller::removeIoEventListener(IioEventListener *iol)
 {
-    const int fd = ioc->fileDescriptor();
+    const int fd = iol->fileDescriptor();
     // Connection should call us *before* resetting its fd on failure
     assert(fd >= 0);
     struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
     epoll_ctl(m_epollFd, EPOLL_CTL_DEL, fd, &epevt);
 }
 
-void EpollEventPoller::setReadWriteInterest(IioEventClient *ioc, bool readEnabled, bool writeEnabled)
+void EpollEventPoller::setReadWriteInterest(IioEventListener *iol, bool readEnabled, bool writeEnabled)
 {
-    FileDescriptor fd = ioc->fileDescriptor();
+    FileDescriptor fd = iol->fileDescriptor();
     if (!fd) {
         return;
     }

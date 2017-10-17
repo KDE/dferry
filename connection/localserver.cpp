@@ -23,7 +23,7 @@
 
 #include "localserver.h"
 
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "localsocket.h"
 
 #include <fcntl.h>
@@ -80,8 +80,8 @@ void LocalServer::handleCanRead()
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
 
     m_incomingConnections.push_back(new LocalSocket(connFd));
-    if (m_newConnectionClient) {
-        m_newConnectionClient->handleCompletion(this);
+    if (m_newConnectionListener) {
+        m_newConnectionListener->handleCompletion(this);
     }
 }
 

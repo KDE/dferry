@@ -21,63 +21,63 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iconnectionclient.h"
+#include "itransportlistener.h"
 
-#include "iconnection.h"
+#include "itransport.h"
 
 
-IConnectionClient::IConnectionClient()
+ITransportListener::ITransportListener()
    : m_readNotificationEnabled(false),
      m_writeNotificationEnabled(false),
-     m_connection(0)
+     m_transport(0)
 {
 }
 
-IConnectionClient::~IConnectionClient()
+ITransportListener::~ITransportListener()
 {
-    if (m_connection) {
-        m_connection->removeClient(this);
+    if (m_transport) {
+        m_transport->removeListener(this);
     }
-    m_connection = 0;
+    m_transport = 0;
 }
 
-void IConnectionClient::setReadNotificationEnabled(bool enable)
+void ITransportListener::setReadNotificationEnabled(bool enable)
 {
     if (enable == m_readNotificationEnabled) {
         return;
     }
     m_readNotificationEnabled = enable;
-    m_connection->updateReadWriteInterest();
+    m_transport->updateReadWriteInterest();
 }
 
-bool IConnectionClient::readNotificationEnabled() const
+bool ITransportListener::readNotificationEnabled() const
 {
     return m_readNotificationEnabled;
 }
 
-void IConnectionClient::setWriteNotificationEnabled(bool enable)
+void ITransportListener::setWriteNotificationEnabled(bool enable)
 {
     if (enable == m_writeNotificationEnabled) {
         return;
     }
     m_writeNotificationEnabled = enable;
-    m_connection->updateReadWriteInterest();
+    m_transport->updateReadWriteInterest();
 }
 
-bool IConnectionClient::writeNotificationEnabled() const
+bool ITransportListener::writeNotificationEnabled() const
 {
     return m_writeNotificationEnabled;
 }
 
-void IConnectionClient::handleConnectionCanRead()
+void ITransportListener::handleTransportCanRead()
 {
 }
 
-void IConnectionClient::handleConnectionCanWrite()
+void ITransportListener::handleTransportCanWrite()
 {
 }
 
-IConnection *IConnectionClient::connection() const
+ITransport *ITransportListener::transport() const
 {
-    return m_connection;
+    return m_transport;
 }

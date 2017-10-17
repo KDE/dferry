@@ -28,7 +28,7 @@
 #include "authclient.h"
 #include "event.h"
 #include "eventdispatcher_p.h"
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "imessagereceiver.h"
 #include "iserver.h"
 #include "localsocket.h"
@@ -58,7 +58,7 @@ public:
     TransceiverPrivate *m_parent;
 };
 
-class ClientConnectedHandler : public ICompletionClient
+class ClientConnectedHandler : public ICompletionListener
 {
 public:
     ~ClientConnectedHandler()
@@ -79,7 +79,7 @@ TransceiverPrivate::TransceiverPrivate(EventDispatcher *dispatcher)
    : m_state(Unconnected),
      m_client(nullptr),
      m_receivingMessage(nullptr),
-     m_connection(nullptr),
+     m_transport(nullptr),
      m_helloReceiver(nullptr),
      m_clientConnectedHandler(nullptr),
      m_eventDispatcher(dispatcher),
@@ -109,7 +109,7 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
             d->m_clientConnectedHandler = new ClientConnectedHandler;
             d->m_clientConnectedHandler->m_server = IServer::create(ca);
             d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
-            d->m_clientConnectedHandler->m_server->setNewConnectionClient(d->m_clientConnectedHandler);
+            d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
             d->m_clientConnectedHandler->m_parent = d;
 
             d->m_state = TransceiverPrivate::ServerWaitingForClient;
@@ -118,8 +118,8 @@ Transceiver::Transceiver(EventDispatcher *dispatcher, const ConnectAddress &ca)
             // state stays at Unconnected
         }
     } else {
-        d->m_connection = IConnection::create(ca);
-        d->m_connection->setEventDispatcher(dispatcher);
+        d->m_transport = ITransport::create(ca);
+        d->m_transport->setEventDispatcher(dispatcher);
         if (ca.bus() == ConnectAddress::Bus::Session || ca.bus() == ConnectAddress::Bus::System) {
             d->authAndHello(this);
             d->m_state = TransceiverPrivate::Authenticating;
@@ -167,7 +167,7 @@ Transceiver::~Transceiver()
 {
     d->close();
 
-    delete d->m_connection;
+    delete d->m_transport;
     delete d->m_authClient;
     delete d->m_helloReceiver;
     delete d->m_receivingMessage;
@@ -218,8 +218,8 @@ void TransceiverPrivate::close()
 
 void TransceiverPrivate::authAndHello(Transceiver *parent)
 {
-    m_authClient = new AuthClient(m_connection);
-    m_authClient->setCompletionClient(this);
+    m_authClient = new AuthClient(m_transport);
+    m_authClient->setCompletionListener(this);
 
     // Announce our presence to the bus and have it send some introductory information of its own
     Message hello;
@@ -271,12 +271,12 @@ void TransceiverPrivate::handleHelloReply()
 
 void TransceiverPrivate::handleClientConnected()
 {
-    m_connection = m_clientConnectedHandler->m_server->takeNextConnection();
+    m_transport = m_clientConnectedHandler->m_server->takeNextClient();
     delete m_clientConnectedHandler;
     m_clientConnectedHandler = nullptr;
 
-    assert(m_connection);
-    m_connection->setEventDispatcher(m_eventDispatcher);
+    assert(m_transport);
+    m_transport->setEventDispatcher(m_eventDispatcher);
     receiveNextMessage();
 
     m_state = Connected;
@@ -327,11 +327,11 @@ Error TransceiverPrivate::prepareSend(Message *msg)
 void TransceiverPrivate::sendPreparedMessage(Message msg)
 {
     MessagePrivate *const mpriv = MessagePrivate::get(&msg);
-    mpriv->setCompletionClient(this);
+    mpriv->setCompletionListener(this);
     m_sendQueue.push_back(std::move(msg));
     if (m_state == TransceiverPrivate::Connected && m_sendQueue.size() == 1) {
         // first in queue, don't wait for some other event to trigger sending
-        mpriv->send(m_connection);
+        mpriv->send(m_transport);
     }
 }
 
@@ -420,7 +420,7 @@ std::string Transceiver::uniqueName() const
 
 bool Transceiver::isConnected() const
 {
-    return d->m_connection && d->m_connection->isOpen();
+    return d->m_transport && d->m_transport->isOpen();
 }
 
 EventDispatcher *Transceiver::eventDispatcher() const
@@ -447,7 +447,7 @@ void TransceiverPrivate::handleCompletion(void *task)
         m_authClient = nullptr;
         // cout << "Authenticated.\n";
         assert(!m_sendQueue.empty()); // the hello message should be in the queue
-        MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
+        MessagePrivate::get(&m_sendQueue.front())->send(m_transport);
         receiveNextMessage();
 
         m_state = AwaitingUniqueName;
@@ -460,7 +460,7 @@ void TransceiverPrivate::handleCompletion(void *task)
             //cout << "Sent message.\n";
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
-                MessagePrivate::get(&m_sendQueue.front())->send(m_connection);
+                MessagePrivate::get(&m_sendQueue.front())->send(m_transport);
             }
         } else {
             assert(task == m_receivingMessage);
@@ -533,8 +533,8 @@ void TransceiverPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
     MessagePrivate *const mpriv = MessagePrivate::get(m_receivingMessage);
-    mpriv->setCompletionClient(this);
-    mpriv->receive(m_connection);
+    mpriv->setCompletionListener(this);
+    mpriv->receive(m_transport);
 }
 
 void TransceiverPrivate::unregisterPendingReply(PendingReplyPrivate *p)

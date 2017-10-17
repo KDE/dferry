@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iioeventclient.h"
+#include "icompletionlistener.h"
 
-IioEventClient::~IioEventClient()
+ICompletionListener::~ICompletionListener()
 {
 }

@@ -28,7 +28,7 @@
 
 class EventDispatcher;
 class EventDispatcherPrivate;
-class ICompletionClient;
+class ICompletionListener;
 
 class DFERRY_EXPORT Timer
 {
@@ -53,8 +53,8 @@ public:
 
     int remainingTime() const;
 
-    void setCompletionClient(ICompletionClient *client);
-    ICompletionClient *completionClient() const;
+    void setCompletionListener(ICompletionListener *client);
+    ICompletionListener *completionClient() const;
 
     EventDispatcher *eventDispatcher() const;
 
@@ -62,7 +62,7 @@ private:
     friend class EventDispatcherPrivate;
     void trigger();
     EventDispatcher *m_eventDispatcher; // TODO make a per-thread event dispatcher implicit?
-    ICompletionClient *m_completionClient;
+    ICompletionListener *m_completionListener;
     bool *m_reentrancyGuard;
     int m_interval;
     bool m_isRunning : 1;

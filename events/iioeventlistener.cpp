@@ -21,35 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ICONNECTIONCLIENT_H
-#define ICONNECTIONCLIENT_H
+#include "iioeventlistener.h"
 
-class IConnection;
-
-class IConnectionClient
+IioEventListener::~IioEventListener()
 {
-public:
-    IConnectionClient();
-    virtual ~IConnectionClient();
-
-    void setReadNotificationEnabled(bool enable);
-    bool readNotificationEnabled() const;
-
-    void setWriteNotificationEnabled(bool enable);
-    bool writeNotificationEnabled() const;
-
-    // public mainly for testing purposes - only call if you know what you're doing
-    // no-op default implementations are provided so you only need to reimplement what you need
-    virtual void handleConnectionCanRead();
-    virtual void handleConnectionCanWrite();
-
-protected:
-    IConnection *connection() const; // returns m_connection
-    bool m_readNotificationEnabled;
-    bool m_writeNotificationEnabled;
-    friend class IConnection;
-private:
-    IConnection *m_connection; // set from IConnection::addClient() / removeClient()
-};
-
-#endif // ICONNECTIONCLIENT_H
+}

@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ICONNECTION_H
-#define ICONNECTION_H
+#ifndef ITRANSPORT_H
+#define ITRANSPORT_H
 
-#include "iioeventclient.h"
+#include "iioeventlistener.h"
 #include "platform.h"
 #include "types.h"
 
@@ -32,21 +32,21 @@
 
 class ConnectAddress;
 class EventDispatcher;
-class IConnectionClient;
+class ITransportListener;
 class SelectEventPoller;
 
-class IConnection : public IioEventClient
+class ITransport : public IioEventListener
 {
 public:
-    // An IConnection subclass must have a file descriptor after construction and it must not change
+    // An ITransport subclass must have a file descriptor after construction and it must not change
     // except to the invalid file descriptor when disconnected.
-    IConnection(); // TODO event dispatcher as constructor argument?
-    virtual ~IConnection();
+    ITransport(); // TODO event dispatcher as constructor argument?
+    virtual ~ITransport();
 
-    // usually, the maximum sensible number of clients is two: one for reading and one for writing.
+    // usually, the maximum sensible number of listeners is two: one for reading and one for writing.
     // avoiding (independent) readers and writers blocking each other is good for IO efficiency.
-    void addClient(IConnectionClient *client);
-    void removeClient(IConnectionClient *client);
+    void addListener(ITransportListener *listener);
+    void removeListener(ITransportListener *listener);
 
     virtual uint32 availableBytesForReading() = 0;
     virtual chunk read(byte *buffer, uint32 maxSize) = 0;
@@ -61,25 +61,25 @@ public:
     EventDispatcher *eventDispatcher() const override;
 
     // factory method - creates a suitable subclass to connect to address
-    static IConnection *create(const ConnectAddress &connectAddress);
+    static ITransport *create(const ConnectAddress &connectAddress);
 
 protected:
     friend class EventDispatcher;
-    // IioEventClient
+    // IioEventListener
     void handleCanRead() override;
     void handleCanWrite() override;
 
     bool m_supportsFileDescriptors;
 
 private:
-    friend class IConnectionClient;
+    friend class ITransportListener;
     friend class SelectEventPoller;
-    void updateReadWriteInterest(); // called internally and from IConnectionClient
+    void updateReadWriteInterest(); // called internally and from ITransportListener
 
     EventDispatcher *m_eventDispatcher;
-    std::vector<IConnectionClient *> m_clients;
+    std::vector<ITransportListener *> m_listeners;
     bool m_readNotificationEnabled;
     bool m_writeNotificationEnabled;
 };
 
-#endif // ICONNECTION_H
+#endif // ITRANSPORT_H

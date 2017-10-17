@@ -24,7 +24,7 @@
 #ifndef ISERVER_H
 #define ISERVER_H
 
-#include "iioeventclient.h"
+#include "iioeventlistener.h"
 #include "platform.h"
 #include "types.h"
 
@@ -32,10 +32,10 @@
 
 class ConnectAddress;
 class EventDispatcher;
-class IConnection;
-class ICompletionClient;
+class ITransport;
+class ICompletionListener;
 
-class IServer : public IioEventClient
+class IServer : public IioEventListener
 {
 public:
     IServer(); // TODO event dispatcher as constructor argument?
@@ -43,9 +43,9 @@ public:
 
     virtual bool isListening() const = 0;
 
-    void setNewConnectionClient(ICompletionClient *client); // notified once on every new connection
+    void setNewConnectionListener(ICompletionListener *listener); // notified once on every new connection
 
-    IConnection *takeNextConnection();
+    ITransport *takeNextClient();
     virtual void close() = 0;
 
     virtual void setEventDispatcher(EventDispatcher *ed) override;
@@ -55,10 +55,10 @@ public:
 
 protected:
     friend class EventDispatcher;
-    // handleCanRead() and handleCanWrite() from IioEventClient stay pure virtual
+    // handleCanRead() and handleCanWrite() from IioEventListener stay pure virtual
 
-    std::deque<IConnection *> m_incomingConnections;
-    ICompletionClient *m_newConnectionClient;
+    std::deque<ITransport *> m_incomingConnections;
+    ICompletionListener *m_newConnectionListener;
 
 private:
     EventDispatcher *m_eventDispatcher;

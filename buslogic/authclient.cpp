@@ -23,8 +23,8 @@
 
 #include "authclient.h"
 
-#include "icompletionclient.h"
-#include "iconnection.h"
+#include "icompletionlistener.h"
+#include "itransport.h"
 #include "stringtools.h"
 
 #include <cassert>
@@ -45,15 +45,15 @@
 
 using namespace std;
 
-AuthClient::AuthClient(IConnection *connection)
+AuthClient::AuthClient(ITransport *transport)
    : m_state(InitialState),
-     m_completionClient(nullptr)
+     m_completionListener(nullptr)
 {
     cerr << "AuthClient constructing\n";
-    connection->addClient(this);
+    transport->addListener(this);
     setReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
-    connection->write(chunk(nullBuf, 1));
+    transport->write(chunk(nullBuf, 1));
 
     stringstream uidEncoded;
 #ifdef _WIN32
@@ -74,7 +74,7 @@ AuthClient::AuthClient(IConnection *connection)
 #endif
     string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
     cout << extLine;
-    connection->write(chunk(extLine.c_str(), extLine.length()));
+    transport->write(chunk(extLine.c_str(), extLine.length()));
     m_state = ExpectOkState;
 }
 
@@ -88,19 +88,19 @@ bool AuthClient::isAuthenticated() const
     return m_state == AuthenticatedState;
 }
 
-void AuthClient::setCompletionClient(ICompletionClient *client)
+void AuthClient::setCompletionListener(ICompletionListener *listener)
 {
-    m_completionClient = client;
+    m_completionListener = listener;
 }
 
-void AuthClient::handleConnectionCanRead()
+void AuthClient::handleTransportCanRead()
 {
     bool wasFinished = isFinished();
     while (!isFinished() && readLine()) {
         advanceState();
     }
-    if (isFinished() && !wasFinished && m_completionClient) {
-        m_completionClient->handleCompletion(this);
+    if (isFinished() && !wasFinished && m_completionListener) {
+        m_completionListener->handleCompletion(this);
     }
 }
 
@@ -110,9 +110,9 @@ bool AuthClient::readLine()
     if (isEndOfLine()) {
         m_line.clear(); // start a new line
     }
-    while (connection()->availableBytesForReading()) {
+    while (transport()->availableBytesForReading()) {
         byte readBuf[1];
-        chunk in = connection()->read(readBuf, 1);
+        chunk in = transport()->read(readBuf, 1);
         assert(in.length == 1);
         m_line += char(in.ptr[0]);
 
@@ -144,7 +144,7 @@ void AuthClient::advanceState()
 #ifdef __unix__
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
         cout << negotiateLine.ptr;
-        connection()->write(chunk(negotiateLine.ptr, negotiateLine.length));
+        transport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
@@ -152,11 +152,11 @@ void AuthClient::advanceState()
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
         cout << beginLine.ptr;
-        connection()->write(chunk(beginLine.ptr, beginLine.length));
+        transport()->write(chunk(beginLine.ptr, beginLine.length));
         m_state = AuthenticatedState;
         break; }
     default:
         m_state = AuthenticationFailedState;
-        connection()->close();
+        transport()->close();
     }
 }

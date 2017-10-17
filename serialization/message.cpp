@@ -29,8 +29,8 @@
 #include "stringtools.h"
 
 #ifndef DFERRY_SERDES_ONLY
-#include "icompletionclient.h"
-#include "iconnection.h"
+#include "icompletionlistener.h"
+#include "itransport.h"
 #endif
 
 #include <cassert>
@@ -671,13 +671,13 @@ static const uint32 s_properFixedHeaderLength = 12;
 static const uint32 s_extendedFixedHeaderLength = 16;
 
 #ifndef DFERRY_SERDES_ONLY
-void MessagePrivate::receive(IConnection *conn)
+void MessagePrivate::receive(ITransport *transport)
 {
     if (m_state > LastSteadyState) {
         std::cerr << "MessagePrivate::receive() Error A.\n";
         return;
     }
-    conn->addClient(this);
+    transport->addListener(this);
     setReadNotificationEnabled(true);
     m_state = MessagePrivate::Deserializing;
     m_headerLength = 0;
@@ -689,13 +689,13 @@ bool Message::isReceiving() const
     return d->m_state == MessagePrivate::Deserializing;
 }
 
-void MessagePrivate::send(IConnection *conn)
+void MessagePrivate::send(ITransport *transport)
 {
     if (!m_buffer.length && !serialize()) {
         std::cerr << "MessagePrivate::send() Error A.\n";
         // m_error.setCode();
-        // notifyCompletionClient(); would call into Transceiver, but it's easier for Transceiver to handle
-        //                           the error from non-callback code, directly in the caller of send().
+        // notifyCompletionListener(); would call into Transceiver, but it's easier for Transceiver to handle
+        //                             the error from non-callback code, directly in the caller of send().
         return;
     }
     if (m_state > MessagePrivate::LastSteadyState) {
@@ -703,7 +703,7 @@ void MessagePrivate::send(IConnection *conn)
         // TODO error feedback
         return;
     }
-    conn->addClient(this);
+    transport->addListener(this);
     setWriteNotificationEnabled(true);
     m_state = MessagePrivate::Serializing;
 }
@@ -713,19 +713,19 @@ bool Message::isSending() const
     return d->m_state == MessagePrivate::Serializing;
 }
 
-void MessagePrivate::setCompletionClient(ICompletionClient *client)
+void MessagePrivate::setCompletionListener(ICompletionListener *listener)
 {
-    m_completionClient = client;
+    m_completionListener = listener;
 }
 
-void MessagePrivate::notifyCompletionClient()
+void MessagePrivate::notifyCompletionListener()
 {
-    if (m_completionClient) {
-        m_completionClient->handleCompletion(m_message);
+    if (m_completionListener) {
+        m_completionListener->handleCompletion(m_message);
     }
 }
 
-void MessagePrivate::handleConnectionCanRead()
+void MessagePrivate::handleTransportCanRead()
 {
     if (m_state != Deserializing) {
         return;
@@ -748,10 +748,10 @@ void MessagePrivate::handleConnectionCanRead()
 
         if (m_bufferPos == 0) {
             // File descriptors should arrive only with the first byte
-            in = connection()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
+            in = transport()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
                                                        &m_fileDescriptors);
         } else {
-            in = connection()->read(m_buffer.ptr + m_bufferPos, readMax);
+            in = transport()->read(m_buffer.ptr + m_bufferPos, readMax);
         }
         m_bufferPos += in.length;
         assert(m_bufferPos <= m_buffer.length);
@@ -780,11 +780,11 @@ void MessagePrivate::handleConnectionCanRead()
                                         bodyData, std::move(m_fileDescriptors), m_isByteSwapped);
             m_fileDescriptors.clear(); // put it into a well-defined state
             assert(!isError);
-            connection()->removeClient(this);
-            notifyCompletionClient(); // do not access members after this because it might delete us!
+            transport()->removeListener(this);
+            notifyCompletionListener(); // do not access members after this because it might delete us!
             break;
         }
-        if (!connection()->isOpen()) {
+        if (!transport()->isOpen()) {
             isError = true;
             break;
         }
@@ -794,13 +794,13 @@ void MessagePrivate::handleConnectionCanRead()
         setReadNotificationEnabled(false);
         m_state = Empty;
         clearBuffer();
-        connection()->removeClient(this);
-        notifyCompletionClient();
+        transport()->removeListener(this);
+        notifyCompletionListener();
         // TODO reset other data members, generally revisit error handling to make it robust
     }
 }
 
-void MessagePrivate::handleConnectionCanWrite()
+void MessagePrivate::handleTransportCanWrite()
 {
     if (m_state != Serializing) {
         return;
@@ -812,17 +812,17 @@ void MessagePrivate::handleConnectionCanWrite()
             setWriteNotificationEnabled(false);
             m_state = Serialized;
             clearBuffer();
-            connection()->removeClient(this);
-            assert(connection() == nullptr);
-            notifyCompletionClient();
+            transport()->removeListener(this);
+            assert(transport() == nullptr);
+            notifyCompletionListener();
             break;
         }
         uint32 written = 0;
         if (m_bufferPos == 0) {
-            written = connection()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
+            written = transport()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
                                                              m_mainArguments.fileDescriptors());
         } else {
-            written = connection()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+            written = transport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         }
         if (written <= 0) {
             // TODO error handling
@@ -924,7 +924,7 @@ Error MessagePrivate::checkRequiredHeaders() const
         return Error::MessageProtocolVersion;
     }
 
-    // might want to check for DestinationHeader if the connection is a bus (not peer-to-peer)
+    // might want to check for DestinationHeader if the transport is a bus (not peer-to-peer)
     // very strange that this isn't in the spec!
 
     switch (m_messageType) {

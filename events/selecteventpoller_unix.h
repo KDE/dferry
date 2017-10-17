@@ -40,9 +40,9 @@ public:
     void interrupt(IEventPoller::InterruptAction) override;
 
     // reimplemented from IEventPoller
-    void addIoEventClient(IioEventClient *ioc) override;
-    void removeIoEventClient(IioEventClient *ioc) override;
-    void setReadWriteInterest(IioEventClient *ioc, bool read, bool write) override;
+    void addIoEventListener(IioEventListener *iol) override;
+    void removeIoEventListener(IioEventListener *iol) override;
+    void setReadWriteInterest(IioEventListener *iol, bool read, bool write) override;
 
 private:
     void notifyRead(int fd);

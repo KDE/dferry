@@ -24,7 +24,7 @@
 #include "selecteventpoller_win32.h"
 
 #include "eventdispatcher_p.h"
-#include "iconnection.h"
+#include "iioeventlistener.h"
 
 #include <iostream>
 #include <thread>
@@ -199,10 +199,10 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     // descriptor like with FD_ISSET.
     // numEvents -= m_readSet.fd_count + m_writeSet.fd_count;
     for (uint i = 0; i < m_readSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)->notifyClientForReading(m_readSet.fd_array[i]);
+        EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForReading(m_readSet.fd_array[i]);
     }
     for (uint i = 0; i < m_writeSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)->notifyClientForWriting(m_writeSet.fd_array[i]);
+        EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForWriting(m_writeSet.fd_array[i]);
     }
 
     return ret;
@@ -222,28 +222,28 @@ void SelectEventPoller::interrupt(IEventPoller::InterruptAction action)
     QueueUserAPC(triggerInterruptSocket, m_selectThreadHandle, dwParam);
 }
 
-void SelectEventPoller::addIoEventClient(IioEventClient *ioc)
+void SelectEventPoller::addIoEventListener(IioEventListener *iol)
 {
     // The main select specific part of registration is in setReadWriteInterest().
     // Here we just check fd limits.
     if (m_fds.size() + 1 >= FD_SETSIZE) {
-        std::cerr << "SelectEventPoller::addIoEventClient() failed A.\n";
+        std::cerr << "SelectEventPoller::addIoEventListener() failed A.\n";
         // TODO error...
         return;
     }
 
     RwEnabled rw = { false, false };
-    m_fds.emplace(ioc->fileDescriptor(), rw);
+    m_fds.emplace(iol->fileDescriptor(), rw);
 }
 
-void SelectEventPoller::removeIoEventClient(IioEventClient *ioc)
+void SelectEventPoller::removeIoEventListener(IioEventListener *iol)
 {
-    m_fds.erase(ioc->fileDescriptor());
+    m_fds.erase(iol->fileDescriptor());
 }
 
-void SelectEventPoller::setReadWriteInterest(IioEventClient *ioc, bool read, bool write)
+void SelectEventPoller::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
 {
-    RwEnabled &rw = m_fds.at(ioc->fileDescriptor());
+    RwEnabled &rw = m_fds.at(iol->fileDescriptor());
     rw.readEnabled = read;
     rw.writeEnabled = write;
 }

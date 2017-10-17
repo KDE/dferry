@@ -28,7 +28,7 @@
 
 #include "platform.h"
 
-class IioEventClient;
+class IioEventListener;
 
 class IEventPoller
 {
@@ -48,9 +48,9 @@ public:
     // interrupt the waiting for events (from another thread)
     virtual void interrupt(InterruptAction action) = 0;
 
-    virtual void addIoEventClient(IioEventClient *ioc) = 0;
-    virtual void removeIoEventClient(IioEventClient *ioc) = 0;
-    virtual void setReadWriteInterest(IioEventClient *ioc, bool read, bool write) = 0;
+    virtual void addIoEventListener(IioEventListener *iol) = 0;
+    virtual void removeIoEventListener(IioEventListener *iol) = 0;
+    virtual void setReadWriteInterest(IioEventListener *iol, bool read, bool write) = 0;
 
 protected:
     EventDispatcher *m_dispatcher;

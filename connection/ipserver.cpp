@@ -25,7 +25,7 @@
 
 #include "connectaddress.h"
 
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "ipsocket.h"
 
 #ifdef __unix__
@@ -94,8 +94,8 @@ void IpServer::handleCanRead()
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
 #endif
     m_incomingConnections.push_back(new IpSocket(connFd));
-    if (m_newConnectionClient) {
-        m_newConnectionClient->handleCompletion(this);
+    if (m_newConnectionListener) {
+        m_newConnectionListener->handleCompletion(this);
     }
 }
 

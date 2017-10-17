@@ -21,8 +21,28 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "icompletionclient.h"
+#ifndef IIOEVENTLISTENER_H
+#define IIOEVENTLISTENER_H
 
-ICompletionClient::~ICompletionClient()
+#include "platform.h"
+
+class EventDispatcher;
+class EventDispatcherPrivate;
+
+class IioEventListener
 {
-}
+public:
+    virtual ~IioEventListener();
+
+    virtual FileDescriptor fileDescriptor() const = 0;
+
+    virtual void setEventDispatcher(EventDispatcher *ed) = 0;
+    virtual EventDispatcher *eventDispatcher() const = 0;
+
+protected:
+    friend class EventDispatcherPrivate;
+    virtual void handleCanRead() = 0;
+    virtual void handleCanWrite() = 0;
+};
+
+#endif // IIOEVENTLISTENER_H

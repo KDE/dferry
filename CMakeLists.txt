@@ -49,17 +49,17 @@ set(DFER_SOURCES
     buslogic/imessagereceiver.cpp
     buslogic/pendingreply.cpp
     buslogic/transceiver.cpp
-    connection/iconnection.cpp
-    connection/iconnectionclient.cpp
     connection/ipserver.cpp
     connection/ipsocket.cpp
     connection/iserver.cpp
+    connection/itransport.cpp
+    connection/itransportlistener.cpp
     connection/stringtools.cpp
     events/event.cpp
     events/eventdispatcher.cpp
     events/foreigneventloopintegrator.cpp
     events/ieventpoller.cpp
-    events/iioeventclient.cpp
+    events/iioeventlistener.cpp
     events/platformtime.cpp
     events/timer.cpp
     serialization/arguments.cpp
@@ -67,7 +67,7 @@ set(DFER_SOURCES
     serialization/argumentswriter.cpp
     serialization/message.cpp
     util/error.cpp
-    util/icompletionclient.cpp
+    util/icompletionlistener.cpp
     util/types.cpp)
 if (UNIX)
     list(APPEND DFER_SOURCES
@@ -89,22 +89,22 @@ set(DFER_PUBLIC_HEADERS
     util/commutex.h
     util/error.h
     util/export.h
-    util/icompletionclient.h
+    util/icompletionlistener.h
     util/types.h
     util/valgrind-noop.h)
 
 set(DFER_PRIVATE_HEADERS
     buslogic/authclient.h
-    connection/iconnection.h
-    connection/iconnectionclient.h
     connection/ipserver.h
     connection/ipsocket.h
     connection/iserver.h
+    connection/itransport.h
+    connection/itransportlistener.h
     connection/platform.h
     connection/stringtools.h
     events/event.h
     events/ieventpoller.h
-    events/iioeventclient.h
+    events/iioeventlistener.h
     events/platformtime.h
     serialization/basictypeio.h)
 if (UNIX)

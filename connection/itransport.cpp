@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iconnection.h"
+#include "itransport.h"
 
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
-#include "iconnectionclient.h"
+#include "itransportlistener.h"
 #include "ipsocket.h"
 #include "connectaddress.h"
 
@@ -38,7 +38,7 @@
 
 using namespace std;
 
-IConnection::IConnection()
+ITransport::ITransport()
    : m_supportsFileDescriptors(false),
      m_eventDispatcher(0),
      m_readNotificationEnabled(false),
@@ -46,58 +46,58 @@ IConnection::IConnection()
 {
 }
 
-IConnection::~IConnection()
+ITransport::~ITransport()
 {
-    vector<IConnectionClient *> clientsCopy = m_clients;
-    for (size_t i = clientsCopy.size() - 1; i + 1 > 0; i--) {
-        removeClient(clientsCopy[i]); // LIFO (stack) order seems safest...
+    vector<ITransportListener *> listenersCopy = m_listeners;
+    for (size_t i = listenersCopy.size() - 1; i + 1 > 0; i--) {
+        removeListener(listenersCopy[i]); // LIFO (stack) order seems safest...
     }
 }
 
-chunk IConnection::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *)
+chunk ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *)
 {
     return read(buffer, maxSize);
 }
 
-uint32 IConnection::writeWithFileDescriptors(chunk data, const vector<int> &)
+uint32 ITransport::writeWithFileDescriptors(chunk data, const vector<int> &)
 {
     return write(data);
 }
 
-void IConnection::addClient(IConnectionClient *client)
+void ITransport::addListener(ITransportListener *listener)
 {
-    if (find(m_clients.begin(), m_clients.end(), client) != m_clients.end()) {
+    if (find(m_listeners.begin(), m_listeners.end(), listener) != m_listeners.end()) {
         return;
     }
-    m_clients.push_back(client);
-    client->m_connection = this;
+    m_listeners.push_back(listener);
+    listener->m_transport = this;
     if (m_eventDispatcher) {
         updateReadWriteInterest();
     }
 }
 
-void IConnection::removeClient(IConnectionClient *client)
+void ITransport::removeListener(ITransportListener *listener)
 {
-    vector<IConnectionClient *>::iterator it = find(m_clients.begin(), m_clients.end(), client);
-    if (it == m_clients.end()) {
+    vector<ITransportListener *>::iterator it = find(m_listeners.begin(), m_listeners.end(), listener);
+    if (it == m_listeners.end()) {
         return;
     }
-    m_clients.erase(it);
-    client->m_connection = 0;
+    m_listeners.erase(it);
+    listener->m_transport = nullptr;
     if (m_eventDispatcher) {
         updateReadWriteInterest();
     }
 }
 
-void IConnection::updateReadWriteInterest()
+void ITransport::updateReadWriteInterest()
 {
     bool readInterest = false;
     bool writeInterest = false;
-    for (IConnectionClient *client : m_clients) {
-        if (client->readNotificationEnabled()) {
+    for (ITransportListener *listener : m_listeners) {
+        if (listener->readNotificationEnabled()) {
             readInterest = true;
         }
-        if (client->writeNotificationEnabled()) {
+        if (listener->writeNotificationEnabled()) {
             writeInterest = true;
         }
     }
@@ -111,52 +111,52 @@ void IConnection::updateReadWriteInterest()
     }
 }
 
-void IConnection::setEventDispatcher(EventDispatcher *ed)
+void ITransport::setEventDispatcher(EventDispatcher *ed)
 {
     if (m_eventDispatcher == ed) {
         return;
     }
     if (m_eventDispatcher) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->removeIoEventClient(this);
+        ep->removeIoEventListener(this);
     }
     m_eventDispatcher = ed;
     if (m_eventDispatcher) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->addIoEventClient(this);
+        ep->addIoEventListener(this);
         m_readNotificationEnabled = false;
         m_writeNotificationEnabled = false;
         updateReadWriteInterest();
     }
 }
 
-EventDispatcher *IConnection::eventDispatcher() const
+EventDispatcher *ITransport::eventDispatcher() const
 {
     return m_eventDispatcher;
 }
 
-void IConnection::handleCanRead()
+void ITransport::handleCanRead()
 {
-    for (IConnectionClient *client : m_clients) {
-        if (client->readNotificationEnabled()) {
-            client->handleConnectionCanRead();
+    for (ITransportListener *listener : m_listeners) {
+        if (listener->readNotificationEnabled()) {
+            listener->handleTransportCanRead();
             break;
         }
     }
 }
 
-void IConnection::handleCanWrite()
+void ITransport::handleCanWrite()
 {
-    for (IConnectionClient *client : m_clients) {
-        if (client->writeNotificationEnabled()) {
-            client->handleConnectionCanWrite();
+    for (ITransportListener *listener : m_listeners) {
+        if (listener->writeNotificationEnabled()) {
+            listener->handleTransportCanWrite();
             break;
         }
     }
 }
 
 //static
-IConnection *IConnection::create(const ConnectAddress &ci)
+ITransport *ITransport::create(const ConnectAddress &ci)
 {
     switch (ci.socketType()) {
 #ifdef __unix__

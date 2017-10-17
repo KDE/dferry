@@ -28,7 +28,7 @@
 
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "spinlock.h"
 
 #include <deque>
@@ -37,8 +37,8 @@
 
 class AuthClient;
 class HelloReceiver;
-class IConnection;
 class IMessageReceiver;
+class ITransport;
 class ClientConnectedHandler;
 
 /*
@@ -75,7 +75,7 @@ class ClientConnectedHandler;
     LocalDisconnect error.
  */
 
-class TransceiverPrivate : public ICompletionClient
+class TransceiverPrivate : public ICompletionListener
 {
 public:
     static TransceiverPrivate *get(Transceiver *t) { return t->d; }
@@ -120,7 +120,7 @@ public:
     // only one of them can be non-null. exception: in the main thread, m_mainThreadTransceiver
     // equals this, so that the main thread knows it's the main thread and not just a thread-local
     // transceiver.
-    IConnection *m_connection;
+    ITransport *m_transport;
 
     HelloReceiver *m_helloReceiver;
     ClientConnectedHandler *m_clientConnectedHandler;

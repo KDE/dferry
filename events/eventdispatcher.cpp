@@ -37,7 +37,7 @@
 #include "event.h"
 #include "foreigneventloopintegrator.h"
 #include "ieventpoller.h"
-#include "iioeventclient.h"
+#include "iioeventlistener.h"
 #include "platformtime.h"
 #include "transceiver_p.h"
 #include "timer.h"
@@ -73,8 +73,8 @@ EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    for (const pair<FileDescriptor, IioEventClient*> &fdCon : m_ioClients) {
-        fdCon.second->setEventDispatcher(0);
+    for (const pair<FileDescriptor, IioEventListener*> &fdListener : m_ioListeners) {
+        fdListener.second->setEventDispatcher(nullptr);
     }
 
     for (const pair<uint64 /* due */, Timer*> &dt : m_timers) {
@@ -128,57 +128,57 @@ void EventDispatcherPrivate::wakeForEvents()
     m_poller->interrupt(IEventPoller::ProcessAuxEvents);
 }
 
-bool EventDispatcherPrivate::addIoEventClient(IioEventClient *ioc)
+bool EventDispatcherPrivate::addIoEventListener(IioEventListener *iol)
 {
-    pair<unordered_map<FileDescriptor, IioEventClient*>::iterator, bool> insertResult;
-    insertResult = m_ioClients.insert(make_pair(ioc->fileDescriptor(), ioc));
+    pair<unordered_map<FileDescriptor, IioEventListener*>::iterator, bool> insertResult;
+    insertResult = m_ioListeners.insert(make_pair(iol->fileDescriptor(), iol));
     const bool ret = insertResult.second;
     if (ret) {
-        m_poller->addIoEventClient(ioc);
+        m_poller->addIoEventListener(iol);
     }
     return ret;
 }
 
-bool EventDispatcherPrivate::removeIoEventClient(IioEventClient *ioc)
+bool EventDispatcherPrivate::removeIoEventListener(IioEventListener *iol)
 {
-    const bool ret = m_ioClients.erase(ioc->fileDescriptor());
+    const bool ret = m_ioListeners.erase(iol->fileDescriptor());
     if (ret) {
-        m_poller->removeIoEventClient(ioc);
+        m_poller->removeIoEventListener(iol);
     }
     return ret;
 }
 
-void EventDispatcherPrivate::setReadWriteInterest(IioEventClient *ioc, bool read, bool write)
+void EventDispatcherPrivate::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
 {
-    m_poller->setReadWriteInterest(ioc, read, write);
+    m_poller->setReadWriteInterest(iol, read, write);
 }
 
-void EventDispatcherPrivate::notifyClientForReading(FileDescriptor fd)
+void EventDispatcherPrivate::notifyListenerForReading(FileDescriptor fd)
 {
-    unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
-    if (it != m_ioClients.end()) {
+    unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
+    if (it != m_ioListeners.end()) {
         it->second->handleCanRead();
     } else {
 
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its handleCanRead() or handleCanWrite() implementation
-        std::cerr << "EventDispatcherPrivate::notifyClientForReading(): unhandled file descriptor "
+        std::cerr << "EventDispatcherPrivate::notifyListenerForReading(): unhandled file descriptor "
                   <<  fd << ".\n";
 #endif
     }
 }
 
-void EventDispatcherPrivate::notifyClientForWriting(FileDescriptor fd)
+void EventDispatcherPrivate::notifyListenerForWriting(FileDescriptor fd)
 {
-    unordered_map<FileDescriptor, IioEventClient *>::iterator it = m_ioClients.find(fd);
-    if (it != m_ioClients.end()) {
+    unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
+    if (it != m_ioListeners.end()) {
         it->second->handleCanWrite();
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its handleCanRead() or handleCanWrite() implementation
-        std::cerr << "EventDispatcherPrivate::notifyClientForWriting(): unhandled file descriptor "
+        std::cerr << "EventDispatcherPrivate::notifyListenerForWriting(): unhandled file descriptor "
                   <<  fd << ".\n";
 #endif
     }

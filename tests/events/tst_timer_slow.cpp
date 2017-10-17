@@ -22,7 +22,7 @@
 */
 
 #include "eventdispatcher.h"
-#include "icompletionclient.h"
+#include "icompletionlistener.h"
 #include "platformtime.h"
 #include "timer.h"
 
@@ -31,7 +31,7 @@
 #include <cstring>
 #include <iostream>
 
-class BamPrinter : public ICompletionClient
+class BamPrinter : public ICompletionListener
 {
 public:
     BamPrinter(const char *customMessage, uint64 startTime)
@@ -56,7 +56,7 @@ static void testBasic()
     BamPrinter printer1(customMessage1, baseTime);
 
     Timer t(&dispatcher);
-    t.setCompletionClient(&printer1);
+    t.setCompletionListener(&printer1);
     t.setInterval(231);
     t.setRunning(true);
 
@@ -64,7 +64,7 @@ static void testBasic()
     BamPrinter printer2(customMessage2, baseTime);
 
     Timer t2(&dispatcher);
-    t2.setCompletionClient(&printer2);
+    t2.setCompletionListener(&printer2);
     t2.setInterval(100);
     t2.setRunning(true);
 
@@ -83,7 +83,7 @@ static void testBasic()
     });
 
     Timer t3(&dispatcher);
-    t3.setCompletionClient(&booPrinter);
+    t3.setCompletionListener(&booPrinter);
     t3.setInterval(420);
     t3.setRunning(true);
 
@@ -91,7 +91,7 @@ static void testBasic()
     }
 }
 
-class AccuracyTester : public ICompletionClient
+class AccuracyTester : public ICompletionListener
 {
 public:
     AccuracyTester()
@@ -125,13 +125,13 @@ static void testAccuracy()
 
     AccuracyTester at1;
     Timer t1(&dispatcher);
-    t1.setCompletionClient(&at1);
+    t1.setCompletionListener(&at1);
     t1.setInterval(225);
     t1.setRunning(true);
 
     AccuracyTester at2;
     Timer t2(&dispatcher);
-    t2.setCompletionClient(&at2);
+    t2.setCompletionListener(&at2);
     t2.setInterval(42);
     t2.setRunning(true);
 
@@ -141,14 +141,14 @@ static void testAccuracy()
 
 // this not only bounds how long the dispatcher runs, it also creates another timer to make the
 // situation more interesting
-class EventDispatcherInterruptor : public ICompletionClient
+class EventDispatcherInterruptor : public ICompletionListener
 {
 public:
     EventDispatcherInterruptor(EventDispatcher *ed, int timeout)
        : m_ttl(ed)
     {
         m_ttl.setInterval(timeout);
-        m_ttl.setCompletionClient(this);
+        m_ttl.setCompletionListener(this);
         m_ttl.setRunning(true);
     }
     void handleCompletion(void * /*task*/) override
@@ -173,7 +173,7 @@ static void testDeleteInTrigger()
     });
 
     Timer *t1 = new Timer(&dispatcher);
-    t1->setCompletionClient(&deleter);
+    t1->setCompletionListener(&deleter);
     t1->setRunning(true);
 
     EventDispatcherInterruptor interruptor(&dispatcher, 50);
@@ -208,7 +208,7 @@ static void testAddInTrigger()
         {
             if (!t2) {
                 t2 = new Timer(&dispatcher);
-                t2->setCompletionClient(&iterChecker);
+                t2->setCompletionListener(&iterChecker);
                 t2->setRunning(true);
                 // this could go wrong because we manipulate the due time in EventDispatcher::addTimer(),
                 // but should be caught in Timer::remainingTime()
@@ -218,7 +218,7 @@ static void testAddInTrigger()
 
         t1.setInterval(10);
         t1.setRunning(true);
-        t1.setCompletionClient(&adder);
+        t1.setCompletionListener(&adder);
 
         EventDispatcherInterruptor interruptor(&dispatcher, 50);
 
@@ -284,7 +284,7 @@ static void testReAddInTrigger()
                             }
                         }
                         new(t) Timer(&dispatcher);
-                        t->setCompletionClient(&addRemove);
+                        t->setCompletionListener(&addRemove);
                         t->start(0);
                         TEST(t->isRunning());
                     }
@@ -304,7 +304,7 @@ static void testReAddInTrigger()
             dispatcher.poll(); // this seems like a good idea for the test...
 
             // run and test the add / remove sequence
-            t->setCompletionClient(&addRemove);
+            t->setCompletionListener(&addRemove);
             dispatcher.poll();
 
             // Test that the timer triggers when it should. Triggering when it should not will likely
@@ -352,8 +352,8 @@ static void testTriggerOnlyOncePerDispatch()
             triggerCounter2++;
         }
     });
-    counter1Timer.setCompletionClient(&countTriggers);
-    counter2Timer.setCompletionClient(&countTriggers);
+    counter1Timer.setCompletionListener(&countTriggers);
+    counter2Timer.setCompletionListener(&countTriggers);
 
     CompletionFunc hardWorker([&hardWorkCounter, &dispatchCounter] (void * /*task*/)
     {
@@ -365,7 +365,7 @@ static void testTriggerOnlyOncePerDispatch()
         } while (PlatformTime::monotonicMsecs() < startTime + 10);
         hardWorkCounter++;
     });
-    hardWorkTimer.setCompletionClient(&hardWorker);
+    hardWorkTimer.setCompletionListener(&hardWorker);
 
     EventDispatcherInterruptor interruptor(&dispatcher, 200);
 
@@ -394,7 +394,7 @@ static void testReEnableNonRepeatingInTrigger()
     });
 
     Timer slow(&dispatcher);
-    slow.setCompletionClient(&slowReEnabler);
+    slow.setCompletionListener(&slowReEnabler);
     slow.setRepeating(false);
     slow.setInterval(5);
     slow.setRunning(true);
@@ -410,7 +410,7 @@ static void testReEnableNonRepeatingInTrigger()
     });
 
     Timer fast(&dispatcher);
-    fast.setCompletionClient(&fastReEnabler);
+    fast.setCompletionListener(&fastReEnabler);
     fast.setRepeating(false);
     fast.setInterval(0);
     fast.setRunning(true);
@@ -421,7 +421,7 @@ static void testReEnableNonRepeatingInTrigger()
         noRepeatCounter++;
     });
     Timer noRepeat(&dispatcher);
-    noRepeat.setCompletionClient(&noRepeatCheck);
+    noRepeat.setCompletionListener(&noRepeatCheck);
     noRepeat.setRepeating(false);
     noRepeat.setInterval(10);
     noRepeat.setRunning(true);

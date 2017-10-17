@@ -24,11 +24,11 @@
 #ifndef LOCALSOCKET_H
 #define LOCALSOCKET_H
 
-#include "iconnection.h"
+#include "itransport.h"
 
 #include <string>
 
-class LocalSocket : public IConnection
+class LocalSocket : public ITransport
 {
 public:
     // Connect to local socket at socketFilePath
@@ -38,7 +38,7 @@ public:
 
     ~LocalSocket();
 
-    // virtuals from IConnection
+    // virtuals from ITransport
     uint32 write(chunk data) override;
     uint32 writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors) override;
     uint32 availableBytesForReading() override;
@@ -48,7 +48,7 @@ public:
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
     void handleCanRead() override;
-    // end IConnection
+    // end ITransport
 
     LocalSocket() = delete;
     LocalSocket(const LocalSocket &) = delete;

@@ -21,28 +21,35 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ICOMPLETIONCLIENT_H
-#define ICOMPLETIONCLIENT_H
+#ifndef ITRANSPORTLISTENER_H
+#define ITRANSPORTLISTENER_H
 
-#include "export.h"
+class ITransport;
 
-#include <functional>
-
-class DFERRY_EXPORT ICompletionClient
+class ITransportListener
 {
 public:
-    virtual ~ICompletionClient();
-    virtual void handleCompletion(void *task) = 0;
+    ITransportListener();
+    virtual ~ITransportListener();
+
+    void setReadNotificationEnabled(bool enable);
+    bool readNotificationEnabled() const;
+
+    void setWriteNotificationEnabled(bool enable);
+    bool writeNotificationEnabled() const;
+
+    // public mainly for testing purposes - only call if you know what you're doing
+    // no-op default implementations are provided so you only need to reimplement what you need
+    virtual void handleTransportCanRead();
+    virtual void handleTransportCanWrite();
+
+protected:
+    ITransport *transport() const; // returns m_transport
+    bool m_readNotificationEnabled;
+    bool m_writeNotificationEnabled;
+    friend class ITransport;
+private:
+    ITransport *m_transport; // set from ITransport::addListener() / removeListener()
 };
 
-class DFERRY_EXPORT CompletionFunc : public ICompletionClient
-{
-public:
-    CompletionFunc(std::function<void(void *)> func) : m_func(func) {}
-    ~CompletionFunc() {}
-    void handleCompletion(void *task) override { if (m_func) { m_func(task); } }
-
-    std::function<void(void *)> m_func;
-};
-
-#endif // ICOMPLETIONCLIENT_H
+#endif // ITRANSPORTLISTENER_H

@@ -21,28 +21,28 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IIOEVENTCLIENT_H
-#define IIOEVENTCLIENT_H
+#ifndef ICOMPLETIONLISTENER_H
+#define ICOMPLETIONLISTENER_H
 
-#include "platform.h"
+#include "export.h"
 
-class EventDispatcher;
-class EventDispatcherPrivate;
+#include <functional>
 
-class IioEventClient
+class DFERRY_EXPORT ICompletionListener
 {
 public:
-    virtual ~IioEventClient();
-
-    virtual FileDescriptor fileDescriptor() const = 0;
-
-    virtual void setEventDispatcher(EventDispatcher *ed) = 0;
-    virtual EventDispatcher *eventDispatcher() const = 0;
-
-protected:
-    friend class EventDispatcherPrivate;
-    virtual void handleCanRead() = 0;
-    virtual void handleCanWrite() = 0;
+    virtual ~ICompletionListener();
+    virtual void handleCompletion(void *task) = 0;
 };
 
-#endif // IIOEVENTCLIENT_H
+class DFERRY_EXPORT CompletionFunc : public ICompletionListener
+{
+public:
+    CompletionFunc(std::function<void(void *)> func) : m_func(func) {}
+    ~CompletionFunc() {}
+    void handleCompletion(void *task) override { if (m_func) { m_func(task); } }
+
+    std::function<void(void *)> m_func;
+};
+
+#endif // ICOMPLETIONLISTENER_H

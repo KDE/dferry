@@ -24,7 +24,7 @@
 #ifndef AUTHCLIENT_H
 #define AUTHCLIENT_H
 
-#include "iconnectionclient.h"
+#include "itransportlistener.h"
 
 #include <string>
 
@@ -32,20 +32,20 @@
 //      enumerate client and server auth mechanisms and then instantiate and pass control to
 //      the right IAuthMechanism implementation (with or without staying around as an intermediate).
 
-class ICompletionClient;
+class ICompletionListener;
 
-class AuthClient : public IConnectionClient
+class AuthClient : public ITransportListener
 {
 public:
-    explicit AuthClient(IConnection *connection);
+    explicit AuthClient(ITransport *transport);
 
-    // reimplemented from IConnectionClient
-    virtual void handleConnectionCanRead();
+    // reimplemented from ITransportClient
+    virtual void handleTransportCanRead();
 
     bool isFinished() const;
     bool isAuthenticated() const;
 
-    void setCompletionClient(ICompletionClient *);
+    void setCompletionListener(ICompletionListener *);
 
 private:
     bool readLine();
@@ -62,7 +62,7 @@ private:
 
     State m_state;
     std::string m_line;
-    ICompletionClient *m_completionClient;
+    ICompletionListener *m_completionListener;
 };
 
 #endif

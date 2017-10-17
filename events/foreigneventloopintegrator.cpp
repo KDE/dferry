@@ -25,7 +25,7 @@
 
 #include "eventdispatcher_p.h"
 #include "ieventpoller.h"
-#include "iioeventclient.h"
+#include "iioeventlistener.h"
 
 #include <cassert>
 #include <unordered_map>
@@ -40,9 +40,9 @@ public:
     // interrupt the waiting for events (from another thread)
     void interrupt(InterruptAction action) override;
 
-    void addIoEventClient(IioEventClient *ioc) override;
-    void removeIoEventClient(IioEventClient *ioc) override;
-    void setReadWriteInterest(IioEventClient *ioc, bool read, bool write) override;
+    void addIoEventListener(IioEventListener *iol) override;
+    void removeIoEventListener(IioEventListener *iol) override;
+    void setReadWriteInterest(IioEventListener *iol, bool read, bool write) override;
 
     // public accessor for protected member variable
     EventDispatcher *dispatcher() const { return m_dispatcher; }
@@ -75,34 +75,34 @@ void ForeignEventLoopIntegratorPrivate::interrupt(InterruptAction /* action */)
     // do nothing, it can't possibly work (and it is *sometimes* a benign error to call this)
 }
 
-void ForeignEventLoopIntegratorPrivate::addIoEventClient(IioEventClient *ioc)
+void ForeignEventLoopIntegratorPrivate::addIoEventListener(IioEventListener *iol)
 {
     if (!exiting) {
         RwEnabled rw = { false, false };
-        m_fds.emplace(ioc->fileDescriptor(), rw);
+        m_fds.emplace(iol->fileDescriptor(), rw);
     }
 }
 
-void ForeignEventLoopIntegratorPrivate::removeIoEventClient(IioEventClient *ioc)
+void ForeignEventLoopIntegratorPrivate::removeIoEventListener(IioEventListener *iol)
 {
     if (!exiting) {
-        m_fds.erase(ioc->fileDescriptor());
+        m_fds.erase(iol->fileDescriptor());
     }
 }
 
-void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(IioEventClient *ioc, bool read, bool write)
+void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
 {
     if (exiting) {
         return;
     }
-    RwEnabled &rw = m_fds.at(ioc->fileDescriptor());
+    RwEnabled &rw = m_fds.at(iol->fileDescriptor());
     if (rw.readEnabled != read) {
         rw.readEnabled = read;
-        m_integrator->setWatchRead(ioc->fileDescriptor(), read);
+        m_integrator->setWatchRead(iol->fileDescriptor(), read);
     }
     if (rw.writeEnabled != write) {
         rw.writeEnabled = write;
-        m_integrator->setWatchWrite(ioc->fileDescriptor(), write);
+        m_integrator->setWatchWrite(iol->fileDescriptor(), write);
     }
 }
 
@@ -163,13 +163,13 @@ void ForeignEventLoopIntegrator::handleTimeout()
 void ForeignEventLoopIntegrator::handleReadyRead(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyClientForReading(fd);
+        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForReading(fd);
     }
 }
 
 void ForeignEventLoopIntegrator::handleReadyWrite(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyClientForWriting(fd);
+        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForWriting(fd);
     }
 }
