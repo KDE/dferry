@@ -1487,6 +1487,7 @@ static void test_signatureLengths()
         switch (i) {
         case 0:
             TEST(false);
+            break;
         case 1:
             writer.writeByte(255);
             break;
