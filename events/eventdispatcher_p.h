@@ -74,7 +74,7 @@ public:
     void maybeSetTimeoutForIntegrator();
     // for Connection
     // this is similar to interrupt(), but doesn't make poll() return false and will call
-    // m_connectionToNotify() -> processQueuedEvents()
+    // m_connectionToNotify -> processQueuedEvents()
     void wakeForEvents();
     void queueEvent(std::unique_ptr<Event> evt); // safe to call from any thread
     void processAuxEvents();

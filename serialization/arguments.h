@@ -108,8 +108,10 @@ public:
         LastState
     };
 
-    Arguments(); // constructs an empty argument list
-    // constructs an argument list to deserialize data in @p data with signature @p signature;
+    // Constructs an empty argument list
+    Arguments();
+
+    // Constructs an argument list to deserialize data in @p data with signature @p signature;
     // if memOwnership is non-null, this means that signature and data's memory is contained in
     // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
     // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
@@ -120,7 +122,8 @@ public:
     // The copy contructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
     Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
-    // same thing as above, just with file descriptors
+
+    // Same thing as above, with file descriptors added
     Arguments(byte *memOwnership, cstring signature, chunk data,
               std::vector<int> fileDescriptors, bool isByteSwapped = false);
 

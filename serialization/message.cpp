@@ -845,7 +845,6 @@ chunk Message::serializeAndView()
     }
     ret = d->m_buffer;
     return ret;
-
 }
 
 std::vector<byte> Message::save()
