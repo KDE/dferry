@@ -82,32 +82,6 @@ public:
     void setType(Type type);
     uint32 protocolVersion() const;
 
-    // more convenient access to headers
-    void setPath(const std::string &path);
-    void setInterface(const std::string &interface);
-    void setMethod(const std::string &method);
-    void setErrorName(const std::string &errorName);
-    void setReplySerial(uint32 replySerial);
-    void setDestination(const std::string &destination);
-    void setSender(const std::string &sender);
-    // no setSignature() - setArguments() also sets the signature
-    void setUnixFdCount(uint32 fdCount);
-
-    std::string path() const;
-    std::string interface() const;
-    std::string method() const;
-    std::string errorName() const;
-    uint32 replySerial() const;
-    std::string destination() const;
-    std::string sender() const;
-    std::string signature() const;
-    uint32 unixFdCount() const;
-
-    bool expectsReply() const;
-    void setExpectsReply(bool);
-
-    // "more generic", enum-based access to headers
-
     enum VariableHeader {
         PathHeader = 1,
         InterfaceHeader,
@@ -120,6 +94,7 @@ public:
         UnixFdsHeader
     };
 
+    // enum-based access to headers
     // These are validated during serialization, not now; the message cannot expected to be in a
     // completely valid state before that anyway. Yes, we could validate some things, but let's just
     // do it all at once.
@@ -127,6 +102,29 @@ public:
     void setStringHeader(VariableHeader header, const std::string &value);
     uint32 intHeader(VariableHeader header, bool *isPresent = nullptr) const;
     void setIntHeader(VariableHeader header, uint32 value);
+
+    // convenience access to headers, these directly call enum-based getters / setters
+    std::string path() const;
+    void setPath(const std::string &path);
+    std::string interface() const;
+    void setInterface(const std::string &interface);
+    std::string method() const;
+    void setMethod(const std::string &method);
+    std::string errorName() const;
+    void setErrorName(const std::string &errorName);
+    uint32 replySerial() const;
+    void setReplySerial(uint32 replySerial);
+    std::string destination() const;
+    void setDestination(const std::string &destination);
+    std::string sender() const;
+    void setSender(const std::string &sender);
+    std::string signature() const;
+    // no setSignature() - setArguments() also sets the signature
+    uint32 unixFdCount() const;
+    void setUnixFdCount(uint32 fdCount);
+
+    bool expectsReply() const;
+    void setExpectsReply(bool);
 
     // setArguments also sets the signature header of the message
     void setArguments(Arguments arguments);
