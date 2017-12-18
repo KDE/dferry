@@ -78,7 +78,7 @@ class ClientConnectedHandler;
 class ConnectionPrivate : public ICompletionListener
 {
 public:
-    static ConnectionPrivate *get(Connection *t) { return t->d; }
+    static ConnectionPrivate *get(Connection *c) { return c->d; }
 
     ConnectionPrivate(EventDispatcher *dispatcher);
     void close();

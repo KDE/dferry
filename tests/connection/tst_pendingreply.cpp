@@ -65,7 +65,7 @@ public:
 static void testBusAddress(bool waitForConnected)
 {
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
 
     Message msg;
     addressMessageToBus(&msg);
@@ -78,12 +78,12 @@ static void testBusAddress(bool waitForConnected)
 
     if (waitForConnected) {
         // finish creating the connection
-        while (trans.uniqueName().empty()) {
+        while (conn.uniqueName().empty()) {
             eventDispatcher.poll();
         }
     }
 
-    PendingReply busNameReply = trans.send(move(msg));
+    PendingReply busNameReply = conn.send(move(msg));
     ReplyCheck replyCheck;
     replyCheck.m_eventDispatcher = &eventDispatcher;
     busNameReply.setReceiver(&replyCheck);
@@ -109,18 +109,18 @@ public:
 static void testTimeout()
 {
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
 
     // finish creating the connection; we need to know our own name so we can send the message to
     // ourself so we can make sure that there will be no reply :)
-    while (trans.uniqueName().empty()) {
+    while (conn.uniqueName().empty()) {
         eventDispatcher.poll();
     }
 
     Message msg = Message::createCall("/some/dummy/path/lol", "dummy_interface", "non_existent_method");
-    msg.setDestination(trans.uniqueName());
+    msg.setDestination(conn.uniqueName());
 
-    PendingReply neverGonnaGetReply = trans.send(move(msg), 200);
+    PendingReply neverGonnaGetReply = conn.send(move(msg), 200);
     TimeoutCheck timeoutCheck;
     timeoutCheck.m_eventDispatcher = &eventDispatcher;
     neverGonnaGetReply.setReceiver(&timeoutCheck);
