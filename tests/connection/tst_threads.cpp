@@ -87,22 +87,22 @@ static void pongThreadRun(Connection::CommRef mainConnectionRef, std::atomic<boo
 {
     std::cout << " Pong thread starting!\n";
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, std::move(mainConnectionRef));
+    Connection conn(&eventDispatcher, std::move(mainConnectionRef));
 
     PongSender pongSender;
-    pongSender.m_connection = &trans;
+    pongSender.m_connection = &conn;
 
-    trans.setSpontaneousMessageReceiver(&pongSender);
+    conn.setSpontaneousMessageReceiver(&pongSender);
 
     while (eventDispatcher.poll()) {
         std::cout << " Pong thread waking up!\n";
-        if (trans.uniqueName().length()) {
+        if (conn.uniqueName().length()) {
             pongThreadReady->store(true);
             // HACK: we do this only to wake up the main thread's event loop
             std::cout << "\n\nSending WAKEUP package!!\n\n";
             Message wakey = Message::createCall(echoPath, "org.notexample.foo", echoMethod);
-            wakey.setDestination(trans.uniqueName());
-            trans.sendNoReply(std::move(wakey));
+            wakey.setDestination(conn.uniqueName());
+            conn.sendNoReply(std::move(wakey));
         } else {
             std::cout << " Pong thread: NO NAME YET!\n";
         }
@@ -132,25 +132,25 @@ public:
 static void testPingPong()
 {
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> pongThreadReady(false);
-    std::thread pongThread(pongThreadRun, trans.createCommRef(), &pongThreadReady);
+    std::thread pongThread(pongThreadRun, conn.createCommRef(), &pongThreadReady);
 
     // finish creating the connection
-    while (trans.uniqueName().empty()) {
+    while (conn.uniqueName().empty()) {
         std::cout << ".";
         eventDispatcher.poll();
     }
 
-    std::cout << "we have connection! " << trans.uniqueName() << "\n";
+    std::cout << "we have connection! " << conn.uniqueName() << "\n";
 
     // send ping message to other thread
     Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
     Arguments::Writer writer;
     writer.writeString(pingPayload);
     ping.setArguments(writer.finish());
-    ping.setDestination(trans.uniqueName());
+    ping.setDestination(conn.uniqueName());
 
     PongReceiver pongReceiver;
     PendingReply pongReply;
@@ -160,7 +160,7 @@ static void testPingPong()
         eventDispatcher.poll();
         if (pongThreadReady.load() && !sentPing) {
             std::cout << "\n\nSending ping!!\n\n";
-            pongReply = trans.send(std::move(ping));
+            pongReply = conn.send(std::move(ping));
             pongReply.setReceiver(&pongReceiver);
             sentPing = true;
         }
@@ -195,15 +195,15 @@ static void timeoutThreadRun(Connection::CommRef mainConnectionRef, std::atomic<
     // more convenient for client programmers and brings some limited ordering guarantees.
     std::cout << " Other thread starting!\n";
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, std::move(mainConnectionRef));
-    while (!trans.uniqueName().length()) {
+    Connection conn(&eventDispatcher, std::move(mainConnectionRef));
+    while (!conn.uniqueName().length()) {
         eventDispatcher.poll();
     }
 
     Message notRepliedTo = Message::createCall(echoPath, echoInterface, echoMethod);
-    notRepliedTo.setDestination(trans.uniqueName());
+    notRepliedTo.setDestination(conn.uniqueName());
 
-    PendingReply deadReply = trans.send(std::move(notRepliedTo), 50);
+    PendingReply deadReply = conn.send(std::move(notRepliedTo), 50);
     TimeoutReceiver timeoutReceiver;
     deadReply.setReceiver(&timeoutReceiver);
 
@@ -216,10 +216,10 @@ static void timeoutThreadRun(Connection::CommRef mainConnectionRef, std::atomic<
 static void testThreadedTimeout()
 {
     EventDispatcher eventDispatcher;
-    Connection trans(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
 
     std::atomic<bool> done(false);
-    std::thread timeoutThread(timeoutThreadRun, trans.createCommRef(), &done);
+    std::thread timeoutThread(timeoutThreadRun, conn.createCommRef(), &done);
 
     while (!done) {
         eventDispatcher.poll();
