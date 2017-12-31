@@ -116,11 +116,11 @@ public:
     bool m_isByteSwapped;
     enum { // ### we don't have an error state, the need hasn't arisen yet. strange!
         Empty = 0,
-        Serialized,
-        Deserialized,
-        LastSteadyState = Deserialized,
-        Serializing,
-        Deserializing
+        Serialized, // This means that marshalled and "native format" data is in sync, which is really
+                    // the same whether the message was marshalled or demarshalled
+        FirstIoState,
+        Sending = FirstIoState,
+        Receiving
     } m_state;
     Message::Type m_messageType;
     enum {

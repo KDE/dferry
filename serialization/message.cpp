@@ -673,44 +673,39 @@ static const uint32 s_extendedFixedHeaderLength = 16;
 #ifndef DFERRY_SERDES_ONLY
 void MessagePrivate::receive(ITransport *transport)
 {
-    if (m_state > LastSteadyState) {
+    if (m_state >= FirstIoState) { // Can only do one I/O operation at a time
         std::cerr << "MessagePrivate::receive() Error A.\n";
         return;
     }
     transport->addListener(this);
     setReadNotificationEnabled(true);
-    m_state = MessagePrivate::Deserializing;
+    m_state = MessagePrivate::Receiving;
     m_headerLength = 0;
     m_bodyLength = 0;
 }
 
 bool Message::isReceiving() const
 {
-    return d->m_state == MessagePrivate::Deserializing;
+    return d->m_state == MessagePrivate::Receiving;
 }
 
 void MessagePrivate::send(ITransport *transport)
 {
-    if (!m_buffer.length && !serialize()) {
+    if (!serialize()) {
         std::cerr << "MessagePrivate::send() Error A.\n";
         // m_error.setCode();
         // notifyCompletionListener(); would call into Connection, but it's easier for Connection to handle
         //                             the error from non-callback code, directly in the caller of send().
         return;
     }
-    if (m_state > MessagePrivate::LastSteadyState) {
-        std::cerr << "MessagePrivate::send() Error B.\n";
-        // TODO error feedback
-        return;
-    }
     transport->addListener(this);
     setWriteNotificationEnabled(true);
-    m_state = MessagePrivate::Serializing;
+    m_state = MessagePrivate::Sending;
 }
 
 bool Message::isSending() const
 {
-    return d->m_state == MessagePrivate::Serializing;
+    return d->m_state == MessagePrivate::Sending;
 }
 
 void MessagePrivate::setCompletionListener(ICompletionListener *listener)
@@ -727,7 +722,7 @@ void MessagePrivate::notifyCompletionListener()
 
 void MessagePrivate::handleTransportCanRead()
 {
-    if (m_state != Deserializing) {
+    if (m_state != Receiving) {
         return;
     }
     bool isError = false;
@@ -774,7 +769,7 @@ void MessagePrivate::handleTransportCanRead()
             // all done!
             assert(m_bufferPos == m_headerLength + m_bodyLength);
             setReadNotificationEnabled(false);
-            m_state = Deserialized;
+            m_state = Serialized;
             chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
             m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
                                         bodyData, std::move(m_fileDescriptors), m_isByteSwapped);
@@ -802,7 +797,7 @@ void MessagePrivate::handleTransportCanRead()
 
 void MessagePrivate::handleTransportCanWrite()
 {
-    if (m_state != Serializing) {
+    if (m_state != Sending) {
         return;
     }
     while (true) {
@@ -811,7 +806,6 @@ void MessagePrivate::handleTransportCanWrite()
         if (!toWrite) {
             setWriteNotificationEnabled(false);
             m_state = Serialized;
-            clearBuffer();
             transport()->removeListener(this);
             assert(transport() == nullptr);
             notifyCompletionListener();
@@ -836,7 +830,7 @@ void MessagePrivate::handleTransportCanWrite()
 chunk Message::serializeAndView()
 {
     chunk ret; // one return variable to enable return value optimization (RVO) in gcc
-    if (d->m_state > MessagePrivate::LastSteadyState) {
+    if (d->m_state >= MessagePrivate::FirstIoState) {
         return ret;
     }
     if (!d->m_buffer.length && !d->serialize()) {
@@ -850,10 +844,7 @@ chunk Message::serializeAndView()
 std::vector<byte> Message::save()
 {
     vector<byte> ret;
-    if (d->m_state > MessagePrivate::LastSteadyState) {
-        return ret;
-    }
-    if (!d->m_buffer.length && !d->serialize()) {
+    if (!d->serialize()) {
         return ret;
     }
     ret.reserve(d->m_buffer.length);
@@ -865,7 +856,7 @@ std::vector<byte> Message::save()
 
 void Message::deserializeAndTake(chunk memOwnership)
 {
-    if (d->m_state > MessagePrivate::LastSteadyState) {
+    if (d->m_state >= MessagePrivate::FirstIoState) {
         free(memOwnership.ptr);
         return;
     }
@@ -891,14 +882,14 @@ void Message::deserializeAndTake(chunk memOwnership)
     chunk bodyData(d->m_buffer.ptr + d->m_headerLength, d->m_bodyLength);
     d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
                                    bodyData, d->m_isByteSwapped);
-    d->m_state = MessagePrivate::Deserialized;
+    d->m_state = MessagePrivate::Serialized;
 }
 
 // This does not return bool because full validation of the main arguments would take quite
 // a few cycles. Validating only the header of the message doesn't seem to be worth it.
 void Message::load(const std::vector<byte> &data)
 {
-    if (d->m_state > MessagePrivate::LastSteadyState || data.empty()) {
+    if (d->m_state >= MessagePrivate::FirstIoState || data.empty()) {
         return;
     }
     chunk buf;
@@ -1068,9 +1059,13 @@ bool MessagePrivate::deserializeVariableHeaders()
 
 bool MessagePrivate::serialize()
 {
-    if (!m_dirty) {
+    if (m_state >= FirstIoState) { // Marshalled data must not be touched while doing I/O
+        return false;
+    }
+    if (m_state == Serialized && !m_dirty) {
         return true;
     }
+
     clearBuffer();
 
     if (m_error.isError() || !requiredHeadersPresent()) {
@@ -1124,6 +1119,7 @@ bool MessagePrivate::serialize()
     m_bufferPos = 0;
 
     m_dirty = false;
+    m_state = Serialized;
     return true;
 }
 
