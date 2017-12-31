@@ -508,6 +508,14 @@ uint32 Message::protocolVersion() const
 void Message::setSerial(uint32 serial)
 {
     d->m_serial = serial;
+    if (d->m_state == MessagePrivate::Serialized && !d->m_dirty) {
+        // performance hack: setSerial is likely to happen just before sending - don't re-serialize,
+        // just patch it.
+        byte *p = d->m_buffer.ptr;
+        basic::writeUint32(p + 4 /* bytes */ + sizeof(uint32), d->m_serial);
+        return;
+    }
+    d->m_dirty = true;
 }
 
 uint32 Message::serial() const
