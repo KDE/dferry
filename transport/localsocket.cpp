@@ -56,10 +56,11 @@ LocalSocket::LocalSocket(const string &socketFilePath)
     addr.sun_family = PF_UNIX;
     bool ok = socketFilePath.length() < sizeof(addr.sun_path);
     if (ok) {
-        memcpy(addr.sun_path, socketFilePath.c_str(), socketFilePath.length());
+        memcpy(addr.sun_path, socketFilePath.c_str(), socketFilePath.length() + 1);
     }
 
-    ok = ok && (connect(fd, (struct sockaddr *)&addr, sizeof(sa_family_t) + socketFilePath.length()) == 0);
+    ok = ok && (connect(fd, (struct sockaddr *)&addr,
+                        sizeof(sa_family_t) + socketFilePath.length() + 1) == 0);
 
     if (ok) {
         m_fd = fd;
