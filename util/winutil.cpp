@@ -31,10 +31,7 @@
 #include <sddl.h>
 #endif
 
-
-using namespace std;
-
-string fetchWindowsSid()
+std::string fetchWindowsSid()
 {
     // Since this code is adapted from libdbus, keep the processId parameter which is only used
     // by the server, in case we need it later. The fixed value should let currently dead code
@@ -48,7 +45,7 @@ string fetchWindowsSid()
     HANDLE processToken = INVALID_HANDLE_VALUE;
     if (ok && !OpenProcessToken(processHandle, TOKEN_QUERY, &processToken)) {
         ok = false;
-        cerr << "OpenProcessToken failed " << GetLastError() << '\n';
+        std::cerr << "OpenProcessToken failed " << GetLastError() << '\n';
     }
 
     PSID psid;
@@ -57,8 +54,8 @@ string fetchWindowsSid()
         SetLastError(0);
         GetTokenInformation(processToken, TokenUser, nullptr, 0, &n);
         TOKEN_USER *token_user = static_cast<TOKEN_USER *>(alloca(n));
-        // cerr << "GetTokenInformation to get length: length is " << n
-        //     << " and GetLastError() returns " << GetLastError() << ".\n";
+        // std::cerr << "GetTokenInformation to get length: length is " << n
+        //           << " and GetLastError() returns " << GetLastError() << ".\n";
         if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !token_user) {
             n = 0;
         }
@@ -66,16 +63,16 @@ string fetchWindowsSid()
             psid = token_user->User.Sid;
         } else {
             ok = false;
-            cerr << "GetTokenInformation failed " << GetLastError() << '\n';
+            std::cerr << "GetTokenInformation failed " << GetLastError() << '\n';
         }
     }
 
     if (ok && !IsValidSid(psid)) {
         ok = false;
-        cerr << "IsValidSid() says no\n";
+        std::cerr << "IsValidSid() says no\n";
     }
 
-    string ret;
+    std::string ret;
     if (ok) {
         char *sidChar = nullptr;
         if (ConvertSidToStringSidA(psid, &sidChar)) {
@@ -83,7 +80,7 @@ string fetchWindowsSid()
             LocalFree(sidChar);
         } else {
             ok = false;
-            cerr << "invalid SID in ConvertSidToStringSidA()\n";
+            std::cerr << "invalid SID in ConvertSidToStringSidA()\n";
         }
     }
 

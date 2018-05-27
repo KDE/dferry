@@ -25,13 +25,11 @@
 
 #include <sstream>
 
-using namespace std;
-
-vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
+std::vector<std::string> split(const std::string &s, char delimiter, bool keepEmptyParts)
 {
-    vector<string> ret;
-    stringstream ss(s);
-    string part;
+    std::vector<std::string> ret;
+    std::stringstream ss(s);
+    std::string part;
     while (getline(ss, part, delimiter)) {
         if (keepEmptyParts || !part.empty()) {
             ret.push_back(part);
@@ -43,9 +41,9 @@ vector<string> split(const string &s, char delimiter, bool keepEmptyParts)
 #ifndef DFERRY_SERDES_ONLY
 #include "sha1.c"
 
-string hexEncode(const string &s)
+std::string hexEncode(const std::string &s)
 {
-    stringstream ss;
+    std::stringstream ss;
     for (size_t i = 0; i < s.length(); i++) {
         const byte b = static_cast<byte>(s[i]);
         ss << std::hex << uint(b >> 4) << uint(b & 0xf);
@@ -53,13 +51,13 @@ string hexEncode(const string &s)
     return ss.str();
 }
 
-string sha1Hex(const string &s)
+std::string sha1Hex(const std::string &s)
 {
     sha1nfo sha;
     sha1_init(&sha);
     sha1_write(&sha, s.c_str(), s.length());
     // SHA-1 produces a 160 bits result, which is 20 bytes
-    string shaResult(reinterpret_cast<char *>(sha1_result(&sha)), 20);
+    const std::string shaResult(reinterpret_cast<char *>(sha1_result(&sha)), 20);
     return hexEncode(shaResult);
 }
 #endif

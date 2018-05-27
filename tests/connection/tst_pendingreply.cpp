@@ -34,13 +34,11 @@
 #include <iostream>
 #include <string>
 
-using namespace std;
-
 static void addressMessageToBus(Message *msg)
 {
     msg->setType(Message::MethodCallMessage);
-    msg->setDestination(string("org.freedesktop.DBus"));
-    msg->setInterface(string("org.freedesktop.DBus"));
+    msg->setDestination("org.freedesktop.DBus");
+    msg->setInterface("org.freedesktop.DBus");
     msg->setPath("/org/freedesktop/DBus");
 }
 
@@ -69,7 +67,7 @@ static void testBusAddress(bool waitForConnected)
 
     Message msg;
     addressMessageToBus(&msg);
-    msg.setMethod(string("RequestName"));
+    msg.setMethod("RequestName");
 
     Arguments::Writer writer;
     writer.writeString("Bana.nana"); // requested name
@@ -83,7 +81,7 @@ static void testBusAddress(bool waitForConnected)
         }
     }
 
-    PendingReply busNameReply = conn.send(move(msg));
+    PendingReply busNameReply = conn.send(std::move(msg));
     ReplyCheck replyCheck;
     replyCheck.m_eventDispatcher = &eventDispatcher;
     busNameReply.setReceiver(&replyCheck);
@@ -120,7 +118,7 @@ static void testTimeout()
     Message msg = Message::createCall("/some/dummy/path/lol", "dummy_interface", "non_existent_method");
     msg.setDestination(conn.uniqueName());
 
-    PendingReply neverGonnaGetReply = conn.send(move(msg), 200);
+    PendingReply neverGonnaGetReply = conn.send(std::move(msg), 200);
     TimeoutCheck timeoutCheck;
     timeoutCheck.m_eventDispatcher = &eventDispatcher;
     neverGonnaGetReply.setReceiver(&timeoutCheck);

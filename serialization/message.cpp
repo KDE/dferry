@@ -40,8 +40,6 @@
 
 #include <iostream>
 
-using namespace std;
-
 #ifdef BIGENDIAN
 static const byte s_thisMachineEndianness = 'b';
 #else
@@ -117,7 +115,8 @@ VarHeaderStorage::~VarHeaderStorage()
     for (int i = 0; i < s_stringHeaderCount; i++) {
         const Message::VariableHeader field = s_stringHeaderAtIndex[i];
         if (hasHeader(field)) {
-            stringHeaders()[i].~string();
+            // ~basic_string() instead of ~string() to work around a GCC bug
+            stringHeaders()[i].~basic_string();
         }
     }
 }
@@ -137,9 +136,9 @@ bool VarHeaderStorage::hasIntHeader(Message::VariableHeader header) const
     return hasHeader(header) && !isStringHeader(header);
 }
 
-string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
+std::string VarHeaderStorage::stringHeader(Message::VariableHeader header) const
 {
-    return hasStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : string();
+    return hasStringHeader(header) ? stringHeaders()[indexOfHeader(header)] : std::string();
 }
 
 cstring VarHeaderStorage::stringHeaderRaw(Message::VariableHeader header)
@@ -149,14 +148,14 @@ cstring VarHeaderStorage::stringHeaderRaw(Message::VariableHeader header)
     cstring ret;
     assert(isStringHeader(header));
     if (hasHeader(header)) {
-        string &str = stringHeaders()[indexOfHeader(header)];
+        std::string &str = stringHeaders()[indexOfHeader(header)];
         ret.ptr = const_cast<char *>(str.c_str());
         ret.length = str.length();
     }
     return ret;
 }
 
-void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const string &value)
+void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const std::string &value)
 {
     if (!isStringHeader(header)) {
         return;
@@ -166,7 +165,7 @@ void VarHeaderStorage::setStringHeader(Message::VariableHeader header, const str
         stringHeaders()[idx] = value;
     } else {
         m_headerPresenceBitmap |= 1u << header;
-        new(stringHeaders() + idx) string(value);
+        new(stringHeaders() + idx) std::string(value);
     }
 }
 
@@ -177,7 +176,7 @@ bool VarHeaderStorage::setStringHeader_deser(Message::VariableHeader header, cst
         return false;
     }
     m_headerPresenceBitmap |= 1u << header;
-    new(stringHeaders() + indexOfHeader(header)) string(value.ptr, value.length);
+    new(stringHeaders() + indexOfHeader(header)) std::string(value.ptr, value.length);
     return true;
 }
 
@@ -188,7 +187,7 @@ void VarHeaderStorage::clearStringHeader(Message::VariableHeader header)
     }
     if (hasHeader(header)) {
         m_headerPresenceBitmap &= ~(1u << header);
-        stringHeaders()[indexOfHeader(header)].~string();
+        stringHeaders()[indexOfHeader(header)].~basic_string();
     }
 }
 
@@ -348,7 +347,7 @@ Error Message::error() const
     return d->m_error;
 }
 
-void Message::setCall(const string &path, const string &interface, const string &method)
+void Message::setCall(const std::string &path, const std::string &interface, const std::string &method)
 {
     setType(MethodCallMessage);
     setPath(path);
@@ -356,7 +355,7 @@ void Message::setCall(const string &path, const string &interface, const string 
     setMethod(method);
 }
 
-void Message::setCall(const string &path, const string &method)
+void Message::setCall(const std::string &path, const std::string &method)
 {
     setType(MethodCallMessage);
     setPath(path);
@@ -370,7 +369,7 @@ void Message::setReplyTo(const Message &call)
     setReplySerial(call.serial());
 }
 
-void Message::setErrorReplyTo(const Message &call, const string &errorName)
+void Message::setErrorReplyTo(const Message &call, const std::string &errorName)
 {
     setType(ErrorMessage);
     setErrorName(errorName);
@@ -378,7 +377,7 @@ void Message::setErrorReplyTo(const Message &call, const string &errorName)
     setReplySerial(call.serial());
 }
 
-void Message::setSignal(const string &path, const string &interface, const string &method)
+void Message::setSignal(const std::string &path, const std::string &interface, const std::string &method)
 {
     setType(SignalMessage);
     setPath(path);
@@ -386,14 +385,14 @@ void Message::setSignal(const string &path, const string &interface, const strin
     setMethod(method);
 }
 
-Message Message::createCall(const string &path, const string &interface, const string &method)
+Message Message::createCall(const std::string &path, const std::string &interface, const std::string &method)
 {
     Message ret;
     ret.setCall(path, interface, method);
     return ret;
 }
 
-Message Message::createCall(const string &path, const string &method)
+Message Message::createCall(const std::string &path, const std::string &method)
 {
     Message ret;
     ret.setCall(path, method);
@@ -407,14 +406,14 @@ Message Message::createReplyTo(const Message &call)
     return ret;
 }
 
-Message Message::createErrorReplyTo(const Message &call, const string &errorName)
+Message Message::createErrorReplyTo(const Message &call, const std::string &errorName)
 {
     Message ret;
     ret.setErrorReplyTo(call, errorName);
     return ret;
 }
 
-Message Message::createSignal(const string &path, const string &interface, const string &method)
+Message Message::createSignal(const std::string &path, const std::string &interface, const std::string &method)
 {
     Message ret;
     ret.setSignal(path, interface, method);
@@ -453,19 +452,19 @@ static const char *printableMessageTypes[messageTypeCount] = {
     "Signal"
 };
 
-string Message::prettyPrint() const
+std::string Message::prettyPrint() const
 {
-    string ret;
+    std::string ret;
     if (d->m_messageType >= 1 && d->m_messageType < messageTypeCount) {
         ret += printableMessageTypes[d->m_messageType];
     } else {
-        return string("Invalid message.\n");
+        return std::string("Invalid message.\n");
     }
 
-    ostringstream os;
+    std::ostringstream os;
     for (int i = 0; i < stringHeadersCount; i++ ) {
         bool isPresent = false;
-        string str = stringHeader(stringHeaderPrinters[i].field, &isPresent);
+        std::string str = stringHeader(stringHeaderPrinters[i].field, &isPresent);
         if (isPresent) {
             os << "; " << stringHeaderPrinters[i].name << ": \"" << str << '"';
 
@@ -608,16 +607,16 @@ void Message::setUnixFdCount(uint32 fdCount)
     setIntHeader(UnixFdsHeader, fdCount);
 }
 
-string Message::stringHeader(VariableHeader header, bool *isPresent) const
+std::string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
     const bool exists = d->m_varHeaders.hasStringHeader(header);
     if (isPresent) {
         *isPresent = exists;
     }
-    return exists ? d->m_varHeaders.stringHeader(header) : string();
+    return exists ? d->m_varHeaders.stringHeader(header) : std::string();
 }
 
-void Message::setStringHeader(VariableHeader header, const string &value)
+void Message::setStringHeader(VariableHeader header, const std::string &value)
 {
     if (header == SignatureHeader) {
         // ### warning? - this is a public method, and setting the signature separately does not make sense
@@ -851,7 +850,7 @@ chunk Message::serializeAndView()
 
 std::vector<byte> Message::save()
 {
-    vector<byte> ret;
+    std::vector<byte> ret;
     if (!d->serialize()) {
         return ret;
     }
@@ -1164,7 +1163,7 @@ Arguments MessagePrivate::serializeVariableHeaders()
         if (m_varHeaders.hasHeader(field)) {
             doVarHeaderPrologue(&writer, field);
 
-            const string &str = m_varHeaders.stringHeaders()[i];
+            const std::string &str = m_varHeaders.stringHeaders()[i];
             if (field == Message::PathHeader) {
                 writer.writeVariantForMessageHeader('o');
                 writer.writeObjectPath(cstring(str.c_str(), str.length()));

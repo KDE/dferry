@@ -49,8 +49,6 @@ typedef SSIZE_T ssize_t;
 // HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
 static const int maxFds = 12;
 
-using namespace std;
-
 IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
 {

@@ -33,8 +33,6 @@
 #include <cstring>
 #include <iostream>
 
-using namespace std;
-
 static void test_signatureHeader()
 {
     Message msg;
@@ -50,7 +48,7 @@ class PrintAndTerminateClient : public IMessageReceiver
 public:
     void handleSpontaneousMessageReceived(Message msg) override
     {
-        cout << msg.prettyPrint();
+        std::cout << msg.prettyPrint();
         m_eventDispatcher->interrupt();
     }
     EventDispatcher *m_eventDispatcher;
@@ -61,7 +59,7 @@ class PrintAndReplyClient : public IMessageReceiver
 public:
     void handleSpontaneousMessageReceived(Message msg) override
     {
-        cout << msg.prettyPrint();
+        std::cout << msg.prettyPrint();
         m_connection->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
         //m_connection->eventDispatcher()->interrupt();
     }
@@ -77,9 +75,9 @@ void testBasic(const ConnectAddress &clientAddress)
     serverAddress.setRole(ConnectAddress::Role::Server);
 
     Connection serverConnection(&dispatcher, serverAddress);
-    cout << "Created server connection. " << &serverConnection << endl;
+    std::cout << "Created server connection. " << &serverConnection << std::endl;
     Connection clientConnection(&dispatcher, clientAddress);
-    cout << "Created client connection. " << &clientConnection << endl;
+    std::cout << "Created client connection. " << &clientConnection << std::endl;
 
     PrintAndReplyClient printAndReplyClient;
     printAndReplyClient.m_connection = &serverConnection;
@@ -94,7 +92,7 @@ void testBasic(const ConnectAddress &clientAddress)
     writer.writeString("couch");
     msg.setArguments(writer.finish());
 
-    clientConnection.sendNoReply(move(msg));
+    clientConnection.sendNoReply(std::move(msg));
 
     while (dispatcher.poll()) {
     }

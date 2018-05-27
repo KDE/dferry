@@ -49,8 +49,6 @@
 
 //#define EVENTDISPATCHER_DEBUG
 
-using namespace std;
-
 #ifndef DFERRY_NO_NATIVE_POLL
 EventDispatcher::EventDispatcher()
    : d(new EventDispatcherPrivate)
@@ -73,11 +71,11 @@ EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    for (const pair<FileDescriptor, IioEventListener*> &fdListener : m_ioListeners) {
+    for (const std::pair<FileDescriptor, IioEventListener*> &fdListener : m_ioListeners) {
         fdListener.second->setEventDispatcher(nullptr);
     }
 
-    for (const pair<uint64 /* due */, Timer*> &dt : m_timers) {
+    for (const std::pair<uint64 /* due */, Timer*> &dt : m_timers) {
         dt.second->m_eventDispatcher = nullptr;
         dt.second->m_isRunning = false;
     }
@@ -101,7 +99,7 @@ bool EventDispatcher::poll(int timeout)
     if (timeout < 0) {
         timeout = nextDue;
     } else if (nextDue >= 0) {
-        timeout = min(timeout, nextDue);
+        timeout = std::min(timeout, nextDue);
     }
 
 #ifdef EVENTDISPATCHER_DEBUG
@@ -130,8 +128,8 @@ void EventDispatcherPrivate::wakeForEvents()
 
 bool EventDispatcherPrivate::addIoEventListener(IioEventListener *iol)
 {
-    pair<unordered_map<FileDescriptor, IioEventListener*>::iterator, bool> insertResult;
-    insertResult = m_ioListeners.insert(make_pair(iol->fileDescriptor(), iol));
+    std::pair<std::unordered_map<FileDescriptor, IioEventListener*>::iterator, bool> insertResult;
+    insertResult = m_ioListeners.insert(std::make_pair(iol->fileDescriptor(), iol));
     const bool ret = insertResult.second;
     if (ret) {
         m_poller->addIoEventListener(iol);
@@ -155,7 +153,7 @@ void EventDispatcherPrivate::setReadWriteInterest(IioEventListener *iol, bool re
 
 void EventDispatcherPrivate::notifyListenerForReading(FileDescriptor fd)
 {
-    unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
+    std::unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
     if (it != m_ioListeners.end()) {
         it->second->handleCanRead();
     } else {
@@ -171,7 +169,7 @@ void EventDispatcherPrivate::notifyListenerForReading(FileDescriptor fd)
 
 void EventDispatcherPrivate::notifyListenerForWriting(FileDescriptor fd)
 {
-    unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
+    std::unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
     if (it != m_ioListeners.end()) {
         it->second->handleCanWrite();
     } else {
@@ -186,7 +184,7 @@ void EventDispatcherPrivate::notifyListenerForWriting(FileDescriptor fd)
 
 int EventDispatcherPrivate::timeToFirstDueTimer() const
 {
-    multimap<uint64, Timer*>::const_iterator it = m_timers.cbegin();
+    std::multimap<uint64, Timer*>::const_iterator it = m_timers.cbegin();
     if (it == m_timers.cend()) {
         return -1;
     }

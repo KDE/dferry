@@ -42,8 +42,6 @@
 #include <cassert>
 #include <iostream>
 
-using namespace std;
-
 class HelloReceiver : public IMessageReceiver
 {
 public:
@@ -99,7 +97,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
 
     if (ca.bus() == ConnectAddress::Bus::None || ca.socketType() == ConnectAddress::SocketType::None ||
         ca.role() == ConnectAddress::Role::None) {
-        cerr << "\nConnection: connection constructor Exit A\n\n";
+        std::cerr << "\nConnection: connection constructor Exit A\n\n";
         return;
     }
 
@@ -114,7 +112,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
 
             d->m_state = ConnectionPrivate::ServerWaitingForClient;
         } else {
-            cerr << "Connection constructor: bus server not supported.\n";
+            std::cerr << "Connection constructor: bus server not supported.\n";
             // state stays at Unconnected
         }
     } else {
@@ -141,7 +139,7 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
     Commutex *const id = d->m_mainThreadLink.id();
     if (!id) {
         assert(false);
-        cerr << "\nConnection: slave constructor Exit A\n\n";
+        std::cerr << "\nConnection: slave constructor Exit A\n\n";
         return; // stay in Unconnected state
     }
 
@@ -470,7 +468,7 @@ void ConnectionPrivate::handleCompletion(void *task)
 
             if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {
-                    m_client->handleSpontaneousMessageReceived(Message(move(*receivedMessage)));
+                    m_client->handleSpontaneousMessageReceived(Message(std::move(*receivedMessage)));
                 }
                 // dispatch to other threads listening to spontaneous messages, if any
                 for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
@@ -590,7 +588,7 @@ void ConnectionPrivate::discardPendingRepliesForSecondaryThread(ConnectionPrivat
 
 void ConnectionPrivate::processEvent(Event *evt)
 {
-    // cerr << "ConnectionPrivate::processEvent() with event type " << evt->type << std::endl;
+    // std::cerr << "ConnectionPrivate::processEvent() with event type " << evt->type << std::endl;
 
     switch (evt->type) {
     case Event::SendMessage:
@@ -606,7 +604,7 @@ void ConnectionPrivate::processEvent(Event *evt)
     case Event::SpontaneousMessageReceived:
         if (m_client) {
             SpontaneousMessageReceivedEvent *smre = static_cast<SpontaneousMessageReceivedEvent *>(evt);
-            m_client->handleSpontaneousMessageReceived(Message(move(smre->message)));
+            m_client->handleSpontaneousMessageReceived(Message(std::move(smre->message)));
         }
         break;
 
@@ -684,11 +682,11 @@ Connection::CommRef Connection::createCommRef()
     // TODO this is a good time to clean up "dead" CommRefs, where the counterpart was destroyed.
     CommRef ret;
     ret.connection = d;
-    pair<CommutexPeer, CommutexPeer> link = CommutexPeer::createLink();
+    std::pair<CommutexPeer, CommutexPeer> link = CommutexPeer::createLink();
     {
         SpinLocker mainLocker(&d->m_lock);
-        d->m_unredeemedCommRefs.emplace_back(move(link.first));
+        d->m_unredeemedCommRefs.emplace_back(std::move(link.first));
     }
-    ret.commutex = move(link.second);
+    ret.commutex = std::move(link.second);
     return ret;
 }

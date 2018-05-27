@@ -36,8 +36,6 @@
 #include <algorithm>
 #include <cassert>
 
-using namespace std;
-
 ITransport::ITransport()
    : m_supportsFileDescriptors(false),
      m_eventDispatcher(0),
@@ -48,18 +46,18 @@ ITransport::ITransport()
 
 ITransport::~ITransport()
 {
-    vector<ITransportListener *> listenersCopy = m_listeners;
+    std::vector<ITransportListener *> listenersCopy = m_listeners;
     for (size_t i = listenersCopy.size() - 1; i + 1 > 0; i--) {
         removeListener(listenersCopy[i]); // LIFO (stack) order seems safest...
     }
 }
 
-chunk ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *)
+chunk ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *)
 {
     return read(buffer, maxSize);
 }
 
-uint32 ITransport::writeWithFileDescriptors(chunk data, const vector<int> &)
+uint32 ITransport::writeWithFileDescriptors(chunk data, const std::vector<int> &)
 {
     return write(data);
 }
@@ -78,7 +76,7 @@ void ITransport::addListener(ITransportListener *listener)
 
 void ITransport::removeListener(ITransportListener *listener)
 {
-    vector<ITransportListener *>::iterator it = find(m_listeners.begin(), m_listeners.end(), listener);
+    std::vector<ITransportListener *>::iterator it = find(m_listeners.begin(), m_listeners.end(), listener);
     if (it == m_listeners.end()) {
         return;
     }
@@ -163,7 +161,7 @@ ITransport *ITransport::create(const ConnectAddress &ci)
         case ConnectAddress::SocketType::Unix:
         return new LocalSocket(ci.path());
     case ConnectAddress::SocketType::AbstractUnix:
-        return new LocalSocket(string(1, '\0') + ci.path());
+        return new LocalSocket(std::string(1, '\0') + ci.path());
 #endif
     case ConnectAddress::SocketType::Ip:
         return new IpSocket(ci);

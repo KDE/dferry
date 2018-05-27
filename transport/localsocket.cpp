@@ -39,9 +39,7 @@
 // HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
 static const int maxFds = 12;
 
-using namespace std;
-
-LocalSocket::LocalSocket(const string &socketFilePath)
+LocalSocket::LocalSocket(const std::string &socketFilePath)
    : m_fd(-1)
 {
     m_supportsFileDescriptors = true;
@@ -119,7 +117,7 @@ uint32 LocalSocket::write(chunk data)
 
 // TODO: consider using iovec to avoid "copying together" message parts before sending; iovec tricks
 // are probably not going to help for receiving, though.
-uint32 LocalSocket::writeWithFileDescriptors(chunk data, const vector<int> &fileDescriptors)
+uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors)
 {
     if (m_fd < 0) {
         return 0; // TODO -1?
@@ -223,7 +221,7 @@ chunk LocalSocket::read(byte *buffer, uint32 maxSize)
     return ret;
 }
 
-chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, vector<int> *fileDescriptors)
+chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors)
 {
     chunk ret;
     if (maxSize <= 0) {

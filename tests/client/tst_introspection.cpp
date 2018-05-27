@@ -32,7 +32,6 @@
 #include <iostream>
 
 namespace tx2 = tinyxml2;
-using namespace std;
 
 // Extract the doctype declaration to insert into the re-synthesized XML. It could just be
 // omitted from the reference results, but I'd rather test with completely "real" data.
@@ -45,11 +44,11 @@ static void addDoctypeDecl(tx2::XMLDocument *doc)
     doc->InsertFirstChild(doctypeDecl);
 }
 
-static string readFile(const char *filename)
+static std::string readFile(const char *filename)
 {
     // Dear STL, you must be kidding...
-    ifstream ifs(filename);
-    return string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    std::ifstream ifs(filename);
+    return std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -74,12 +73,12 @@ static void xmlizeNode(tx2::XMLNode *el, const IntrospectionNode *node)
 {
     tx2::XMLElement *nodeEl = addElement(el, "node", node->name);
 
-    map<string, Interface>::const_iterator iIt = node->interfaces.begin();
+    std::map<std::string, Interface>::const_iterator iIt = node->interfaces.begin();
     for (; iIt != node->interfaces.end(); ++iIt) {
         xmlizeInterface(nodeEl, &iIt->second);
     }
 
-    map<string, IntrospectionNode *>::const_iterator nIt = node->children.begin();
+    std::map<std::string, IntrospectionNode *>::const_iterator nIt = node->children.begin();
     for (; nIt != node->children.end(); ++nIt) {
         xmlizeNode(nodeEl, nIt->second);
     }
@@ -90,12 +89,12 @@ static void xmlizeInterface(tx2::XMLElement *el, const Interface *iface)
 {
     tx2::XMLElement *ifaceEl = addElement(el, "interface", iface->name);
 
-    map<string, Method>::const_iterator mIt = iface->methods.begin();
+    std::map<std::string, Method>::const_iterator mIt = iface->methods.begin();
     for (; mIt != iface->methods.end(); ++mIt) {
         xmlizeMethod(ifaceEl, &mIt->second);
     }
 
-    map<string, Property>::const_iterator pIt = iface->properties.begin();
+    std::map<std::string, Property>::const_iterator pIt = iface->properties.begin();
     for (; pIt != iface->properties.end(); ++pIt) {
         xmlizeProperty(ifaceEl, &pIt->second);
     }

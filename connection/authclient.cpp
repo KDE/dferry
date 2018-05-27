@@ -43,8 +43,6 @@
 #include "winutil.h"
 #endif
 
-using namespace std;
-
 AuthClient::AuthClient(ITransport *transport)
    : m_state(InitialState),
      m_completionListener(nullptr)
@@ -54,7 +52,7 @@ AuthClient::AuthClient(ITransport *transport)
     byte nullBuf[1] = { 0 };
     transport->write(chunk(nullBuf, 1));
 
-    stringstream uidEncoded;
+    std::stringstream uidEncoded;
 #ifdef _WIN32
     // Most common (or rather... actually used) authentication method on Windows:
     // - Server publishes address of a nonce file; the file name is in a shared memory segment
@@ -71,8 +69,8 @@ AuthClient::AuthClient(ITransport *transport)
     // The numeric UID is first encoded to ASCII ("1000") and the ASCII to hex... because.
     uidEncoded << geteuid();
 #endif
-    string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
-    cout << extLine;
+    std::string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
+    std::cout << extLine;
     transport->write(chunk(extLine.c_str(), extLine.length()));
     m_state = ExpectOkState;
 }
@@ -135,14 +133,14 @@ void AuthClient::advanceState()
     // some findings:
     // - the string after the server OK is its UUID that also appears in the address string
 
-    cout << "> " << m_line;
+    std::cout << "> " << m_line;
 
     switch (m_state) {
     case ExpectOkState: {
         // TODO check the OK
 #ifdef __unix__
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
-        cout << negotiateLine.ptr;
+        std::cout << negotiateLine.ptr;
         transport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
@@ -150,7 +148,7 @@ void AuthClient::advanceState()
 #endif
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
-        cout << beginLine.ptr;
+        std::cout << beginLine.ptr;
         transport()->write(chunk(beginLine.ptr, beginLine.length));
         m_state = AuthenticatedState;
         break; }

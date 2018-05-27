@@ -47,11 +47,8 @@
 #include "winutil.h"
 #endif
 
-
-using namespace std;
-
 #ifdef __unix__
-static string homeDir()
+static std::string homeDir()
 {
     const char *home = getenv("HOME"); // this overrides the entry in /etc/passwd
     if (!home) {
@@ -63,10 +60,10 @@ static string homeDir()
         }
     }
     assert(home);
-    return string(home);
+    return std::string(home);
 }
 
-static string sessionInfoFile()
+static std::string sessionInfoFile()
 {
     static const int numMachineUuidFilenames = 2;
     static const char *machineUuidFilenames[numMachineUuidFilenames] = {
@@ -74,31 +71,31 @@ static string sessionInfoFile()
         "/etc/machine-id"
     };
 
-    string uuid;
+    std::string uuid;
     for (int i = 0; i < numMachineUuidFilenames && uuid.empty(); i++) {
-        ifstream uuidFile(machineUuidFilenames[i]);
+        std::ifstream uuidFile(machineUuidFilenames[i]);
         uuidFile >> uuid;
         // TODO check that uuid consists of lowercase hex chars
     }
     if (uuid.length() != 32) {
-        return string();
+        return std::string();
     }
 
     const char *displayChar = getenv("DISPLAY");
     if (!displayChar) {
         // TODO error message "no X11 session blah"
-        return string();
+        return std::string();
     }
-    string display = displayChar;
+    std::string display = displayChar;
     // TODO from the original: "Note that we leave the hostname in the display most of the time"
     size_t lastColon = display.rfind(':');
-    if (lastColon == string::npos) {
-        return string();
+    if (lastColon == std::string::npos) {
+        return std::string();
     }
     display.erase(0, lastColon + 1);
 
     static const char *pathInHome = "/.dbus/session-bus/";
-    string ret = homeDir() + pathInHome + uuid + '-' + display;
+    const std::string ret = homeDir() + pathInHome + uuid + '-' + display;
     return ret;
 }
 #endif
@@ -113,12 +110,12 @@ What do on Windows:
 - Read 16 bytes from the nonce file, the credentials for the planned TCP connection
 - Implement the nonce-data dialog in AuthClient / something it can use
 */
-static string hashOfInstallRoot()
+static std::string hashOfInstallRoot()
 {
     // Using the non-Unicode API for bug compatibility with libdbus pathname hashes, for now.
     // This requires us to be installed to the same folder, which is a little weird, so maybe
     // drop this compatibility later.
-    string ret;
+    std::string ret;
 #if 1
     char path[MAX_PATH * 2] = "C:\\Program Files (x86)\\D-Bus\\bin\\dbus-monitor.exe)";
     size_t pathLength = 0;
@@ -158,16 +155,16 @@ static string hashOfInstallRoot()
         }
     }
 
-    string pathString(path, pathLength);
+    std::string pathString(path, pathLength);
     return sha1Hex(pathString);
 }
 
 // Returns something like:
 // "tcp:host=localhost,port=52933,family=ipv4,guid=0fcf91a66520469005539fb2000001a7"
-static string sessionBusAddressFromShm()
+static std::string sessionBusAddressFromShm()
 {
-    string ret;
-    string shmNamePostfix;
+    std::string ret;
+    std::string shmNamePostfix;
 
     if (true /* scope == "*install-path" */) {
         shmNamePostfix = hashOfInstallRoot();
@@ -183,7 +180,7 @@ static string sessionBusAddressFromShm()
     // TODO check that the daemon is available using the mutex
 
     HANDLE sharedMem;
-    string shmName = "DBusDaemonAddressInfo-";
+    std::string shmName = "DBusDaemonAddressInfo-";
     shmName += shmNamePostfix;
     // full shm name looks something like "DBusDaemonAddressInfo-395c81f0c8140cfdeab22831b0faf4ec0ebcaae5"
     // full mutex name looks something like "DBusDaemonMutex-395c81f0c8140cfdeab22831b0faf4ec0ebcaae5"
@@ -195,7 +192,7 @@ static string sessionBusAddressFromShm()
         if (sharedMem != 0) {
             break;
         }
-        cerr << "Retrying OpenFileMappingA\n";
+        std::cerr << "Retrying OpenFileMappingA\n";
         Sleep(100);
     }
 
@@ -319,7 +316,7 @@ void ConnectAddress::setPath(const std::string &path)
     d->m_path = path;
 }
 
-string ConnectAddress::path() const
+std::string ConnectAddress::path() const
 {
     return d->m_path;
 }
@@ -334,7 +331,7 @@ int ConnectAddress::port() const
     return d->m_port;
 }
 
-string ConnectAddress::guid() const
+std::string ConnectAddress::guid() const
 {
     return d->m_guid;
 }
@@ -342,7 +339,7 @@ string ConnectAddress::guid() const
 
 void ConnectAddress::Private::fetchSessionBusInfo()
 {
-    string line;
+    std::string line;
 #ifdef __unix__
     // TODO: on X, the spec requires a special way to find the session bus
     //       (but nobody seems to use it?)
@@ -353,8 +350,8 @@ void ConnectAddress::Private::fetchSessionBusInfo()
         line = envAddress;
     } else {
         // try it using a byzantine system involving files...
-        ifstream infoFile(sessionInfoFile().c_str());
-        const string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
+        std::ifstream infoFile(sessionInfoFile().c_str());
+        const std::string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
         while (getline(infoFile, line)) {
             // TODO do we need any of the other information in the file?
             if (line.find(busAddressPrefix) == 0 ) {
@@ -370,25 +367,25 @@ void ConnectAddress::Private::fetchSessionBusInfo()
     parseSessionBusInfo(line);
 }
 
-void ConnectAddress::Private::parseSessionBusInfo(string info)
+void ConnectAddress::Private::parseSessionBusInfo(std::string info)
 {
     // typical input on Linux: "unix:abstract=/tmp/dbus-BrYfzr7UIv,guid=6c79b601925e949a9fe0c9ea565d80e8"
     // Windows: "tcp:host=localhost,port=64707,family=ipv4,guid=11ec225ce5f514366eec72f10000011d"
 
     // TODO is there any escaping?
     // ### well-formed input is assumed - this may produce nonsensical results with bad input
-    const vector<string> parts = split(info, ',');
+    const std::vector<std::string> parts = split(info, ',');
 
-    const string guidLiteral = "guid=";
-    const string tcpHostLiteral = "tcp:host=";
-    const string portLiteral = "port=";
+    const std::string guidLiteral = "guid=";
+    const std::string tcpHostLiteral = "tcp:host=";
+    const std::string portLiteral = "port=";
     // const string familyLiteral = "family="; // ### ignored for now (we assume "ipv4")
 #ifdef __unix__
-    const string unixPathLiteral = "unix:path=";
-    const string unixAbstractLiteral = "unix:abstract=";
+    const std::string unixPathLiteral = "unix:path=";
+    const std::string unixAbstractLiteral = "unix:abstract=";
     // TODO what about "tmpdir=..."?
 
-    for (const string &part : parts) {
+    for (const std::string &part : parts) {
         if (part.find(unixPathLiteral) == 0) {
             if (m_socketType != SocketType::None) {
                 goto invalid; // error - duplicate path specification
@@ -404,7 +401,7 @@ void ConnectAddress::Private::parseSessionBusInfo(string info)
         }
     }
 #endif
-    for (const string &part : parts) {
+    for (const std::string &part : parts) {
         if (part.find(guidLiteral) == 0) {
             m_guid = part.substr(guidLiteral.length());
         } else if (part.find(tcpHostLiteral) == 0) {
@@ -414,7 +411,7 @@ void ConnectAddress::Private::parseSessionBusInfo(string info)
             }
             m_socketType = SocketType::Ip;
         } else if (part.find(portLiteral) == 0) {
-            string portStr = part.substr(portLiteral.length());
+            const std::string portStr = part.substr(portLiteral.length());
             errno = 0;
             m_port = strtol(portStr.c_str(), nullptr, 10);
             if (errno) {

@@ -32,8 +32,6 @@
 #include <iostream>
 #include <string>
 
-using namespace std;
-
 static Message createEavesdropMessage(const char *messageType)
 {
     Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
@@ -54,7 +52,7 @@ class ReplyPrinter : public IMessageReceiver
 
 void ReplyPrinter::handleSpontaneousMessageReceived(Message m)
 {
-    cout << '\n' << m.prettyPrint();
+    std::cout << '\n' << m.prettyPrint();
 }
 
 static void printHelp()
@@ -71,7 +69,7 @@ int main(int argc, char *argv[])
 
     ConnectAddress::Bus bus = ConnectAddress::Bus::Session;
     for (int i = 1; i < argc; i++) {
-        string s = argv[i];
+        std::string s = argv[i];
         if (s == "--help") {
             printHelp();
             exit(0);
