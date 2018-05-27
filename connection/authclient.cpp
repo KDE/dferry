@@ -49,7 +49,6 @@ AuthClient::AuthClient(ITransport *transport)
    : m_state(InitialState),
      m_completionListener(nullptr)
 {
-    cerr << "AuthClient constructing\n";
     transport->addListener(this);
     setReadNotificationEnabled(true);
     byte nullBuf[1] = { 0 };
