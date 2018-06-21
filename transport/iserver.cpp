@@ -49,18 +49,20 @@ IServer::~IServer()
 //static
 IServer *IServer::create(const ConnectAddress &ca)
 {
-    if (ca.bus() != ConnectAddress::Bus::PeerToPeer) {
+    if (ca.role() != ConnectAddress::Role::PeerServer) {
         return nullptr;
     }
 
-    switch (ca.socketType()) {
+    switch (ca.type()) {
 #ifdef __unix__
-    case ConnectAddress::SocketType::Unix:
+    case ConnectAddress::Type::UnixPath:
         return new LocalServer(ca.path());
-    case ConnectAddress::SocketType::AbstractUnix:
+    case ConnectAddress::Type::AbstractUnixPath:
         return new LocalServer(std::string(1, '\0') + ca.path());
 #endif
-    case ConnectAddress::SocketType::Ip:
+    case ConnectAddress::Type::Tcp:
+    case ConnectAddress::Type::Tcp4:
+    case ConnectAddress::Type::Tcp6:
         return new IpServer(ca);
     default:
         return nullptr;

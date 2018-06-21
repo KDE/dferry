@@ -95,8 +95,7 @@ static std::string sessionInfoFile()
     display.erase(0, lastColon + 1);
 
     static const char *pathInHome = "/.dbus/session-bus/";
-    const std::string ret = homeDir() + pathInHome + uuid + '-' + display;
-    return ret;
+    return homeDir() + pathInHome + uuid + '-' + display;
 }
 #endif
 
@@ -213,22 +212,52 @@ static std::string sessionBusAddressFromShm()
 }
 #endif
 
+static std::string fetchSessionBusInfo()
+{
+    std::string ret;
+#ifdef __unix__
+    // TODO: on X, the spec requires a special way to find the session bus
+    //       (but nobody seems to use it?)
+
+    // try the environment variable
+    const char *envAddress = getenv("DBUS_SESSION_BUS_ADDRESS");
+    if (envAddress) {
+        ret = envAddress;
+    } else {
+        // try it using a byzantine system involving files...
+        std::ifstream infoFile(sessionInfoFile().c_str());
+        const std::string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
+        while (getline(infoFile, ret)) {
+            // TODO do we need any of the other information in the file?
+            if (ret.find(busAddressPrefix) == 0 ) {
+                ret = ret.substr(busAddressPrefix.length());
+                break;
+            }
+        }
+    }
+#elif defined _WIN32
+    ret = sessionBusAddressFromShm();
+//#error see dbus-sysdeps-win.c, _dbus_get_autolaunch_shm and CreateMutexA / WaitForSingleObject in its callers
+#endif // no #else <some error>, some platform might not have a session bus
+    return ret;
+}
+
+static bool isSomeTcpType(ConnectAddress::Type t)
+{
+    return t == ConnectAddress::Type::Tcp || t == ConnectAddress::Type::Tcp4 ||
+           t == ConnectAddress::Type::Tcp6;
+}
 
 class ConnectAddress::Private
 {
 public:
     Private()
-       : m_bus(ConnectAddress::Bus::None),
-         m_socketType(ConnectAddress::SocketType::None),
+       : m_addrType(ConnectAddress::Type::None),
          m_role(ConnectAddress::Role::None),
          m_port(-1)
     {}
 
-    void fetchSessionBusInfo();
-    void parseSessionBusInfo(std::string info);
-
-    ConnectAddress::Bus m_bus;
-    ConnectAddress::SocketType m_socketType;
+    ConnectAddress::Type m_addrType;
     ConnectAddress::Role m_role;
     std::string m_path;
     int m_port;
@@ -240,25 +269,23 @@ ConnectAddress::ConnectAddress()
 {
 }
 
-ConnectAddress::ConnectAddress(Bus bus)
+ConnectAddress::ConnectAddress(StandardBus bus)
    : d(new Private)
 {
-    d->m_bus = bus;
-    d->m_role = Role::Client;
+    d->m_role = Role::BusClient;
 
-    if (bus == Bus::Session) {
-        d->fetchSessionBusInfo();
-    } else if (bus == Bus::System) {
+    if (bus == StandardBus::Session) {
+        setAddressFromString(fetchSessionBusInfo());
+    } else {
+        assert(bus == StandardBus::System);
 #ifdef __unix__
         // ### does the __unix__ version actually apply to non-Linux?
-        d->m_socketType = SocketType::Unix;
+        d->m_addrType = Type::UnixPath;
         d->m_path = "/var/run/dbus/system_bus_socket";
 #else
         // Windows... it doesn't really have a system bus
-        d->m_socketType = SocketType::None;
+        d->m_addrType = Type::None;
 #endif
-    } else {
-        assert(bus <= Bus::PeerToPeer);
     }
 }
 
@@ -281,24 +308,30 @@ ConnectAddress::~ConnectAddress()
     d = nullptr;
 }
 
-void ConnectAddress::setBus(Bus bus)
+bool ConnectAddress::operator==(const ConnectAddress &other) const
 {
-    d->m_bus = bus;
+    // first, check everything that doesn't depend on address type
+    if (d->m_addrType != other.d->m_addrType || d->m_role != other.d->m_role ||
+        d->m_guid != other.d->m_guid) {
+        return false;
+    }
+    // then check the data that matters for each address type (this is defensive coding, the irrelevant
+    // data should be zero / null / empty).
+    if (isSomeTcpType(d->m_addrType)) {
+        return d->m_port == other.d->m_port;
+    } else {
+        return d->m_path == other.d->m_path;
+    }
 }
 
-ConnectAddress::Bus ConnectAddress::bus() const
+void ConnectAddress::setType(Type addrType)
 {
-    return d->m_bus;
+    d->m_addrType = addrType;
 }
 
-void ConnectAddress::setSocketType(SocketType socketType)
+ConnectAddress::Type ConnectAddress::type() const
 {
-    d->m_socketType = socketType;
-}
-
-ConnectAddress::SocketType ConnectAddress::socketType() const
-{
-    return d->m_socketType;
+    return d->m_addrType;
 }
 
 void ConnectAddress::setRole(Role role)
@@ -331,98 +364,279 @@ int ConnectAddress::port() const
     return d->m_port;
 }
 
+void ConnectAddress::setGuid(const std::string &guid)
+{
+    d->m_guid = guid;
+}
+
 std::string ConnectAddress::guid() const
 {
     return d->m_guid;
 }
 
-
-void ConnectAddress::Private::fetchSessionBusInfo()
+class UniqueCheck
 {
-    std::string line;
-#ifdef __unix__
-    // TODO: on X, the spec requires a special way to find the session bus
-    //       (but nobody seems to use it?)
+public:
+    enum Key
+    {
+        Path = 1 << 0,
+        Host = 1 << 1,
+        Port = 1 << 2,
+        Family = 1 << 3,
+        Guid = 1 << 4
+    };
 
-    // try the environment variable
-    const char *envAddress = getenv("DBUS_SESSION_BUS_ADDRESS");
-    if (envAddress) {
-        line = envAddress;
+    inline bool claim(Key key)
+    {
+        const uint32_t oldClaimed = m_claimed;
+        m_claimed |= key;
+        return !(oldClaimed & key);
+    }
+
+private:
+    uint32_t m_claimed = 0;
+};
+
+bool ConnectAddress::setAddressFromString(const std::string &addr)
+{
+    d->m_addrType = Type::None;
+    d->m_path.clear();
+    d->m_port = -1;
+    d->m_guid.clear();
+
+    const size_t addrStart = 0;
+    const size_t addrEnd = addr.length();
+
+    // ### The algorithm is a copy of libdbus's, which is kind of dumb (it parses each character
+    // several times), but simple and works. This way, the errors for malformed input will be similar.
+
+    // TODO: double check which strings may be empty in libdbus and emulate that
+    // TODO: lots of off-by-one errors in length checks
+
+    UniqueCheck unique;
+
+    const size_t kvListStart = addr.find(':', addrStart);
+    // ### if we're going to check the method immediately, we can omit the last condition
+    if (kvListStart == std::string::npos || kvListStart >= addrEnd || kvListStart == addrStart) {
+        return false;
+    }
+    const std::string method = addr.substr(addrStart, kvListStart - addrStart);
+
+    if (method == "unix") {
+        d->m_addrType = Type::UnixPath;
+    } else if (method == "unixexec") {
+        d->m_addrType = Type::UnixPath; // ### ???
+    } else if (method == "tcp") {
+        d->m_addrType = Type::Tcp;
     } else {
-        // try it using a byzantine system involving files...
-        std::ifstream infoFile(sessionInfoFile().c_str());
-        const std::string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
-        while (getline(infoFile, line)) {
-            // TODO do we need any of the other information in the file?
-            if (line.find(busAddressPrefix) == 0 ) {
-                line = line.substr(busAddressPrefix.length());
-                break;
+        return false;
+    }
+
+    size_t keyStart = kvListStart + 1;
+    while (keyStart < addrEnd) {
+        size_t valueEnd = addr.find(',', keyStart);
+        if (valueEnd == std::string::npos) { // ### check zero length key-value pairs?
+            valueEnd = addrEnd;
+        }
+
+        const size_t keyEnd = addr.find('=', keyStart);
+        if (keyEnd == std::string::npos || keyEnd == keyStart) {
+            return false;
+        }
+        const size_t valueStart = keyEnd + 1; // skip '='
+        if (valueStart >= valueEnd) {
+            return false;
+        }
+
+        const std::string key = addr.substr(keyStart, keyEnd - keyStart);
+        const std::string value = addr.substr(valueStart, valueEnd - valueStart);
+
+        // libdbus-1 takes the value from the first occurrence of a key because that is the simplest way to
+        // handle it with its key list scanning approach. So it accidentally allows to specify the same key
+        // multiple times... but it does not allow to specify contradictory keys, e.g. "path" and "abstract".
+        // Instead of imitating that weirdness, we reject any address string with duplicate *or*
+        // contradictory keys. By using the same "uniqueness category" Path for all the path-type keys, this
+        // is easy to implement - and it makes more sense anyway.
+
+        Type newAddressType = Type::None;
+        if (key == "path") {
+            newAddressType = Type::UnixPath;
+        } else if (key == "abstract") {
+            newAddressType = Type::AbstractUnixPath;
+        } else if (key == "dir") {
+            newAddressType = Type::UnixDir;
+        } else if (key == "tmpdir") {
+            newAddressType = Type::TmpDir;
+        } else if (key == "runtime") {
+            newAddressType = Type::RuntimeDir;
+            if (value != "yes") {
+                return false;
             }
         }
+
+        if (newAddressType != Type::None) {
+            if (!unique.claim(UniqueCheck::Path)) {
+                return false;
+            }
+            if (d->m_addrType != Type::UnixPath) {
+                return false;
+            }
+            d->m_addrType = newAddressType;
+            if (newAddressType == Type::RuntimeDir) {
+                // Ensure that no one somehow opens a socket called "yes"
+                d->m_path.clear();
+            } else {
+                d->m_path = value;
+            }
+        } else if (key == "host") {
+            if (!unique.claim(UniqueCheck::Host)) {
+                return false;
+            }
+            if (!isSomeTcpType(d->m_addrType)) {
+                return false;
+            }
+            if (value != "localhost" && value != "127.0.0.1") {
+                return false;
+            }
+        } else if (key == "port") {
+            if (!unique.claim(UniqueCheck::Port)) {
+                return false;
+            }
+            if (!isSomeTcpType(d->m_addrType)) {
+                return false;
+            }
+            const bool convertOk = dfFromString(value, &d->m_port);
+            if (!convertOk || d->m_port < 1 || d->m_port > 65535) {
+                return false;
+            }
+        } else if (key == "family") {
+            if (!unique.claim(UniqueCheck::Family)) {
+                return false;
+            }
+            if (d->m_addrType != Type::Tcp) {
+                return false;
+            }
+            if (value == "ipv4") {
+                d->m_addrType = Type::Tcp4;
+            } else if (value == "ipv6") {
+                d->m_addrType = Type::Tcp6;
+            } else {
+                return false;
+            }
+        } else if (key == "guid") {
+            if (!unique.claim(UniqueCheck::Guid)) {
+                return false;
+            }
+            d->m_guid = value;
+        } else {
+            return false;
+        }
+
+        keyStart = valueEnd + 1;
     }
-#elif defined _WIN32
-    line = sessionBusAddressFromShm();
-//#error see dbus-sysdeps-win.c, _dbus_get_autolaunch_shm and CreateMutexA / WaitForSingleObject in its callers
-#endif // no #else <some error>, some platform might not have a session bus
-    parseSessionBusInfo(line);
+
+
+    // Don't try to fully validate everything: the OS knows best how to fully check path validity, and
+    // runtime errors still need to be handled in any case (e.g. access rights, etc)
+    // ... what about the *Dir types, though?!
+    if (d->m_addrType == Type::UnixPath || d->m_addrType == Type::AbstractUnixPath) {
+        if (d->m_path.empty()) {
+            return false;
+        }
+    } else if (isSomeTcpType(d->m_addrType)) {
+        // port -1 is allowed for server-only addresses (the server picks a port)
+        if (unique.claim(UniqueCheck::Host) /* we don't save the actual hostname */) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
-void ConnectAddress::Private::parseSessionBusInfo(std::string info)
+#if 0
+// Does anyone need this? The "try connections in order" things in the DBus spec seems ill-advised
+// and nobody / nothing seems to be using it.
+
+// static member function
+std::vector<ConnectAddress> ConnectAddress::parseAddressList(const std::string &addrString)
 {
-    // typical input on Linux: "unix:abstract=/tmp/dbus-BrYfzr7UIv,guid=6c79b601925e949a9fe0c9ea565d80e8"
-    // Windows: "tcp:host=localhost,port=64707,family=ipv4,guid=11ec225ce5f514366eec72f10000011d"
-
-    // TODO is there any escaping?
-    // ### well-formed input is assumed - this may produce nonsensical results with bad input
-    const std::vector<std::string> parts = split(info, ',');
-
-    const std::string guidLiteral = "guid=";
-    const std::string tcpHostLiteral = "tcp:host=";
-    const std::string portLiteral = "port=";
-    // const string familyLiteral = "family="; // ### ignored for now (we assume "ipv4")
-#ifdef __unix__
-    const std::string unixPathLiteral = "unix:path=";
-    const std::string unixAbstractLiteral = "unix:abstract=";
-    // TODO what about "tmpdir=..."?
-
-    for (const std::string &part : parts) {
-        if (part.find(unixPathLiteral) == 0) {
-            if (m_socketType != SocketType::None) {
-                goto invalid; // error - duplicate path specification
-            }
-            m_socketType = SocketType::Unix;
-            m_path = part.substr(unixPathLiteral.length());
-        } else if (part.find(unixAbstractLiteral) == 0) {
-            if (m_socketType != SocketType::None) {
-                goto invalid;
-            }
-            m_socketType = SocketType::AbstractUnix;
-            m_path = part.substr(unixAbstractLiteral.length());
+    std::vector<ConnectAddress> ret;
+    while (find next semicolon) {
+        ConnectAddress addr;
+        addr.setAddressFromString(substr);
+        if (addr.error()) {
+            return std::vector<ConnectAddress>();
         }
+        ret.push_back(addr);
     }
+    return ret;
+}
 #endif
-    for (const std::string &part : parts) {
-        if (part.find(guidLiteral) == 0) {
-            m_guid = part.substr(guidLiteral.length());
-        } else if (part.find(tcpHostLiteral) == 0) {
-            if (part.substr(tcpHostLiteral.length()) != "localhost") {
-                // only local connections are currently supported!
-                goto invalid;
-            }
-            m_socketType = SocketType::Ip;
-        } else if (part.find(portLiteral) == 0) {
-            const std::string portStr = part.substr(portLiteral.length());
-            errno = 0;
-            m_port = strtol(portStr.c_str(), nullptr, 10);
-            if (errno) {
-                goto invalid;
-            }
-        }
+
+std::string ConnectAddress::toString() const
+{
+    std::string ret;
+    // no need to check bus and role, they are ignored here anyway
+    // TODO consistency check between connectable vs listen address and role?
+
+    switch (d->m_addrType) {
+    case Type::UnixPath:
+        ret = "unix:path=";
+        break;
+    case Type::AbstractUnixPath:
+        ret = "unix:abstract=";
+        break;
+    case Type::UnixDir:
+        ret = "unix:dir=";
+        break;
+    case Type::TmpDir:
+        ret = "unix:tmpdir=";
+        break;
+    case Type::RuntimeDir:
+        ret = "unix:runtime=yes";
+        break;
+    case Type::Tcp:
+        ret = "tcp:host=localhost,port=";
+        break;
+    case Type::Tcp4:
+        ret = "tcp:host=localhost,family=ipv4,port=";
+        break;
+    case Type::Tcp6:
+        ret = "tcp:host=localhost,family=ipv6,port=";
+        break;
+    default:
+        // invalid
+        return ret;
     }
 
-    return;
-invalid:
-    // TODO introduce and call a clear() method
-    m_socketType = SocketType::None;
-    m_path.clear();
+    if (isSomeTcpType(d->m_addrType)) {
+        ret += dfToString(d->m_port);
+    } else if (d->m_addrType != Type::RuntimeDir) {
+        ret += d->m_path;
+    }
+
+    if (!d->m_guid.empty()) {
+        ret += ",guid=";
+        ret += d->m_guid;
+    }
+
+    return ret;
+}
+
+bool ConnectAddress::isServerOnly() const
+{
+    switch (d->m_addrType) {
+#ifdef __unix__
+    case Type::UnixDir: // fall through
+    case Type::RuntimeDir: // fall through
+#ifdef __linux__
+    case Type::TmpDir:
+#endif
+    return true;
+#endif
+    case Type::Tcp:
+        return d->m_port == -1;
+    default:
+        return false;
+    }
 }

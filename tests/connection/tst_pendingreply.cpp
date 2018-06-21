@@ -63,7 +63,7 @@ public:
 static void testBusAddress(bool waitForConnected)
 {
     EventDispatcher eventDispatcher;
-    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
 
     Message msg;
     addressMessageToBus(&msg);
@@ -107,7 +107,7 @@ public:
 static void testTimeout()
 {
     EventDispatcher eventDispatcher;
-    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
 
     // finish creating the connection; we need to know our own name so we can send the message to
     // ourself so we can make sure that there will be no reply :)

@@ -95,33 +95,28 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     assert(d->m_eventDispatcher);
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
-    if (ca.bus() == ConnectAddress::Bus::None || ca.socketType() == ConnectAddress::SocketType::None ||
-        ca.role() == ConnectAddress::Role::None) {
+    if (ca.type() == ConnectAddress::Type::None || ca.role() == ConnectAddress::Role::None) {
         std::cerr << "\nConnection: connection constructor Exit A\n\n";
         return;
     }
 
-    if (ca.role() == ConnectAddress::Role::Server) {
-        if (ca.bus() == ConnectAddress::Bus::PeerToPeer) {
-            // this sets up a server that will be destroyed after accepting exactly one connection
-            d->m_clientConnectedHandler = new ClientConnectedHandler;
-            d->m_clientConnectedHandler->m_server = IServer::create(ca);
-            d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
-            d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
-            d->m_clientConnectedHandler->m_parent = d;
+    if (ca.role() == ConnectAddress::Role::PeerServer) {
+        // this sets up a server that will be destroyed after accepting exactly one connection
+        d->m_clientConnectedHandler = new ClientConnectedHandler;
+        d->m_clientConnectedHandler->m_server = IServer::create(ca);
+        d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
+        d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
+        d->m_clientConnectedHandler->m_parent = d;
 
-            d->m_state = ConnectionPrivate::ServerWaitingForClient;
-        } else {
-            std::cerr << "Connection constructor: bus server not supported.\n";
-            // state stays at Unconnected
-        }
+        d->m_state = ConnectionPrivate::ServerWaitingForClient;
     } else {
         d->m_transport = ITransport::create(ca);
         d->m_transport->setEventDispatcher(dispatcher);
-        if (ca.bus() == ConnectAddress::Bus::Session || ca.bus() == ConnectAddress::Bus::System) {
+        if (ca.role() == ConnectAddress::Role::BusClient) {
             d->authAndHello(this);
             d->m_state = ConnectionPrivate::Authenticating;
-        } else if (ca.bus() == ConnectAddress::Bus::PeerToPeer) {
+        } else {
+            assert(ca.role() == ConnectAddress::Role::PeerClient);
             d->receiveNextMessage();
             d->m_state = ConnectionPrivate::Connected;
         }

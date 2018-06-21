@@ -72,7 +72,7 @@ void testBasic(const ConnectAddress &clientAddress)
     EventDispatcher dispatcher;
 
     ConnectAddress serverAddress = clientAddress;
-    serverAddress.setRole(ConnectAddress::Role::Server);
+    serverAddress.setRole(ConnectAddress::Role::PeerServer);
 
     Connection serverConnection(&dispatcher, serverAddress);
     std::cout << "Created server connection. " << &serverConnection << std::endl;
@@ -135,19 +135,19 @@ int main(int, char *[])
     test_signatureHeader();
 #ifdef __linux__
     {
-        ConnectAddress clientAddress(ConnectAddress::Bus::PeerToPeer);
-        clientAddress.setSocketType(ConnectAddress::SocketType::AbstractUnix);
-        clientAddress.setRole(ConnectAddress::Role::Client);
+        ConnectAddress clientAddress;
+        clientAddress.setType(ConnectAddress::Type::AbstractUnixPath);
+        clientAddress.setRole(ConnectAddress::Role::PeerClient);
         clientAddress.setPath("dferry.Test.Message");
         testBasic(clientAddress);
     }
 #endif
     // TODO: SocketType::Unix works on any Unix-compatible OS, but we'll need to construct a path
     {
-        ConnectAddress clientAddress(ConnectAddress::Bus::PeerToPeer);
-        clientAddress.setSocketType(ConnectAddress::SocketType::Ip);
+        ConnectAddress clientAddress;
+        clientAddress.setType(ConnectAddress::Type::Tcp);
         clientAddress.setPort(6800);
-        clientAddress.setRole(ConnectAddress::Role::Client);
+        clientAddress.setRole(ConnectAddress::Role::PeerClient);
         testBasic(clientAddress);
     }
 

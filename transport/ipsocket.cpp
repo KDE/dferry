@@ -49,10 +49,11 @@ typedef SSIZE_T ssize_t;
 // HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
 static const int maxFds = 12;
 
+// TODO implement address family (IPv4 / IPv6) support
 IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
 {
-    assert(ca.socketType() == ConnectAddress::SocketType::Ip);
+    assert(ca.type() == ConnectAddress::Type::Tcp);
 #ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)

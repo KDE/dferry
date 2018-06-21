@@ -26,6 +26,7 @@
 
 #include "types.h"
 
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,26 @@ std::string sha1Hex(const std::string &s);
 inline std::string toStdString(cstring cstr)
 {
     return std::string(cstr.ptr, cstr.length);
+}
+
+// In C++11, std::to_string doesn't exist yet... so use this instead
+template <typename T>
+std::string dfToString(T value)
+{
+    std::stringstream ss;
+    ss.imbue(std::locale::classic());
+    ss << value;
+    return ss.str();
+}
+
+// kind of like std::stoi (note: available in C+11) but without exceptions
+template <typename T>
+static bool dfFromString(const std::string &s, T *t)
+{
+    std::istringstream is(s);
+    is.imbue(std::locale::classic());
+    is >> *t;
+    return !is.fail() && is.eof();
 }
 
 #endif // STRINGTOOLS_H

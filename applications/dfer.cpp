@@ -67,16 +67,16 @@ int main(int argc, char *argv[])
 {
     EventDispatcher dispatcher;
 
-    ConnectAddress::Bus bus = ConnectAddress::Bus::Session;
+    ConnectAddress::StandardBus bus = ConnectAddress::StandardBus::Session;
     for (int i = 1; i < argc; i++) {
         std::string s = argv[i];
         if (s == "--help") {
             printHelp();
             exit(0);
         } else if (s == "--system-bus") {
-            bus = ConnectAddress::Bus::System;
+            bus = ConnectAddress::StandardBus::System;
         } else if (s == "--session-bus") {
-            bus = ConnectAddress::Bus::Session;
+            bus = ConnectAddress::StandardBus::Session;
         } else {
             std::cerr << "Unknown option \"" << s << "\".\n";
             printHelp();

@@ -132,7 +132,7 @@ public:
 static void testPingPong()
 {
     EventDispatcher eventDispatcher;
-    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
 
     std::atomic<bool> pongThreadReady(false);
     std::thread pongThread(pongThreadRun, conn.createCommRef(), &pongThreadReady);
@@ -216,7 +216,7 @@ static void timeoutThreadRun(Connection::CommRef mainConnectionRef, std::atomic<
 static void testThreadedTimeout()
 {
     EventDispatcher eventDispatcher;
-    Connection conn(&eventDispatcher, ConnectAddress::Bus::Session);
+    Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
 
     std::atomic<bool> done(false);
     std::thread timeoutThread(timeoutThreadRun, conn.createCommRef(), &done);

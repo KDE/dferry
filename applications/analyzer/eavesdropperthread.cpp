@@ -67,7 +67,7 @@ void EavesdropperThread::run()
     m_timer.start();
     m_dispatcher = new EventDispatcher;
 
-    m_connection = new Connection(m_dispatcher, ConnectAddress::Bus::Session);
+    m_connection = new Connection(m_dispatcher, ConnectAddress::StandardBus::Session);
     m_connection->setSpontaneousMessageReceiver(this);
     {
         static const int messageTypeCount = 4;

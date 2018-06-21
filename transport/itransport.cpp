@@ -156,14 +156,16 @@ void ITransport::handleCanWrite()
 //static
 ITransport *ITransport::create(const ConnectAddress &ci)
 {
-    switch (ci.socketType()) {
+    switch (ci.type()) {
 #ifdef __unix__
-        case ConnectAddress::SocketType::Unix:
+        case ConnectAddress::Type::UnixPath:
         return new LocalSocket(ci.path());
-    case ConnectAddress::SocketType::AbstractUnix:
+    case ConnectAddress::Type::AbstractUnixPath: // TODO this is Linux only, reflect it in code
         return new LocalSocket(std::string(1, '\0') + ci.path());
 #endif
-    case ConnectAddress::SocketType::Ip:
+    case ConnectAddress::Type::Tcp:
+    case ConnectAddress::Type::Tcp4:
+    case ConnectAddress::Type::Tcp6:
         return new IpSocket(ci);
     default:
         assert(false);

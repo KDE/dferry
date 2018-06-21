@@ -43,10 +43,11 @@
 
 #include <iostream>
 
+// TODO implement address family (IPv4 / IPv6) support
 IpServer::IpServer(const ConnectAddress &ca)
    : m_listenFd(-1)
 {
-    assert(ca.socketType() == ConnectAddress::SocketType::Ip);
+    assert(ca.type() == ConnectAddress::Type::Tcp);
 
     const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
     if (!isValidFileDescriptor(fd)) {

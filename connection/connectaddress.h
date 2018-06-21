@@ -34,45 +34,50 @@
 class DFERRY_EXPORT ConnectAddress
 {
 public:
-    enum class Bus : unsigned char
+    enum class StandardBus : unsigned char
     {
-        None = 0,
         System,
-        Session,
-        PeerToPeer
+        Session
     };
 
-    enum SocketType : unsigned char
+    enum class Type : unsigned char
     {
         None = 0,
 #ifdef __unix__
-        Unix,
+        UnixPath,
+        UnixDir,
+        RuntimeDir,
+        TmpDir,
 #ifdef __linux__
-        AbstractUnix,
+        AbstractUnixPath,
 #endif
 #endif
-        Ip = 3
+        Tcp = 6,
+        Tcp4,
+        Tcp6
     };
 
     enum class Role : unsigned char
     {
         None = 0,
-        Client,
-        Server
+        BusClient,
+        // BusServer, // = 2, not implemented
+        PeerClient = 3,
+        PeerServer
     };
 
     ConnectAddress();
-    // Intentionally not explicit; it resolves the details of a bus address
-    ConnectAddress(Bus bus);
+    // Intentionally not explicit; this constructor discovers the bus address (mostly ;) according to spec
+    ConnectAddress(StandardBus bus);
     ConnectAddress(const ConnectAddress &other);
     ConnectAddress &operator=(const ConnectAddress &other);
     ~ConnectAddress();
 
-    void setBus(Bus bus);
-    Bus bus() const;
+    bool operator==(const ConnectAddress &other) const;
+    bool operator!=(const ConnectAddress &other) const { return !(*this == other); }
 
-    void setSocketType(SocketType socketType);
-    SocketType socketType() const;
+    void setType(Type type);
+    Type type() const;
 
     void setRole(Role role);
     Role role() const;
@@ -83,7 +88,15 @@ public:
     void setPort(int port);
     int port() const; // only for TcpSocket
 
+    void setGuid(const std::string &guid);
     std::string guid() const;
+
+    // the dbus standard format strings don't contain information about role and bus type, so the setter
+    // will not touch these and the getter will lose that information.
+    bool setAddressFromString(const std::string &addr);
+    std::string toString() const;
+
+    bool isServerOnly() const;
 
     // TODO comparison operators
 
