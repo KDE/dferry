@@ -92,9 +92,12 @@ void AuthClient::setCompletionListener(ICompletionListener *listener)
 
 void AuthClient::handleTransportCanRead()
 {
-    bool wasFinished = isFinished();
+    const bool wasFinished = isFinished();
     while (!isFinished() && readLine()) {
         advanceState();
+    }
+    if (!transport()->isOpen()) {
+        m_state = AuthenticationFailedState;
     }
     if (isFinished() && !wasFinished && m_completionListener) {
         m_completionListener->handleCompletion(this);
