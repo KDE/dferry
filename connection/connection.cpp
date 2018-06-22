@@ -406,6 +406,28 @@ Error Connection::sendNoReply(Message m)
     return Error::NoError;
 }
 
+void Connection::waitForConnectionEstablished()
+{
+    if (d->m_state != ConnectionPrivate::Authenticating) {
+        return;
+    }
+    while (d->m_state == ConnectionPrivate::Authenticating) {
+        d->m_authClient->handleTransportCanRead();
+    }
+    if (d->m_state != ConnectionPrivate::AwaitingUniqueName) {
+        return;
+    }
+    // Send the hello message
+    assert(!d->m_sendQueue.empty()); // the hello message should be in the queue
+    MessagePrivate *helloPriv = MessagePrivate::get(&d->m_sendQueue.front());
+    helloPriv->handleTransportCanWrite();
+
+    // Receive the hello reply
+    while (d->m_state == ConnectionPrivate::AwaitingUniqueName) {
+        MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
+    }
+}
+
 ConnectAddress Connection::connectAddress() const
 {
     return d->m_connectAddress;

@@ -81,6 +81,7 @@ public:
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
     Error sendNoReply(Message m);
 
+    void waitForConnectionEstablished();
     ConnectAddress connectAddress() const;
     std::string uniqueName() const;
     bool isConnected() const;
