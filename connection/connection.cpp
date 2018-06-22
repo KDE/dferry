@@ -169,6 +169,11 @@ Connection::~Connection()
     d = nullptr;
 }
 
+void Connection::close()
+{
+    d->close();
+}
+
 void ConnectionPrivate::close()
 {
     // Can't be main and secondary at the main time - it could be made to work, but what for?

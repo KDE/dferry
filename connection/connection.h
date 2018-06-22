@@ -64,6 +64,8 @@ public:
     Connection(Connection &other) = delete;
     Connection &operator=(Connection &other) = delete;
 
+    void close();
+
     CommRef createCommRef();
 
     void setDefaultReplyTimeout(int msecs);
