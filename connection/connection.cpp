@@ -73,8 +73,9 @@ public:
     ConnectionPrivate *m_parent;
 };
 
-ConnectionPrivate::ConnectionPrivate(EventDispatcher *dispatcher)
+ConnectionPrivate::ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher)
    : m_state(Unconnected),
+     m_connection(connection),
      m_client(nullptr),
      m_receivingMessage(nullptr),
      m_transport(nullptr),
@@ -89,7 +90,7 @@ ConnectionPrivate::ConnectionPrivate(EventDispatcher *dispatcher)
 }
 
 Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
-   : d(new ConnectionPrivate(dispatcher))
+   : d(new ConnectionPrivate(this, dispatcher))
 {
     d->m_connectAddress = ca;
     assert(d->m_eventDispatcher);
@@ -113,10 +114,11 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
         d->m_transport = ITransport::create(ca);
         d->m_transport->setEventDispatcher(dispatcher);
         if (ca.role() == ConnectAddress::Role::BusClient) {
-            d->authAndHello(this);
+            d->startAuthentication();
             d->m_state = ConnectionPrivate::Authenticating;
         } else {
             assert(ca.role() == ConnectAddress::Role::PeerClient);
+            // get ready to receive messages right away
             d->receiveNextMessage();
             d->m_state = ConnectionPrivate::Connected;
         }
@@ -124,7 +126,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
 }
 
 Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
-   : d(new ConnectionPrivate(dispatcher))
+   : d(new ConnectionPrivate(this, dispatcher))
 {
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
@@ -214,24 +216,10 @@ void ConnectionPrivate::close()
     EventDispatcherPrivate::get(m_eventDispatcher)->m_connectionToNotify = nullptr;
 }
 
-void ConnectionPrivate::authAndHello(Connection *parent)
+void ConnectionPrivate::startAuthentication()
 {
     m_authClient = new AuthClient(m_transport);
     m_authClient->setCompletionListener(this);
-
-    // Announce our presence to the bus and have it send some introductory information of its own
-    Message hello;
-    hello.setType(Message::MethodCallMessage);
-    hello.setExpectsReply(false);
-    hello.setDestination(std::string("org.freedesktop.DBus"));
-    hello.setInterface(std::string("org.freedesktop.DBus"));
-    hello.setPath(std::string("/org/freedesktop/DBus"));
-    hello.setMethod(std::string("Hello"));
-
-    m_helloReceiver = new HelloReceiver;
-    m_helloReceiver->m_helloReply = parent->send(std::move(hello));
-    m_helloReceiver->m_helloReply.setReceiver(m_helloReceiver);
-    m_helloReceiver->m_parent = this;
 }
 
 void ConnectionPrivate::handleHelloReply()
@@ -463,21 +451,45 @@ void ConnectionPrivate::handleCompletion(void *task)
     switch (m_state) {
     case Authenticating: {
         assert(task == m_authClient);
+        if (!m_authClient->isAuthenticated()) {
+            m_state = Unconnected;
+        }
         delete m_authClient;
         m_authClient = nullptr;
-        // cout << "Authenticated.\n";
-        assert(!m_sendQueue.empty()); // the hello message should be in the queue
-        MessagePrivate::get(&m_sendQueue.front())->send(m_transport);
-        receiveNextMessage();
+        if (m_state == Unconnected) {
+            break;
+        }
 
         m_state = AwaitingUniqueName;
+
+        // Announce our presence to the bus and have it send some introductory information of its own
+        Message hello = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello");
+        hello.setExpectsReply(false);
+        hello.setDestination(std::string("org.freedesktop.DBus"));
+        MessagePrivate *const helloPriv = MessagePrivate::get(&hello);
+
+        m_helloReceiver = new HelloReceiver;
+        m_helloReceiver->m_helloReply = m_connection->send(std::move(hello));
+        // Small hack: Connection::send() refuses to really start sending if the connection isn't in
+        // Connected state. So force the sending here to actually get to Connected state.
+        helloPriv->send(m_transport);
+        // Also ensure that the hello message is sent before any other messages that may have been
+        // already enqueued by an API client
+        hello = std::move(m_sendQueue.back());
+        m_sendQueue.pop_back();
+        m_sendQueue.push_front(std::move(hello));
+
+        m_helloReceiver->m_helloReply.setReceiver(m_helloReceiver);
+        m_helloReceiver->m_parent = this;
+        // get ready to receive the first message, the hello reply
+        receiveNextMessage();
+
         break;
     }
-    case AwaitingUniqueName: // the code path for this only diverges in the PendingReply callback
+    case AwaitingUniqueName: // the code paths for these two states only diverge in the PendingReply handler
     case Connected: {
         assert(!m_authClient);
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
-            //cout << "Sent message.\n";
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
                 MessagePrivate::get(&m_sendQueue.front())->send(m_transport);

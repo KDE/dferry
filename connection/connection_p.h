@@ -80,10 +80,10 @@ class ConnectionPrivate : public ICompletionListener
 public:
     static ConnectionPrivate *get(Connection *c) { return c->d; }
 
-    ConnectionPrivate(EventDispatcher *dispatcher);
+    ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher);
     void close();
 
-    void authAndHello(Connection *parent);
+    void startAuthentication();
     void handleHelloReply();
     void handleClientConnected();
 
@@ -112,6 +112,7 @@ public:
         Connected
     } m_state;
 
+    Connection *m_connection;
     IMessageReceiver *m_client;
     Message *m_receivingMessage;
 
