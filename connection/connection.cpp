@@ -289,17 +289,19 @@ uint32 ConnectionPrivate::takeNextSerial()
 
 Error ConnectionPrivate::prepareSend(Message *msg)
 {
-    if (!m_mainThreadConnection) {
-        msg->setSerial(takeNextSerial());
-    } else {
-        // we take a serial from the other Connection and then serialize locally in order to keep the CPU
-        // expense of serialization local, even though it's more complicated than doing everything in the
-        // other thread / Connection.
-        CommutexLocker locker(&m_mainThreadLink);
-        if (locker.hasLock()) {
-            msg->setSerial(m_mainThreadConnection->takeNextSerial());
+    if (msg->serial() == 0) {
+        if (!m_mainThreadConnection) {
+            msg->setSerial(takeNextSerial());
         } else {
-            return Error::LocalDisconnect;
+            // we take a serial from the other Connection and then serialize locally in order to keep the CPU
+            // expense of serialization local, even though it's more complicated than doing everything in the
+            // other thread / Connection.
+            CommutexLocker locker(&m_mainThreadLink);
+            if (locker.hasLock()) {
+                msg->setSerial(m_mainThreadConnection->takeNextSerial());
+            } else {
+                return Error::LocalDisconnect;
+            }
         }
     }
 
