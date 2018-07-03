@@ -47,6 +47,7 @@ public:
     PendingReply(PendingReply &other) = delete;
     void operator=(PendingReply &other) = delete;
 
+    bool isNull() const; // only true for default-constructed or moved-from instances
     bool isFinished() const; // received a reply or in a state that will not allow receiving a reply
     bool hasNonErrorReply() const; // isFinished() && !isError()
 

@@ -105,6 +105,11 @@ void PendingReply::dumpState()
     }
 }
 
+bool PendingReply::isNull() const
+{
+    return !d;
+}
+
 bool PendingReply::isFinished() const
 {
     return !d || d->m_isFinished;
