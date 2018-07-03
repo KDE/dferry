@@ -130,7 +130,7 @@ Error PendingReply::error() const
 
 bool PendingReply::isError() const
 {
-    return d->m_error.isError();
+    return d && d->m_error.isError();
 }
 
 void PendingReply::setCookie(void *cookie)
