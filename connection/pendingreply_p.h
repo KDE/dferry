@@ -37,7 +37,8 @@ class PendingReplyPrivate : public ICompletionListener
 public:
     PendingReplyPrivate(EventDispatcher *dispatcher, int timeout)
        : m_replyTimeout(dispatcher),
-         m_isFinished(false)
+         m_isFinished(false),
+         m_reserved(0)
     {
         if (timeout >= 0) {
             m_replyTimeout.setRepeating(false);
@@ -52,16 +53,16 @@ public:
     // for m_replyTimeout
     void handleCompletion(void *task) override;
 
-    PendingReply *m_owner;
+    PendingReply *m_owner = nullptr;
     union {
-        ConnectionPrivate *connection;
+        ConnectionPrivate *connection = nullptr;
         Message *reply;
     } m_connectionOrReply;
-    void *m_cookie;
+    void *m_cookie = nullptr;
     Timer m_replyTimeout;
-    IMessageReceiver *m_receiver;
+    IMessageReceiver *m_receiver = nullptr;
     Error m_error;
-    uint32 m_serial;
+    uint32 m_serial = 0;
     bool m_isFinished : 1;
     uint32 m_reserved : 31;
 };
