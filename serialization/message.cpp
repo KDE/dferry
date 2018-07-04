@@ -721,9 +721,11 @@ void MessagePrivate::send(ITransport *transport)
         //                             the error from non-callback code, directly in the caller of send().
         return;
     }
-    transport->addListener(this);
-    setWriteNotificationEnabled(true);
-    m_state = MessagePrivate::Sending;
+    if (m_state != MessagePrivate::Sending) {
+        transport->addListener(this);
+        setWriteNotificationEnabled(true);
+        m_state = MessagePrivate::Sending;
+    }
 }
 
 bool Message::isSending() const
@@ -859,10 +861,7 @@ void MessagePrivate::handleTransportCanWrite()
 chunk Message::serializeAndView()
 {
     chunk ret; // one return variable to enable return value optimization (RVO) in gcc
-    if (d->m_state >= MessagePrivate::FirstIoState) {
-        return ret;
-    }
-    if (!d->m_buffer.length && !d->serialize()) {
+    if (!d->serialize()) {
         // TODO report error?
         return ret;
     }
@@ -1079,16 +1078,16 @@ bool MessagePrivate::deserializeVariableHeaders()
         }
     }
 
-    return true;
+    return reader.isFinished();
 }
 
 bool MessagePrivate::serialize()
 {
+    if ((m_state == Serialized || m_state == Sending) && !m_dirty) {
+        return true;
+    }
     if (m_state >= FirstIoState) { // Marshalled data must not be touched while doing I/O
         return false;
-    }
-    if (m_state == Serialized && !m_dirty) {
-        return true;
     }
 
     clearBuffer();
