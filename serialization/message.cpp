@@ -40,6 +40,10 @@
 
 #include <iostream>
 
+#ifdef __unix__
+#include <unistd.h>
+#endif
+
 #ifdef BIGENDIAN
 static const byte s_thisMachineEndianness = 'b';
 #else
@@ -265,6 +269,18 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
         // Simplification: don't try to figure out which part of other.m_buffer contains "valid" data,
         // just copy everything.
         memcpy(m_buffer.ptr, other.m_buffer.ptr, other.m_buffer.length);
+#ifdef __unix__
+        // TODO ensure all "actual" file descriptor handling everywhere is inside this ifdef
+        // (note conditional compilation of whole file localsocket.cpp)
+        m_fileDescriptors.clear();
+        for (int fd : other.m_fileDescriptors) {
+            int fdCopy = ::dup(fd);
+            if (fdCopy == -1) {
+                // TODO error...
+            }
+            m_fileDescriptors.push_back(fdCopy);
+        }
+#endif
     } else {
         assert(!m_buffer.length);
     }
@@ -331,7 +347,6 @@ Message &Message::operator=(const Message &other)
     }
     return *this;
 }
-
 
 Message::~Message()
 {
@@ -602,11 +617,6 @@ uint32 Message::unixFdCount() const
     return intHeader(UnixFdsHeader, 0);
 }
 
-void Message::setUnixFdCount(uint32 fdCount)
-{
-    setIntHeader(UnixFdsHeader, fdCount);
-}
-
 std::string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
     const bool exists = d->m_varHeaders.hasStringHeader(header);
@@ -659,14 +669,20 @@ void Message::setArguments(Arguments arguments)
 {
     d->m_dirty = true;
     d->m_error = arguments.error();
-    d->m_mainArguments = std::move(arguments);
+    const size_t fdCount = arguments.fileDescriptors().size();
+    if (fdCount) {
+        d->m_varHeaders.setIntHeader(Message::UnixFdsHeader, fdCount);
+    } else {
+        d->m_varHeaders.clearIntHeader(Message::UnixFdsHeader);
+    }
 
-    cstring signature = d->m_mainArguments.signature();
+    cstring signature = arguments.signature();
     if (signature.length) {
         d->m_varHeaders.setStringHeader(Message::SignatureHeader, toStdString(signature));
     } else {
         d->m_varHeaders.clearStringHeader(Message::SignatureHeader);
     }
+    d->m_mainArguments = std::move(arguments);
 }
 
 const Arguments &Message::arguments() const
@@ -766,7 +782,13 @@ void MessagePrivate::handleTransportCanRead()
                 }
             }
             if (m_headerLength > 0 && m_bufferPos >= m_headerLength) {
-                if (!deserializeVariableHeaders()) {
+                if (deserializeVariableHeaders()) {
+                    const uint32 fdsCount = m_varHeaders.intHeader(Message::UnixFdsHeader);
+                    if (fdsCount != m_fileDescriptors.size()) {
+                        isError = true;
+                        break;
+                    }
+                } else {
                     isError = true;
                     break;
                 }
@@ -1038,11 +1060,7 @@ bool MessagePrivate::deserializeVariableHeaders()
             }
         } else {
             ok = ok && reader.state() == Arguments::Uint32;
-            if (headerField == Message::UnixFdsHeader) {
-                reader.readUint32(); // discard it, for now (TODO)
-            } else {
-                ok = ok && m_varHeaders.setIntHeader_deser(eHeader, reader.readUint32());
-            }
+            ok = ok && m_varHeaders.setIntHeader_deser(eHeader, reader.readUint32());
         }
 
         if (!ok) {
@@ -1219,6 +1237,11 @@ void MessagePrivate::clearBuffer()
         assert(m_buffer.length == 0);
         assert(m_bufferPos == 0);
     }
+#ifdef __unix__
+    for (int fd : m_fileDescriptors) {
+        ::close(fd);
+    }
+#endif
     m_fileDescriptors.clear();
 }
 

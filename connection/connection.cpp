@@ -726,3 +726,8 @@ Connection::CommRef Connection::createCommRef()
     ret.commutex = std::move(link.second);
     return ret;
 }
+
+bool Connection::supportsPassingFileDescriptors() const
+{
+    return d->m_transport && d->m_transport->supportsPassingFileDescriptors();
+}

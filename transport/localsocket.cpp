@@ -36,8 +36,11 @@
 #include <cstdlib>
 #include <cstring>
 
-// HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
-static const int maxFds = 12;
+enum {
+    // ### This is configurable in libdbus-1 but nobody ever seems to change it from the default of 16.
+    MaxFds = 16,
+    MaxFdPayloadSize = MaxFds * sizeof(int)
+};
 
 LocalSocket::LocalSocket(const std::string &socketFilePath)
    : m_fd(-1)
@@ -88,7 +91,7 @@ void LocalSocket::close()
 
 uint32 LocalSocket::write(chunk data)
 {
-    if (m_fd < 0) {
+    if (m_fd < 0 || data.length == 0) {
         return 0; // TODO -1?
     }
 
@@ -101,11 +104,11 @@ uint32 LocalSocket::write(chunk data)
                 continue;
             }
             // see EAGAIN comment in read()
-            if (errno == EAGAIN /* && iov.iov_len < a.length */ ) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
-            return false;
+            return 0;
         }
 
         data.ptr += nbytes;
@@ -119,8 +122,8 @@ uint32 LocalSocket::write(chunk data)
 // are probably not going to help for receiving, though.
 uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors)
 {
-    if (m_fd < 0) {
-        return 0; // TODO -1?
+    if (m_fd < 0 || data.length == 0) {
+        return 0;
     }
 
     // sendmsg  boilerplate
@@ -139,27 +142,33 @@ uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> 
     // we can only send a fixed number of fds anyway due to the non-flexible size of the control message
     // receive buffer, so we set an arbitrary limit.
     const uint32 numFds = fileDescriptors.size();
-    assert(fileDescriptors.size() <= maxFds); // TODO proper error
+    if (fileDescriptors.size() > MaxFds) {
+        // TODO allow a proper error return
+        close();
+        return 0;
+    }
 
-    char cmsgBuf[CMSG_SPACE(sizeof(int) * maxFds)];
+    char cmsgBuf[CMSG_SPACE(MaxFdPayloadSize)];
+    const uint32 fdPayloadSize = numFds * sizeof(int);
 
     if (numFds) {
         // fill in a control message
         send_msg.msg_control = cmsgBuf;
-        send_msg.msg_controllen = CMSG_SPACE(sizeof(int) * numFds);
+        send_msg.msg_controllen = CMSG_SPACE(fdPayloadSize);
 
         struct cmsghdr *c_msg = CMSG_FIRSTHDR(&send_msg);
-        c_msg->cmsg_len = CMSG_LEN(sizeof(int) * numFds);
+        c_msg->cmsg_len = CMSG_LEN(fdPayloadSize);
         c_msg->cmsg_level = SOL_SOCKET;
         c_msg->cmsg_type = SCM_RIGHTS;
 
         // set the control data to pass - this is why we don't use the simpler write()
+        int *const fdPayload = reinterpret_cast<int *>(CMSG_DATA(c_msg));
         for (uint32 i = 0; i < numFds; i++) {
-            reinterpret_cast<int *>(CMSG_DATA(c_msg))[i] = fileDescriptors[i];
+            fdPayload[i] = fileDescriptors[i];
         }
     } else {
         // no file descriptor to send, no control message
-        send_msg.msg_control = 0;
+        send_msg.msg_control = nullptr;
         send_msg.msg_controllen = 0;
     }
 
@@ -170,11 +179,15 @@ uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> 
                 continue;
             }
             // see EAGAIN comment in read()
-            if (errno == EAGAIN /* && iov.iov_len < a.length */ ) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
-            return false;
+            return data.length - iov.iov_len;
+        } else if (nbytes > 0) {
+            // control message already sent, don't send again
+            send_msg.msg_control = nullptr;
+            send_msg.msg_controllen = 0;
         }
 
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
@@ -209,9 +222,13 @@ chunk LocalSocket::read(byte *buffer, uint32 maxSize)
             // multiple times and in that case, we may be called in an attempt to read more when there is
             // currently no more data.
             // Just return zero bytes and no error in that case.
-            if (errno == EAGAIN /* && iov.iov_len < maxSize */) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
+            close();
+            return ret;
+        } else if (nbytes == 0) {
+            // orderly shutdown
             close();
             return ret;
         }
@@ -224,17 +241,20 @@ chunk LocalSocket::read(byte *buffer, uint32 maxSize)
 chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors)
 {
     chunk ret;
-    if (maxSize <= 0) {
+    if (maxSize == 0) {
         return ret;
     }
 
     // recvmsg-with-control-message boilerplate
     struct msghdr recv_msg;
-    char cmsgBuf[CMSG_SPACE(sizeof(int) * maxFds)];
-    memset(cmsgBuf, 0, sizeof(cmsgBuf));
+    char cmsgBuf[CMSG_SPACE(sizeof(int) * MaxFds)];
 
     recv_msg.msg_control = cmsgBuf;
-    recv_msg.msg_controllen = sizeof(cmsgBuf);
+    recv_msg.msg_controllen = CMSG_SPACE(MaxFdPayloadSize);
+    memset(cmsgBuf, 0, recv_msg.msg_controllen);
+    // prevent equivalent to CVE-2014-3635 in libdbus-1: We could receive and ignore an extra file
+    // descriptor, thus eventually run out of file descriptors
+    recv_msg.msg_controllen = CMSG_LEN(MaxFdPayloadSize);
     recv_msg.msg_name = 0;
     recv_msg.msg_namelen = 0;
     recv_msg.msg_flags = 0;
@@ -261,26 +281,35 @@ chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::ve
             // multiple times and in that case, we may be called in an attempt to read more when there is
             // currently no more data.
             // Just return zero bytes and no error in that case.
-            if (errno == EAGAIN /* && iov.iov_len < maxSize */) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
             return ret;
+        }  else if (nbytes == 0) {
+            // orderly shutdown
+            close();
+            return ret;
+        } else {
+            // read any file descriptors passed via control messages
+
+            struct cmsghdr *c_msg = CMSG_FIRSTHDR(&recv_msg);
+            if (c_msg && c_msg->cmsg_level == SOL_SOCKET && c_msg->cmsg_type == SCM_RIGHTS) {
+                const int count = (c_msg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+                const int *const fdPayload = reinterpret_cast<int *>(CMSG_DATA(c_msg));
+                for (int i = 0; i < count; i++) {
+                    fileDescriptors->push_back(fdPayload[i]);
+                }
+            }
+
+            // control message already received, don't receive another
+            recv_msg.msg_control = nullptr;
+            recv_msg.msg_controllen = 0;
         }
+
         ret.length += size_t(nbytes);
         iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
         iov.iov_len -= size_t(nbytes);
-    }
-
-    // done reading "regular data", now read any file descriptors passed via control messages
-
-    struct cmsghdr *c_msg = CMSG_FIRSTHDR(&recv_msg);
-    if (c_msg && c_msg->cmsg_level == SOL_SOCKET && c_msg->cmsg_type == SCM_RIGHTS) {
-        const int len = c_msg->cmsg_len / sizeof(int);
-        int *cmsgData = reinterpret_cast<int *>(CMSG_DATA(c_msg));
-        for (int i = 0; i < len; i++) {
-            fileDescriptors->push_back(cmsgData[i]);
-        }
     }
 
     return ret;

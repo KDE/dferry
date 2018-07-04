@@ -57,6 +57,8 @@ public:
     virtual void close() = 0;
     virtual bool isOpen() = 0;
 
+    bool supportsPassingFileDescriptors() const { return m_supportsFileDescriptors; }
+
     void setEventDispatcher(EventDispatcher *ed) override;
     EventDispatcher *eventDispatcher() const override;
 

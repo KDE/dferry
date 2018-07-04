@@ -27,8 +27,12 @@
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"
+#include "pendingreply.h"
 #include "testutil.h"
 #include "connection.h"
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <cstring>
 #include <iostream>
@@ -130,6 +134,139 @@ void testMessageLength()
     }
 }
 
+enum {
+    // a small integer could be confused with an index into the fd array (in the implementation),
+    // so make it large
+    DummyFdOffset = 1000000
+};
+
+static Arguments createArgumentsWithDummyFileDescriptors(uint fdCount)
+{
+    Arguments::Writer writer;
+    for (uint i = 0; i < fdCount; i++) {
+        writer.writeUnixFd(DummyFdOffset - i);
+    }
+    return writer.finish();
+}
+
+void testFileDescriptorsInArguments()
+{
+    // Note: This replaces round-trip tests with file descriptors in tst_arguments.
+    // A full roundtrip test must go through Message due to the out-of-band way that file
+    // descriptors are stored (which is so because they are also transmitted out-of-band).
+    Message msg = Message::createCall("/foo", "org.foo.interface", "doNothing");
+    for (uint i = 0; i < 4; i++) {
+        msg.setArguments(createArgumentsWithDummyFileDescriptors(i));
+        {
+            // const ref to arguments
+            const Arguments &args = msg.arguments();
+            Arguments::Reader reader(args);
+            for (uint j = 0; j < i; j++) {
+                TEST(reader.readUnixFd() == int(DummyFdOffset - j));
+                TEST(reader.isValid());
+            }
+            TEST(reader.isFinished());
+        }
+        {
+            // copy of arguments
+            Arguments args = msg.arguments();
+            Arguments::Reader reader(args);
+            for (uint j = 0; j < i; j++) {
+                TEST(reader.readUnixFd() == int(DummyFdOffset - j));
+                TEST(reader.isValid());
+            }
+            TEST(reader.isFinished());
+        }
+    }
+}
+
+void testTooManyFileDescriptors()
+{
+    // TODO re-think what is the best place to catch too many file descriptors...
+    Arguments::Writer writer;
+}
+
+void testFileDescriptorsHeader()
+{
+    Message msg = Message::createCall("/foo", "org.foo.interface", "doNothing");
+    for (uint i = 0; i < 4; i++) {
+        msg.setArguments(createArgumentsWithDummyFileDescriptors(i));
+        TEST(msg.unixFdCount() == i);
+    }
+}
+
+enum {
+    // for pipe2() file descriptor array
+    ReadSide = 0,
+    WriteSide = 1,
+    // how many file descriptors to send in test
+    FdCountToSend = 10
+};
+
+class FileDescriptorTestReceiver : public IMessageReceiver
+{
+public:
+    void handleSpontaneousMessageReceived(Message msg) override
+    {
+        // we're on the session bus, so we'll receive all kinds of notifications we don't care about here
+        if (msg.type() != Message::MethodCallMessage
+            || msg.method() != "testFileDescriptorsForDataTransfer") {
+            return;
+        }
+
+        Arguments::Reader reader(msg.arguments());
+        for (uint i = 0; i < FdCountToSend; i++) {
+            int fd = reader.readUnixFd();
+            uint readBuf = 12345;
+            ::read(fd, &readBuf, sizeof(uint));
+            ::close(fd);
+            TEST(readBuf == i);
+        }
+        Message reply = Message::createReplyTo(msg);
+        m_connection->sendNoReply(std::move(reply));
+    }
+
+    Connection *m_connection = nullptr;
+};
+
+void testFileDescriptorsForDataTransfer()
+{
+    EventDispatcher eventDispatcher;
+    Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
+    conn.waitForConnectionEstablished();
+    TEST(conn.isConnected());
+
+    int pipeFds[2 * FdCountToSend];
+
+    Message msg = Message::createCall("/foo", "org.foo.interface", "testFileDescriptorsForDataTransfer");
+    msg.setDestination(conn.uniqueName());
+
+    Arguments::Writer writer;
+    for (uint i = 0; i < FdCountToSend; i++) {
+        TEST(pipe2(pipeFds + 2 * i, O_NONBLOCK) == 0);
+        // write into write side of the pipe... will be read when the message is received back from bus
+        ::write(pipeFds[2 * i + WriteSide], &i, sizeof(uint));
+
+        writer.writeUnixFd(pipeFds[2 * i + ReadSide]);
+    }
+
+    msg.setArguments(writer.finish());
+
+    PendingReply reply = conn.send(std::move(msg), 500 /* fail quickly */);
+    FileDescriptorTestReceiver fdTestReceiver;
+    conn.setSpontaneousMessageReceiver(&fdTestReceiver);
+    fdTestReceiver.m_connection = &conn;
+
+    while (!reply.isFinished()) {
+        eventDispatcher.poll();
+    }
+    TEST(reply.hasNonErrorReply()); // otherwise timeout, the message exchange failed somehow
+
+    for (uint i = 0; i < FdCountToSend; i++) {
+        ::close(pipeFds[2 * i + WriteSide]);
+    }
+}
+
 int main(int, char *[])
 {
     test_signatureHeader();
@@ -152,6 +289,11 @@ int main(int, char *[])
     }
 
     testMessageLength();
+
+    testFileDescriptorsInArguments();
+    testTooManyFileDescriptors();
+    testFileDescriptorsHeader();
+    testFileDescriptorsForDataTransfer();
 
     // TODO testSaveLoad();
     // TODO testDeepCopy();

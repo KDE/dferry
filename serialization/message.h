@@ -91,7 +91,7 @@ public:
         DestinationHeader,
         SenderHeader,
         SignatureHeader,
-        UnixFdsHeader
+        UnixFdsHeader // TODO UnixFdCountHeader
     };
 
     // enum-based access to headers
@@ -121,7 +121,7 @@ public:
     std::string signature() const;
     // no setSignature() - setArguments() also sets the signature
     uint32 unixFdCount() const;
-    void setUnixFdCount(uint32 fdCount);
+    // no setUnixFdCount() - setArguments() also sets the Unix file descriptor count
 
     bool expectsReply() const;
     void setExpectsReply(bool);

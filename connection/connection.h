@@ -68,6 +68,8 @@ public:
 
     CommRef createCommRef();
 
+    bool supportsPassingFileDescriptors() const;
+
     void setDefaultReplyTimeout(int msecs);
     int defaultReplyTimeout() const;
     enum TimeoutSpecialValues {

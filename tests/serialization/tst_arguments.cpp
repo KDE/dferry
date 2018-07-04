@@ -1871,19 +1871,34 @@ static void test_emptyArrayAndDict()
 static void test_fileDescriptors()
 {
 #ifdef __unix__
-    Arguments::Writer writer;
-    writer.writeUnixFd(200);
-    writer.writeByte(12);
-    writer.writeUnixFd(1);
-    Arguments arg = writer.finish();
-    doRoundtrip(arg, false);
-    // doRoundtrip only checks the serialized data, but unfortunately file descriptors
-    // are out of band, so check explicitly
-    Arguments::Reader reader(arg);
-    TEST(reader.readUnixFd() == 200);
-    TEST(reader.readByte() == 12);
-    TEST(reader.readUnixFd() == 1);
-    TEST(reader.state() == Arguments::Finished);
+    {
+        Arguments::Writer writer;
+        writer.writeUnixFd(200);
+        writer.writeByte(12);
+        writer.writeUnixFd(1);
+        Arguments arg = writer.finish();
+        doRoundtrip(arg, false);
+        // doRoundtrip only checks the serialized data, but unfortunately file descriptors
+        // are out of band, so check explicitly
+        Arguments::Reader reader(arg);
+        TEST(reader.readUnixFd() == 200);
+        TEST(reader.readByte() == 12);
+        TEST(reader.readUnixFd() == 1);
+        TEST(reader.state() == Arguments::Finished);
+    }
+    {
+        Arguments::Writer writer;
+        writer.writeUnixFd(400);
+        Arguments arg = writer.finish();
+        doRoundtrip(arg, false);
+        // doRoundtrip only checks the serialized data, but unfortunately file descriptors
+        // are out of band, so check explicitly
+        Arguments::Reader reader(arg);
+        TEST(reader.state() == Arguments::UnixFd);
+        TEST(reader.readUnixFd() == 400);
+        TEST(reader.state() == Arguments::Finished);
+
+    }
 #endif
 }
 
