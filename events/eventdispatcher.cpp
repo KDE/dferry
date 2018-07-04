@@ -71,8 +71,12 @@ EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    for (const std::pair<FileDescriptor, IioEventListener*> &fdListener : m_ioListeners) {
-        fdListener.second->setEventDispatcher(nullptr);
+    // Make a copy because setEventDispatcher() eventually mutates the container (removes the entry)
+    {
+        std::unordered_map<FileDescriptor, IioEventListener*> ioListeners = m_ioListeners;
+        for (const std::pair<FileDescriptor, IioEventListener*> &fdListener : ioListeners) {
+            fdListener.second->setEventDispatcher(nullptr);
+        }
     }
 
     for (const std::pair<uint64 /* due */, Timer*> &dt : m_timers) {
@@ -80,9 +84,7 @@ EventDispatcherPrivate::~EventDispatcherPrivate()
         dt.second->m_isRunning = false;
     }
 
-    if (m_integrator) {
-        delete m_integrator; // owns the poller (its private class!) and deletes it
-    } else {
+    if (!m_integrator) {
         delete m_poller;
     }
 }
