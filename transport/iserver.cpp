@@ -33,6 +33,39 @@
 
 #include <string>
 
+#ifdef __unix__
+
+#include <random>
+#include "stringtools.h"
+
+static std::string randomDbusSocketName()
+{
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    char randomData[16];
+    // OK dead code elimination, show us what you can!
+    if (sizeof(size_t) >= 8) {
+        std::uniform_int_distribution<uint64> dist;
+        for (size_t i = 0; i < (sizeof(randomData) / sizeof(uint64)); i++) {
+            reinterpret_cast<uint64 *>(randomData)[i] = dist(mt);
+        }
+    } else {
+        std::uniform_int_distribution<uint32> dist;
+        for (size_t i = 0; i < (sizeof(randomData) / sizeof(uint32)); i++) {
+            reinterpret_cast<uint32 *>(randomData)[i] = dist(mt);
+        }
+    }
+    // Good that std::string knows nothing about valid utf-8 encoding!
+    const std::string pseudoString(randomData, sizeof(randomData));
+    return std::string("/dbus-") + hexEncode(pseudoString);
+}
+
+static std::string xdgRuntimeDir()
+{
+    return std::string(getenv("XDG_RUNTIME_DIR"));
+}
+#endif
+
 IServer::IServer()
    : m_newConnectionListener(nullptr),
      m_eventDispatcher(nullptr)
@@ -47,26 +80,67 @@ IServer::~IServer()
 }
 
 //static
-IServer *IServer::create(const ConnectAddress &ca)
+IServer *IServer::create(const ConnectAddress &listenAddr, ConnectAddress *concreteAddr)
 {
-    if (ca.role() != ConnectAddress::Role::PeerServer) {
+    if (listenAddr.role() != ConnectAddress::Role::PeerServer) {
         return nullptr;
     }
 
-    switch (ca.type()) {
+#ifdef __unix__
+    bool isLocalSocket = true;
+    bool isAbstract = false;
+    std::string unixSocketPath;
+#endif
+
+    switch (listenAddr.type()) {
 #ifdef __unix__
     case ConnectAddress::Type::UnixPath:
-        return new LocalServer(ca.path());
+        unixSocketPath = listenAddr.path();
+        break;
+    case ConnectAddress::Type::UnixDir:
+        unixSocketPath = listenAddr.path() + randomDbusSocketName();
+        break;
+    case ConnectAddress::Type::RuntimeDir:
+        unixSocketPath = xdgRuntimeDir() + randomDbusSocketName();
+        break;
+    case ConnectAddress::Type::TmpDir:
+        unixSocketPath = listenAddr.path() + randomDbusSocketName();
+#ifdef __linux__
+        isAbstract = true;
+#endif
+        break;
+#ifdef __linux__
     case ConnectAddress::Type::AbstractUnixPath:
-        return new LocalServer(std::string(1, '\0') + ca.path());
+        unixSocketPath = listenAddr.path();
+        isAbstract = true;
+        break;
+#endif
 #endif
     case ConnectAddress::Type::Tcp:
     case ConnectAddress::Type::Tcp4:
     case ConnectAddress::Type::Tcp6:
-        return new IpServer(ca);
+#ifdef __unix__
+        isLocalSocket = false;
+#endif
+        break;
     default:
         return nullptr;
     }
+
+    *concreteAddr = listenAddr;
+
+#ifdef __unix__
+    if (isLocalSocket) {
+        concreteAddr->setType(isAbstract ? ConnectAddress::Type::AbstractUnixPath
+                                         : ConnectAddress::Type::UnixPath);
+        concreteAddr->setPath(unixSocketPath);
+        if (isAbstract) {
+            unixSocketPath.insert(0, 1, '\0');
+        }
+        return new LocalServer(unixSocketPath);
+    } else
+#endif
+        return new IpServer(listenAddr);
 }
 
 ITransport *IServer::takeNextClient()

@@ -34,8 +34,10 @@ class ConnectionPrivate;
 class Error;
 class EventDispatcher;
 class IMessageReceiver;
+class ITransport;
 class Message;
 class PendingReply;
+class Server;
 
 class DFERRY_EXPORT Connection
 {
@@ -100,6 +102,9 @@ public:
     void setSpontaneousMessageReceiver(IMessageReceiver *receiver);
 
 private:
+    friend class Server;
+    Connection(ITransport *transport, const ConnectAddress &address); // called from Server
+
     friend class ConnectionPrivate;
     ConnectionPrivate *d;
 };

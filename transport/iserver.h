@@ -51,7 +51,10 @@ public:
     void setEventDispatcher(EventDispatcher *ed) override;
     EventDispatcher *eventDispatcher() const override;
 
-    static IServer *create(const ConnectAddress &connectAddress);
+    // listenAddress may be a concrete address (in which case *concreteAddress will be set to a copy of it)
+    // or it may be a "listen-only address", which is an underspecified or wildcard address. In the latter
+    // case, *concreteAddress will be set to a concrete address generated according to listenAddress.
+    static IServer *create(const ConnectAddress &listenAddress, ConnectAddress *concreteAddress);
 
 protected:
     friend class EventDispatcher;

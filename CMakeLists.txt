@@ -48,7 +48,9 @@ set(DFER_SOURCES
     connection/connectaddress.cpp
     connection/connection.cpp
     connection/imessagereceiver.cpp
+    connection/inewconnectionlistener.cpp
     connection/pendingreply.cpp
+    connection/server.cpp
     events/event.cpp
     events/eventdispatcher.cpp
     events/foreigneventloopintegrator.cpp
@@ -79,7 +81,9 @@ set(DFER_PUBLIC_HEADERS
     connection/connectaddress.h
     connection/connection.h
     connection/imessagereceiver.h
+    connection/inewconnectionlistener.h
     connection/pendingreply.h
+    connection/server.h
     client/introspection.h
     events/eventdispatcher.h
     events/foreigneventloopintegrator.h

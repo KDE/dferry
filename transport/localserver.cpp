@@ -72,7 +72,6 @@ LocalServer::~LocalServer()
 
 void LocalServer::handleCanRead()
 {
-    setEventDispatcher(nullptr);
     int connFd = accept(m_listenFd, nullptr, nullptr);
     if (connFd < 0) {
         return;
@@ -98,6 +97,7 @@ bool LocalServer::isListening() const
 
 void LocalServer::close()
 {
+    setEventDispatcher(nullptr);
     if (m_listenFd >= 0) {
         ::close(m_listenFd);
         m_listenFd = -1;

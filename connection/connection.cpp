@@ -104,7 +104,8 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     if (ca.role() == ConnectAddress::Role::PeerServer) {
         // this sets up a server that will be destroyed after accepting exactly one connection
         d->m_clientConnectedHandler = new ClientConnectedHandler;
-        d->m_clientConnectedHandler->m_server = IServer::create(ca);
+        ConnectAddress dummyClientAddress;
+        d->m_clientConnectedHandler->m_server = IServer::create(ca, &dummyClientAddress);
         d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
         d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
         d->m_clientConnectedHandler->m_parent = d;
@@ -156,6 +157,30 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
     evt->id = id;
     EventDispatcherPrivate::get(mainD->m_eventDispatcher)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
+}
+
+Connection::Connection(ITransport *transport, const ConnectAddress &address)
+   : d(new ConnectionPrivate(this, transport->eventDispatcher()))
+{
+    // TODO FULLY validate address, also in the other constructors and in ITransport::create()
+    //      and in IServer::create()!
+    assert(address.role() == ConnectAddress::Role::PeerServer);
+    assert(d->m_eventDispatcher);
+    d->m_transport = transport;
+    d->m_connectAddress = address;
+    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
+
+#if 0
+    // TODO make the client authenticate itself, roughly along these lines
+    // this sets up a server that will be destroyed after accepting exactly one connection
+    d->m_clientConnectedHandler = new ClientConnectedHandler;
+    d->m_clientConnectedHandler->m_server = IServer::create(ca);
+    d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
+    d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
+    d->m_clientConnectedHandler->m_parent = d;
+#endif
+    d->receiveNextMessage();
+    d->m_state = ConnectionPrivate::Connected;
 }
 
 Connection::~Connection()
