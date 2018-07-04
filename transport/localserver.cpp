@@ -46,9 +46,9 @@ LocalServer::LocalServer(const std::string &socketFilePath)
 
     struct sockaddr_un addr;
     addr.sun_family = PF_UNIX;
-    bool ok = socketFilePath.length() < sizeof(addr.sun_path);
+    bool ok = socketFilePath.length() + 1 <= sizeof(addr.sun_path);
     if (ok) {
-        memcpy(addr.sun_path, socketFilePath.c_str(), socketFilePath.length());
+        memcpy(addr.sun_path, socketFilePath.c_str(), socketFilePath.length() + 1);
     }
 
     if (!socketFilePath.empty() && socketFilePath[0] != '\0') {
