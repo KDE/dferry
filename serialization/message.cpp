@@ -665,6 +665,34 @@ void Message::setExpectsReply(bool expectsReply)
     }
 }
 
+bool Message::autoStartService() const
+{
+    return (d->m_flags & MessagePrivate::NoAutoStartServiceFlag) == 0;
+}
+
+void Message::setAutoStartService(bool autoStart) const
+{
+    if (autoStart) {
+        d->m_flags &= ~MessagePrivate::NoAutoStartServiceFlag;
+    } else {
+        d->m_flags |= MessagePrivate::NoAutoStartServiceFlag;
+    }
+}
+
+bool Message::interactiveAuthorizationAllowed() const
+{
+    return (d->m_flags & MessagePrivate::NoAllowInteractiveAuthorizationFlag) == 0;
+}
+
+void Message::setInteractiveAuthorizationAllowed(bool allowInteractive) const
+{
+    if (allowInteractive) {
+        d->m_flags &= ~MessagePrivate::NoAllowInteractiveAuthorizationFlag;
+    } else {
+        d->m_flags |= MessagePrivate::NoAllowInteractiveAuthorizationFlag;
+    }
+}
+
 void Message::setArguments(Arguments arguments)
 {
     d->m_dirty = true;

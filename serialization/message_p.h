@@ -124,8 +124,9 @@ public:
     } m_state;
     Message::Type m_messageType;
     enum {
-        NoReplyExpectedFlag = 1,
-        NoAutoStartFlag = 2
+        NoReplyExpectedFlag = 0x1,
+        NoAutoStartServiceFlag = 0x2,
+        NoAllowInteractiveAuthorizationFlag = 0x4
     };
     byte m_flags;
     byte m_protocolVersion;

@@ -123,8 +123,14 @@ public:
     uint32 unixFdCount() const;
     // no setUnixFdCount() - setArguments() also sets the Unix file descriptor count
 
-    bool expectsReply() const;
+    bool expectsReply() const; // default true (except for signals, I guess? TODO clarify)
     void setExpectsReply(bool);
+
+    bool autoStartService() const; // default true
+    void setAutoStartService(bool) const;
+
+    bool interactiveAuthorizationAllowed() const; // default true
+    void setInteractiveAuthorizationAllowed(bool) const;
 
     // setArguments also sets the signature header of the message
     void setArguments(Arguments arguments);
