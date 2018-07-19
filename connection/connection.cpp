@@ -183,8 +183,25 @@ Connection::Connection(ITransport *transport, const ConnectAddress &address)
     d->m_state = ConnectionPrivate::Connected;
 }
 
+Connection::Connection(Connection &&other)
+{
+    d = other.d;
+    other.d = nullptr;
+}
+
+Connection &Connection::operator=(Connection &&other)
+{
+    this->~Connection();
+    d = other.d;
+    other.d = nullptr;
+    return *this;
+}
+
 Connection::~Connection()
 {
+    if (!d) {
+        return;
+    }
     d->close();
 
     delete d->m_transport;

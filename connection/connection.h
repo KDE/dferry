@@ -62,6 +62,9 @@ public:
     // for reusing the connection of a Connection in another thread
     Connection(EventDispatcher *dispatcher, CommRef otherConnection);
 
+    Connection(Connection &&other);
+    Connection &operator=(Connection &&other);
+
     ~Connection();
     Connection(Connection &other) = delete;
     Connection &operator=(Connection &other) = delete;
