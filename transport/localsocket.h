@@ -55,8 +55,6 @@ public:
     LocalSocket &operator=(const LocalSocket &) = delete;
 
 private:
-    friend class IEventLoop;
-
     int m_fd;
 };
 

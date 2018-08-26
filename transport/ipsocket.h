@@ -55,8 +55,6 @@ public:
     IpSocket &operator=(const IpSocket &) = delete;
 
 private:
-    friend class IEventLoop;
-
     FileDescriptor m_fd;
 };
 
