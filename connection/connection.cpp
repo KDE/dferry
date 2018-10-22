@@ -187,6 +187,9 @@ Connection::Connection(Connection &&other)
 {
     d = other.d;
     other.d = nullptr;
+    if (d) {
+        d->m_connection = this;
+    }
 }
 
 Connection &Connection::operator=(Connection &&other)
@@ -194,6 +197,9 @@ Connection &Connection::operator=(Connection &&other)
     this->~Connection();
     d = other.d;
     other.d = nullptr;
+    if (d) {
+        d->m_connection = this;
+    }
     return *this;
 }
 
