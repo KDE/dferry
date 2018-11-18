@@ -273,8 +273,9 @@ static void testReAddInTrigger()
                     if (removeTimer) {
                         TEST(t->isRunning());
                         t->~Timer();
-                        memset(t, 0, sizeof(Timer)); // ensure that it can't trigger - of course if Timer
-                                                     // relies on that we should find it in valgrind...
+                        // ensure that it can't trigger - of course if Timer
+                        // relies on that we should find it in valgrind...
+                        memset(static_cast<void *>(t), 0, sizeof(Timer));
                     } else {
                         if (!withAliasing) {
                             if (t == &timerArray[0]) {
