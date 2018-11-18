@@ -110,28 +110,28 @@ public:
         Authenticating,
         AwaitingUniqueName,
         Connected
-    } m_state;
+    } m_state = Unconnected;
 
-    Connection *m_connection;
-    IMessageReceiver *m_client;
-    Message *m_receivingMessage;
+    Connection *m_connection = nullptr;
+    IMessageReceiver *m_client = nullptr;
+    Message *m_receivingMessage = nullptr;
 
     std::deque<Message> m_sendQueue; // waiting to be sent
 
     // only one of them can be non-null. exception: in the main thread, m_mainThreadConnection
     // equals this, so that the main thread knows it's the main thread and not just a thread-local
     // connection.
-    ITransport *m_transport;
+    ITransport *m_transport = nullptr;
 
-    HelloReceiver *m_helloReceiver;
-    ClientConnectedHandler *m_clientConnectedHandler;
+    HelloReceiver *m_helloReceiver = nullptr;
+    ClientConnectedHandler *m_clientConnectedHandler = nullptr;
 
-    EventDispatcher *m_eventDispatcher;
+    EventDispatcher *m_eventDispatcher = nullptr;
     ConnectAddress m_connectAddress;
     std::string m_uniqueName;
-    AuthClient *m_authClient;
+    AuthClient *m_authClient = nullptr;
 
-    int m_defaultTimeout;
+    int m_defaultTimeout = 25000;
 
     class PendingReplyRecord
     {
@@ -153,12 +153,12 @@ public:
     Spinlock m_lock; // only one lock because things done with lock held are quick, and anyway you shouldn't
                      // be using one connection from multiple threads if you need best performance
 
-    std::atomic<uint32> m_sendSerial;
+    std::atomic<uint32> m_sendSerial { 1 };
 
     std::unordered_map<ConnectionPrivate *, CommutexPeer> m_secondaryThreadLinks;
     std::vector<CommutexPeer> m_unredeemedCommRefs; // for createCommRef() and the constructor from CommRef
 
-    ConnectionPrivate *m_mainThreadConnection;
+    ConnectionPrivate *m_mainThreadConnection = nullptr;
     CommutexPeer m_mainThreadLink;
 };
 

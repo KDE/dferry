@@ -74,18 +74,8 @@ public:
 };
 
 ConnectionPrivate::ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher)
-   : m_state(Unconnected),
-     m_connection(connection),
-     m_client(nullptr),
-     m_receivingMessage(nullptr),
-     m_transport(nullptr),
-     m_helloReceiver(nullptr),
-     m_clientConnectedHandler(nullptr),
-     m_eventDispatcher(dispatcher),
-     m_authClient(nullptr),
-     m_defaultTimeout(25000),
-     m_sendSerial(1),
-     m_mainThreadConnection(nullptr)
+   : m_connection(connection),
+     m_eventDispatcher(dispatcher)
 {
 }
 
