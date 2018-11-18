@@ -45,7 +45,7 @@
 class HelloReceiver : public IMessageReceiver
 {
 public:
-    void handlePendingReplyFinished(PendingReply *pr) override
+    void handlePendingReplyFinished(PendingReply *pr, Connection *) override
     {
         assert(pr == &m_helloReply);
         (void) pr;
@@ -552,7 +552,8 @@ void ConnectionPrivate::handleCompletion(void *task)
 
             if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {
-                    m_client->handleSpontaneousMessageReceived(Message(std::move(*receivedMessage)));
+                    m_client->handleSpontaneousMessageReceived(Message(std::move(*receivedMessage)),
+                                                               m_connection);
                 }
                 // dispatch to other threads listening to spontaneous messages, if any
                 for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
@@ -688,7 +689,7 @@ void ConnectionPrivate::processEvent(Event *evt)
     case Event::SpontaneousMessageReceived:
         if (m_client) {
             SpontaneousMessageReceivedEvent *smre = static_cast<SpontaneousMessageReceivedEvent *>(evt);
-            m_client->handleSpontaneousMessageReceived(Message(std::move(smre->message)));
+            m_client->handleSpontaneousMessageReceived(Message(std::move(smre->message)), m_connection);
         }
         break;
 

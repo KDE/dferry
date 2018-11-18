@@ -46,7 +46,7 @@ class ReplyCheck : public IMessageReceiver
 {
 public:
     EventDispatcher *m_eventDispatcher;
-    void handlePendingReplyFinished(PendingReply *pr) override
+    void handlePendingReplyFinished(PendingReply *pr, Connection *) override
     {
         pr->dumpState();
         std::cout << "got it!\n" << pr->reply()->arguments().prettyPrint();
@@ -94,7 +94,7 @@ class TimeoutCheck : public IMessageReceiver
 {
 public:
     EventDispatcher *m_eventDispatcher;
-    void handlePendingReplyFinished(PendingReply *reply) override
+    void handlePendingReplyFinished(PendingReply *reply, Connection *) override
     {
         TEST(reply->isFinished());
         TEST(!reply->hasNonErrorReply());

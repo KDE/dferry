@@ -47,10 +47,10 @@ static Message createEavesdropMessage(const char *messageType)
 class ReplyPrinter : public IMessageReceiver
 {
     // reimplemented from IMessageReceiver
-    void handleSpontaneousMessageReceived(Message m) override;
+    void handleSpontaneousMessageReceived(Message m, Connection *) override;
 };
 
-void ReplyPrinter::handleSpontaneousMessageReceived(Message m)
+void ReplyPrinter::handleSpontaneousMessageReceived(Message m, Connection *)
 {
     std::cout << '\n' << m.prettyPrint();
 }

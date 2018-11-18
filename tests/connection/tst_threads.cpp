@@ -52,7 +52,7 @@ class PongSender : public IMessageReceiver
 public:
     Connection *m_connection;
 
-    void handleSpontaneousMessageReceived(Message ping) override
+    void handleSpontaneousMessageReceived(Message ping, Connection *) override
     {
         if (ping.interface() != echoInterface) {
             // This is not the ping... it is probably still something from connection setup.
@@ -115,7 +115,7 @@ static void pongThreadRun(Connection::CommRef mainConnectionRef, std::atomic<boo
 class PongReceiver : public IMessageReceiver
 {
 public:
-    void handlePendingReplyFinished(PendingReply *pongReply) override
+    void handlePendingReplyFinished(PendingReply *pongReply, Connection *) override
     {
         TEST(!pongReply->error().isError());
         Message pong = pongReply->takeReply();
@@ -177,7 +177,7 @@ static void testPingPong()
 class TimeoutReceiver : public IMessageReceiver
 {
 public:
-    void handlePendingReplyFinished(PendingReply *reply) override
+    void handlePendingReplyFinished(PendingReply *reply, Connection *) override
     {
         TEST(reply->isFinished());
         TEST(!reply->hasNonErrorReply());

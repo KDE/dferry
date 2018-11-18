@@ -89,10 +89,11 @@ void PendingReplyPrivate::handleReceived(Message *reply)
 {
     m_isFinished = true;
     // Connection has already unregistered us because it knows this reply is done
+    Connection *const connection = m_connectionOrReply.connection->m_connection;
     m_connectionOrReply.reply = reply;
     m_replyTimeout.stop();
     if (m_receiver) {
-        m_receiver->handlePendingReplyFinished(m_owner);
+        m_receiver->handlePendingReplyFinished(m_owner, connection);
     }
 }
 
@@ -196,8 +197,9 @@ void PendingReplyPrivate::handleError(Error error)
         m_error = error;
     }
     m_isFinished = true;
+    Connection *const connection = m_connectionOrReply.connection->m_connection;
     m_connectionOrReply.reply = nullptr;
     if (m_receiver) {
-        m_receiver->handlePendingReplyFinished(m_owner);
+        m_receiver->handlePendingReplyFinished(m_owner, connection);
     }
 }

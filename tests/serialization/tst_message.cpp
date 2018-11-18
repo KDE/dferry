@@ -50,7 +50,7 @@ static void test_signatureHeader()
 class PrintAndTerminateClient : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *) override
     {
         std::cout << msg.prettyPrint();
         m_eventDispatcher->interrupt();
@@ -61,7 +61,7 @@ public:
 class PrintAndReplyClient : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *) override
     {
         std::cout << msg.prettyPrint();
         m_connection->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
@@ -206,7 +206,7 @@ enum {
 class FileDescriptorTestReceiver : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *) override
     {
         // we're on the session bus, so we'll receive all kinds of notifications we don't care about here
         if (msg.type() != Message::MethodCallMessage

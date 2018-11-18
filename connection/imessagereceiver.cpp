@@ -29,12 +29,12 @@ IMessageReceiver::~IMessageReceiver()
 {
 }
 
-void IMessageReceiver::handleSpontaneousMessageReceived(Message /* message */)
+void IMessageReceiver::handleSpontaneousMessageReceived(Message /* message */, Connection * /* connection */)
 {
     // *poof* goes the message when this method returns!
 }
 
-void IMessageReceiver::handlePendingReplyFinished(PendingReply * /* pendingReply */)
+void IMessageReceiver::handlePendingReplyFinished(PendingReply * /* pendingReply */, Connection *)
 {
     // if we get here that might be bad! but it also might not be under special circumstances, so
     // don't complain.

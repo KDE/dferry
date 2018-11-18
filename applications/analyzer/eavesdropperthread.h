@@ -46,7 +46,7 @@ public:
     ~EavesdropperThread() override;
 
     // reimplemented IMessageReceiver method
-    void handleSpontaneousMessageReceived(Message message) override;
+    void handleSpontaneousMessageReceived(Message message, Connection *) override;
 
 signals:
     void messageReceived(Message *message, qint64 timestamp);
