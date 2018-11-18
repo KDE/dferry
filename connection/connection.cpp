@@ -558,7 +558,11 @@ void ConnectionPrivate::handleCompletion(void *task)
                 // dispatch to other threads listening to spontaneous messages, if any
                 for (auto it = m_secondaryThreadLinks.begin(); it != m_secondaryThreadLinks.end(); ) {
                     SpontaneousMessageReceivedEvent *evt = new SpontaneousMessageReceivedEvent();
-                    evt->message = *receivedMessage;
+                    if (std::next(it) != m_secondaryThreadLinks.end()) {
+                        evt->message = *receivedMessage;
+                    } else {
+                        evt->message = std::move(*receivedMessage);
+                    }
 
                     CommutexLocker otherLocker(&it->second);
                     if (otherLocker.hasLock()) {
