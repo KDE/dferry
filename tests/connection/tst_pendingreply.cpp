@@ -115,7 +115,7 @@ static void testTimeout()
         eventDispatcher.poll();
     }
 
-    Message msg = Message::createCall("/some/dummy/path/lol", "dummy_interface", "non_existent_method");
+    Message msg = Message::createCall("/some/dummy/path", "org.no_interface", "non_existent_method");
     msg.setDestination(conn.uniqueName());
 
     PendingReply neverGonnaGetReply = conn.send(std::move(msg), 200);
