@@ -127,9 +127,8 @@ IpSocket::~IpSocket()
 #endif
 }
 
-void IpSocket::close()
+void IpSocket::platformClose()
 {
-    setEventDispatcher(nullptr);
     if (isValidFileDescriptor(m_fd)) {
 #ifdef _WIN32
         closesocket(m_fd);
@@ -140,11 +139,13 @@ void IpSocket::close()
     }
 }
 
-uint32 IpSocket::write(chunk a)
+IO::Result IpSocket::write(chunk a)
 {
+    IO::Result ret;
     if (!isValidFileDescriptor(m_fd)) {
         std::cerr << "\nIpSocket::write() failed A.\n\n";
-        return 0; // TODO -1 and return int32?
+        ret.status = IO::Status::InternalError;
+        return ret;
     }
 
     const uint32 initialLength = a.length;
@@ -160,14 +161,16 @@ uint32 IpSocket::write(chunk a)
                 break;
             }
             close();
-            return false;
+            ret.status = IO::Status::InternalError;
+            return ret;
         }
 
         a.ptr += nbytes;
         a.length -= uint32(nbytes);
     }
 
-    return initialLength - a.length;
+    ret.length = initialLength - a.length;
+    return ret;
 }
 
 uint32 IpSocket::availableBytesForReading()
@@ -184,15 +187,14 @@ uint32 IpSocket::availableBytesForReading()
     return uint32(available);
 }
 
-chunk IpSocket::read(byte *buffer, uint32 maxSize)
+IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
 {
-    chunk ret;
+    IO::Result ret;
     if (maxSize <= 0) {
         std::cerr << "\nIpSocket::read() failed A.\n\n";
+        ret.status = IO::Status::InternalError;
         return ret;
     }
-
-    ret.ptr = buffer;
 
     while (maxSize > 0) {
         ssize_t nbytes = recv(m_fd, reinterpret_cast<char *>(buffer), maxSize, 0);
@@ -205,6 +207,7 @@ chunk IpSocket::read(byte *buffer, uint32 maxSize)
                 break;
             }
             close();
+            ret.status = IO::Status::RemoteClosed; // TODO
             return ret;
         }
         ret.length += uint32(nbytes);
@@ -223,14 +226,4 @@ bool IpSocket::isOpen()
 FileDescriptor IpSocket::fileDescriptor() const
 {
     return m_fd;
-}
-
-void IpSocket::handleCanRead()
-{
-    if (availableBytesForReading()) {
-        ITransport::handleCanRead();
-    } else {
-        // This should really only happen in error cases! ### TODO test?
-        close();
-    }
 }

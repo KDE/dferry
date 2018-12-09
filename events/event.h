@@ -72,7 +72,7 @@ struct PendingReplyCancelEvent : public Event
 struct MainConnectionDisconnectEvent : public Event
 {
     MainConnectionDisconnectEvent() : Event(Event::MainConnectionDisconnect) {}
-    // no additiona3 data members - we could also just use Event
+    Error error;
 };
 
 struct SecondaryConnectionConnectEvent : public Event

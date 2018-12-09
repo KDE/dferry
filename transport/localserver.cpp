@@ -70,11 +70,15 @@ LocalServer::~LocalServer()
     close();
 }
 
-void LocalServer::handleCanRead()
+IO::Status LocalServer::handleIoReady(IO::RW rw)
 {
+    if (rw != IO::RW::Read) {
+        assert(false);
+        return IO::Status::InternalError;
+    }
     int connFd = accept(m_listenFd, nullptr, nullptr);
     if (connFd < 0) {
-        return;
+        return IO::Status::RemoteClosed;
     }
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
 
@@ -82,12 +86,7 @@ void LocalServer::handleCanRead()
     if (m_newConnectionListener) {
         m_newConnectionListener->handleCompletion(this);
     }
-}
-
-void LocalServer::handleCanWrite()
-{
-    // We never registered this to be called, so...
-    assert(false);
+    return IO::Status::OK;
 }
 
 bool LocalServer::isListening() const
@@ -95,9 +94,8 @@ bool LocalServer::isListening() const
     return m_listenFd >= 0;
 }
 
-void LocalServer::close()
+void LocalServer::platformClose()
 {
-    setEventDispatcher(nullptr);
     if (m_listenFd >= 0) {
         ::close(m_listenFd);
         m_listenFd = -1;

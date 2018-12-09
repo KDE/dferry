@@ -35,7 +35,7 @@ class EventDispatcher;
 class ITransportListener;
 class SelectEventPoller;
 
-class ITransport : public IioEventListener
+class ITransport : public IIoEventListener
 {
 public:
     // An ITransport subclass must have a file descriptor after construction and it must not change
@@ -43,45 +43,40 @@ public:
     ITransport(); // TODO event dispatcher as constructor argument?
     ~ITransport() override;
 
-    // usually, the maximum sensible number of listeners is two: one for reading and one for writing.
-    // avoiding (independent) readers and writers blocking each other is good for IO efficiency.
-    void addListener(ITransportListener *listener);
-    void removeListener(ITransportListener *listener);
+    // This listener interface is different from IIoEventSource / IIoEventListener because that one is
+    // one source, several file descriptors, one file descriptor to one listener
+    // this is one file descriptor, two channels, one channel (read or write) to one listener.
+    void setReadListener(ITransportListener *listener);
+    void setWriteListener(ITransportListener *listener);
 
     virtual uint32 availableBytesForReading() = 0;
-    virtual chunk read(byte *buffer, uint32 maxSize) = 0;
-    virtual chunk readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors);
-    virtual uint32 write(chunk data) = 0;
-    virtual uint32 writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors);
+    virtual IO::Result read(byte *buffer, uint32 maxSize) = 0;
+    virtual IO::Result readWithFileDescriptors(byte *buffer, uint32 maxSize,
+                                               std::vector<int> *fileDescriptors);
+    virtual IO::Result write(chunk data) = 0;
+    virtual IO::Result writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors);
 
-    virtual void close() = 0;
+    void close();
     virtual bool isOpen() = 0;
 
     bool supportsPassingFileDescriptors() const { return m_supportsFileDescriptors; }
 
-    void setEventDispatcher(EventDispatcher *ed) override;
-    EventDispatcher *eventDispatcher() const override;
+    IO::Status handleIoReady(IO::RW rw) override;
 
     // factory method - creates a suitable subclass to connect to address
     static ITransport *create(const ConnectAddress &connectAddress);
 
 protected:
-    friend class EventDispatcher;
-    // IioEventListener
-    void handleCanRead() override;
-    void handleCanWrite() override;
-
-    bool m_supportsFileDescriptors;
+    virtual void platformClose() = 0;
+    bool m_supportsFileDescriptors = false;
 
 private:
+    void updateTransportIoInterest(); // "Transport" in name to avoid confusion with IIoEventSource
     friend class ITransportListener;
     friend class SelectEventPoller;
-    void updateReadWriteInterest(); // called internally and from ITransportListener
 
-    EventDispatcher *m_eventDispatcher;
-    std::vector<ITransportListener *> m_listeners;
-    bool m_readNotificationEnabled;
-    bool m_writeNotificationEnabled;
+    ITransportListener *m_readListener = nullptr;
+    ITransportListener *m_writeListener = nullptr;
 };
 
 #endif // ITRANSPORT_H

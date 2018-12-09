@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2018 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,42 +21,36 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iioeventlistener.h"
+#ifndef IOVALUETYPES_H
+#define IOVALUETYPES_H
 
-#include "iioeventsource.h"
+#include "types.h"
 
-#include <cassert>
-
-IIoEventListener::~IIoEventListener()
+namespace IO
 {
-    // ### we would like to remove ourself from any IIoEventSource here, but we "are" only
-    //     the base class at this point, so it can't be done here. However, we can check!
-    assert(!m_eventSource);
-#if 0
-    if (m_eventSource) {
-        // can't do this, it calls fileDescriptor() which is a pure virtual at this point
-        m_eventSource->removeIoListener(this);
-    }
-#endif
-}
 
-IIoEventSource *IIoEventListener::ioEventSource() const
+// would be nice to wrap this into a type-safe bitset enum / class, but since it's for
+// internal use, uint32 is okay...
+enum class RW
 {
-    return m_eventSource;
-}
+    Read = 1,
+    Write = 2,
+};
 
-uint32 IIoEventListener::ioInterest() const
+enum class Status
 {
-    return m_ioInterest;
-}
+    OK = 0,
+    RemoteClosed,
+    LocalClosed,
+    InternalError
+};
 
-void IIoEventListener::setIoInterest(uint32 ioRw)
+struct Result
 {
-    if (m_ioInterest == ioRw) {
-        return;
-    }
-    m_ioInterest = ioRw;
-    if (m_eventSource) {
-        m_eventSource->updateIoInterest(this);
-    }
-}
+    Status status = Status::OK;
+    uint32 length = 0;
+};
+
+} // namespace IO
+
+#endif // IOVALUETYPES_H

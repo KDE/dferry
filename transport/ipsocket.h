@@ -41,13 +41,12 @@ public:
     ~IpSocket() override;
 
     // pure virtuals from ITransport
-    uint32 write(chunk data) override;
+    IO::Result write(chunk data) override;
     uint32 availableBytesForReading() override;
-    chunk read(byte *buffer, uint32 maxSize) override;
-    void close() override;
+    IO::Result read(byte *buffer, uint32 maxSize) override;
+    void platformClose() override;
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
-    void handleCanRead() override;
     // end ITransport
 
     IpSocket() = delete;

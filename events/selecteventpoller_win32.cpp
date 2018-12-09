@@ -141,13 +141,13 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     // ### doing FD_SET "manually", avoiding a scan of the whole list for each set action - there is
     //     no danger of duplicates because our input is a set which already guarantees uniqueness.
     for (const auto &fdRw : m_fds) {
-        if (fdRw.second.readEnabled) {
+        if (fdRw.second & IO::RW::Read) {
             // FD_SET(fdRw.first, &m_readSet);
             if (m_readSet.fd_count < FD_SETSIZE) {
                 m_readSet.fd_array[m_readSet.fd_count++] = fdRw.first;
             }
         }
-        if (fdRw.second.writeEnabled) {
+        if (fdRw.second & IO::RW::Write) {
             // FD_SET(fdRw.first, &m_writeSet);
             if (m_writeSet.fd_count < FD_SETSIZE) {
                 m_writeSet.fd_array[m_writeSet.fd_count++] = fdRw.first;
@@ -199,10 +199,12 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     // descriptor like with FD_ISSET.
     // numEvents -= m_readSet.fd_count + m_writeSet.fd_count;
     for (uint i = 0; i < m_readSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForReading(m_readSet.fd_array[i]);
+        EventDispatcherPrivate::get(m_dispatcher)
+            ->notifyListenerForIo(m_readSet.fd_array[i], IO::RW::Read);
     }
     for (uint i = 0; i < m_writeSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForWriting(m_writeSet.fd_array[i]);
+        EventDispatcherPrivate::get(m_dispatcher)
+            ->notifyListenerForIo(m_writeSet.fd_array[i], IO::RW::Write);
     }
 
     return ret;
@@ -222,7 +224,7 @@ void SelectEventPoller::interrupt(IEventPoller::InterruptAction action)
     QueueUserAPC(triggerInterruptSocket, m_selectThreadHandle, dwParam);
 }
 
-void SelectEventPoller::addIoEventListener(IioEventListener *iol)
+void SelectEventPoller::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
 {
     // The main select specific part of registration is in setReadWriteInterest().
     // Here we just check fd limits.
@@ -232,18 +234,15 @@ void SelectEventPoller::addIoEventListener(IioEventListener *iol)
         return;
     }
 
-    RwEnabled rw = { false, false };
-    m_fds.emplace(iol->fileDescriptor(), rw);
+    m_fds.emplace(iol->fileDescriptor(), ioRw);
 }
 
-void SelectEventPoller::removeIoEventListener(IioEventListener *iol)
+void SelectEventPoller::removeFileDescriptor(FileDescriptor fd)
 {
-    m_fds.erase(iol->fileDescriptor());
+    m_fds.erase(fd);
 }
 
-void SelectEventPoller::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
+void SelectEventPoller::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
 {
-    RwEnabled &rw = m_fds.at(iol->fileDescriptor());
-    rw.readEnabled = read;
-    rw.writeEnabled = write;
+    m_fds.at(fd) = ioRw;
 }

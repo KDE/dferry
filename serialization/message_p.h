@@ -85,8 +85,8 @@ public:
     MessagePrivate(const MessagePrivate &other, Message *parent);
     ~MessagePrivate() override;
 
-    void handleTransportCanRead() override;
-    void handleTransportCanWrite() override;
+    IO::Status handleTransportCanRead() override;
+    IO::Status handleTransportCanWrite() override;
 
     // ITransport is non-public API, so these make no sense in the public interface
     void receive(ITransport *transport); // fills in this message from transport

@@ -725,11 +725,9 @@ static const uint32 s_extendedFixedHeaderLength = 16;
 void MessagePrivate::receive(ITransport *transport)
 {
     if (m_state >= FirstIoState) { // Can only do one I/O operation at a time
-        std::cerr << "MessagePrivate::receive() Error A.\n";
         return;
     }
-    transport->addListener(this);
-    setReadNotificationEnabled(true);
+    transport->setReadListener(this);
     m_state = MessagePrivate::Receiving;
     m_headerLength = 0;
     m_bodyLength = 0;
@@ -743,15 +741,14 @@ bool Message::isReceiving() const
 void MessagePrivate::send(ITransport *transport)
 {
     if (!serialize()) {
-        std::cerr << "MessagePrivate::send() Error A.\n";
+        // TODO
         // m_error.setCode();
         // notifyCompletionListener(); would call into Connection, but it's easier for Connection to handle
         //                             the error from non-callback code, directly in the caller of send().
         return;
     }
     if (m_state != MessagePrivate::Sending) {
-        transport->addListener(this);
-        setWriteNotificationEnabled(true);
+        transport->setWriteListener(this);
         m_state = MessagePrivate::Sending;
     }
 }
@@ -773,13 +770,13 @@ void MessagePrivate::notifyCompletionListener()
     }
 }
 
-void MessagePrivate::handleTransportCanRead()
+IO::Status MessagePrivate::handleTransportCanRead()
 {
     if (m_state != Receiving) {
-        return;
+        return IO::Status::InternalError;
     }
-    bool isError = false;
-    chunk in;
+    IO::Status ret = IO::Status::OK;
+    IO::Result ioRes;
     do {
         uint32 readMax = 0;
         if (!m_headerLength) {
@@ -796,18 +793,18 @@ void MessagePrivate::handleTransportCanRead()
 
         if (m_bufferPos == 0) {
             // File descriptors should arrive only with the first byte
-            in = transport()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
-                                                       &m_fileDescriptors);
+            ioRes = readTransport()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
+                                                         &m_fileDescriptors);
         } else {
-            in = transport()->read(m_buffer.ptr + m_bufferPos, readMax);
+            ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax);
         }
-        m_bufferPos += in.length;
+        m_bufferPos += ioRes.length;
         assert(m_bufferPos <= m_buffer.length);
 
         if (!headersDone) {
             if (m_headerLength == 0 && m_bufferPos >= s_extendedFixedHeaderLength) {
                 if (!deserializeFixedHeaders()) {
-                    isError = true;
+                    ret = IO::Status::InternalError; // TODO ... m_error = Error::MalformetReply?
                     break;
                 }
             }
@@ -815,11 +812,11 @@ void MessagePrivate::handleTransportCanRead()
                 if (deserializeVariableHeaders()) {
                     const uint32 fdsCount = m_varHeaders.intHeader(Message::UnixFdsHeader);
                     if (fdsCount != m_fileDescriptors.size()) {
-                        isError = true;
+                        ret = IO::Status::InternalError; // TODO
                         break;
                     }
                 } else {
-                    isError = true;
+                    ret = IO::Status::InternalError; // TODO
                     break;
                 }
             }
@@ -827,62 +824,67 @@ void MessagePrivate::handleTransportCanRead()
         if (m_headerLength > 0 && m_bufferPos >= m_headerLength + m_bodyLength) {
             // all done!
             assert(m_bufferPos == m_headerLength + m_bodyLength);
-            setReadNotificationEnabled(false);
             m_state = Serialized;
             chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
             m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
                                         bodyData, std::move(m_fileDescriptors), m_isByteSwapped);
             m_fileDescriptors.clear(); // put it into a well-defined state
-            assert(!isError);
-            transport()->removeListener(this);
+            assert(ioRes.status == IO::Status::OK && ret == IO::Status::OK);
+            readTransport()->setReadListener(nullptr);
             notifyCompletionListener(); // do not access members after this because it might delete us!
             break;
         }
-        if (!transport()->isOpen()) {
-            isError = true;
+        if (!readTransport()->isOpen()) {
+            ret = IO::Status::InternalError; // TODO
             break;
         }
-    } while (in.length);
+    } while (ioRes.status == IO::Status::OK);
 
-    if (isError) {
-        setReadNotificationEnabled(false);
+    if (ret != IO::Status::OK) {
         m_state = Empty;
         clearBuffer();
-        transport()->removeListener(this);
+        readTransport()->setReadListener(nullptr);
+        m_error = Error::RemoteDisconnect;
         notifyCompletionListener();
-        // TODO reset other data members, generally revisit error handling to make it robust
+        // TODO reset other data members, SET ERROR, generally revisit error handling to make it robust
     }
+    return ret;
 }
 
-void MessagePrivate::handleTransportCanWrite()
+IO::Status MessagePrivate::handleTransportCanWrite()
 {
     if (m_state != Sending) {
-        return;
+        return IO::Status::InternalError;
     }
     while (true) {
         assert(m_buffer.length >= m_bufferPos);
         const uint32 toWrite = m_buffer.length - m_bufferPos;
         if (!toWrite) {
-            setWriteNotificationEnabled(false);
             m_state = Serialized;
-            transport()->removeListener(this);
-            assert(transport() == nullptr);
+            writeTransport()->setWriteListener(nullptr);
             notifyCompletionListener();
             break;
         }
-        uint32 written = 0;
+        IO::Result ioRes;
         if (m_bufferPos == 0) {
-            written = transport()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
-                                                             m_mainArguments.fileDescriptors());
+            // Send file descriptors and / or credentials with first byte of message. We could call
+            // write() after checking that we don't need to send fds (easy) or credentials (which would
+            // be a slight layering violation).
+            ioRes = writeTransport()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
+                                                               m_mainArguments.fileDescriptors());
         } else {
-            written = transport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+            ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         }
-        if (written <= 0) {
-            // TODO error handling
+        if (ioRes.status != IO::Status::OK) {
+            writeTransport()->setWriteListener(nullptr);
+            // TODO notifyCompletionListener() for failure?
+            // TODO state update?
+            return IO::Status::RemoteClosed;
             break;
         }
-        m_bufferPos += written;
+        m_bufferPos += ioRes.length;
     }
+    return IO::Status::OK;
 }
 #endif // !DFERRY_SERDES_ONLY
 

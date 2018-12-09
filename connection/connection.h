@@ -29,10 +29,12 @@
 
 #include <string>
 
+class Connection;
 class ConnectAddress;
 class ConnectionPrivate;
 class Error;
 class EventDispatcher;
+class IConnectionStateListener;
 class IMessageReceiver;
 class ITransport;
 class Message;
@@ -42,6 +44,13 @@ class Server;
 class DFERRY_EXPORT Connection
 {
 public:
+    enum State
+    {
+        Unconnected = 0,
+        Connecting,
+        Connected
+    };
+
     enum ThreadAffinity
     {
         MainConnection = 0,
@@ -69,6 +78,7 @@ public:
     Connection(Connection &other) = delete;
     Connection &operator=(Connection &other) = delete;
 
+    State state() const;
     void close();
 
     CommRef createCommRef();
@@ -90,6 +100,8 @@ public:
     // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
     Error sendNoReply(Message m);
 
+    size_t sendQueueLength() const;
+
     void waitForConnectionEstablished();
     ConnectAddress connectAddress() const;
     std::string uniqueName() const;
@@ -104,9 +116,13 @@ public:
     IMessageReceiver *spontaneousMessageReceiver() const;
     void setSpontaneousMessageReceiver(IMessageReceiver *receiver);
 
+    IConnectionStateListener *connectionStateListener() const;
+    void setConnectionStateListener(IConnectionStateListener *listener);
+
 private:
     friend class Server;
-    Connection(ITransport *transport, const ConnectAddress &address); // called from Server
+    // called from Server
+    Connection(ITransport *transport, EventDispatcher *eventDispatcher, const ConnectAddress &address);
 
     friend class ConnectionPrivate;
     ConnectionPrivate *d;

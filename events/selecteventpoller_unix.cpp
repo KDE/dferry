@@ -58,11 +58,11 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     FD_SET(m_interruptPipe[0], &m_readSet);
 
     for (const auto &fdRw : m_fds) {
-        if (fdRw.second.readEnabled) {
+        if (fdRw.second & IO::RW::Read) {
             nfds = std::max(nfds, fdRw.first);
             FD_SET(fdRw.first, &m_readSet);
         }
-        if (fdRw.second.writeEnabled) {
+        if (fdRw.second & IO::RW::Write) {
             nfds = std::max(nfds, fdRw.first);
             FD_SET(fdRw.first, &m_writeSet);
         }
@@ -102,11 +102,13 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     } else if (numEvents > 0) {
         for (auto fdListener : EventDispatcherPrivate::get(m_dispatcher)->m_ioListeners) {
             if (FD_ISSET(fdListener.first, &m_readSet)) {
-                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForReading(fdListener.first);
+                EventDispatcherPrivate::get(m_dispatcher)
+                    ->notifyListenerForIo(fdListener.first, IO::RW::Read);
                 numEvents--;
             }
             if (FD_ISSET(fdListener.first, &m_writeSet)) {
-                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForWriting(fdListener.first);
+                EventDispatcherPrivate::get(m_dispatcher)
+                    ->notifyListenerForIo(fdListener.first, IO::RW::Write);
                 numEvents--;
             }
             if (numEvents <= 0) {
@@ -132,27 +134,24 @@ void SelectEventPoller::interrupt(IEventPoller::InterruptAction action)
     write(m_interruptPipe[1], &buf, 1);
 }
 
-void SelectEventPoller::addIoEventListener(IioEventListener *ioc)
+void SelectEventPoller::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
 {
     // The main select specific part of registration is in setReadWriteInterest().
     // Here we just check fd limits.
-    if (ioc->fileDescriptor() >= FD_SETSIZE) {
+    if (fd >= FD_SETSIZE) {
         // TODO error...
         return;
     }
 
-    RwEnabled rw = { false, false };
-    m_fds.emplace(ioc->fileDescriptor(), rw);
+    m_fds.emplace(fd, ioRw);
 }
 
-void SelectEventPoller::removeIoEventListener(IioEventListener *ioc)
+void SelectEventPoller::removeFileDescriptor(FileDescriptor fd)
 {
-    m_fds.erase(ioc->fileDescriptor());
+    m_fds.erase(fd);
 }
 
-void SelectEventPoller::setReadWriteInterest(IioEventListener *ioc, bool read, bool write)
+void SelectEventPoller::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
 {
-    RwEnabled &rw = m_fds.at(ioc->fileDescriptor());
-    rw.readEnabled = read;
-    rw.writeEnabled = write;
+    m_fds.at(fd) = ioRw;
 }

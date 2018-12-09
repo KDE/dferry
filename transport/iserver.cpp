@@ -32,9 +32,9 @@
 #endif
 
 #include <string>
+#include <iostream>
 
 #ifdef __unix__
-
 #include <random>
 #include "stringtools.h"
 
@@ -67,9 +67,9 @@ static std::string xdgRuntimeDir()
 #endif
 
 IServer::IServer()
-   : m_newConnectionListener(nullptr),
-     m_eventDispatcher(nullptr)
+   : m_newConnectionListener(nullptr)
 {
+    setIoInterest(uint32(IO::RW::Read));
 }
 
 IServer::~IServer()
@@ -158,24 +158,13 @@ void IServer::setNewConnectionListener(ICompletionListener *listener)
     m_newConnectionListener = listener;
 }
 
-void IServer::setEventDispatcher(EventDispatcher *ed)
+void IServer::close()
 {
-    if (m_eventDispatcher == ed) {
+    if (!isListening()) {
         return;
     }
-    if (m_eventDispatcher) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->removeIoEventListener(this);
+    if (ioEventSource()) {
+        ioEventSource()->removeIoListener(this);
     }
-    m_eventDispatcher = ed;
-    if (m_eventDispatcher) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->addIoEventListener(this);
-        ep->setReadWriteInterest(this, true, false);
-    }
-}
-
-EventDispatcher *IServer::eventDispatcher() const
-{
-    return m_eventDispatcher;
+    platformClose();
 }

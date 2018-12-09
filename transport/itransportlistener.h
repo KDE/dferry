@@ -24,6 +24,8 @@
 #ifndef ITRANSPORTLISTENER_H
 #define ITRANSPORTLISTENER_H
 
+#include "iovaluetypes.h"
+
 class ITransport;
 
 class ITransportListener
@@ -32,24 +34,21 @@ public:
     ITransportListener();
     virtual ~ITransportListener();
 
-    void setReadNotificationEnabled(bool enable);
-    bool readNotificationEnabled() const;
-
-    void setWriteNotificationEnabled(bool enable);
-    bool writeNotificationEnabled() const;
+    ITransport *readTransport() const;
+    ITransport *writeTransport() const;
 
     // public mainly for testing purposes - only call if you know what you're doing
     // no-op default implementations are provided so you only need to reimplement what you need
-    virtual void handleTransportCanRead();
-    virtual void handleTransportCanWrite();
+    virtual IO::Status handleTransportCanRead();
+    virtual IO::Status handleTransportCanWrite();
 
 protected:
-    ITransport *transport() const; // returns m_transport
-    bool m_readNotificationEnabled;
-    bool m_writeNotificationEnabled;
+    uint32 m_ioInterest = 0;
     friend class ITransport;
 private:
-    ITransport *m_transport; // set from ITransport::addListener() / removeListener()
+    void updateIoInterest(IO::RW which, bool enable);
+    ITransport *m_readTransport = nullptr; // set from ITransport::setReadListener()
+    ITransport *m_writeTransport = nullptr; // set from ITransport::setWriteListener()
 };
 
 #endif // ITRANSPORTLISTENER_H

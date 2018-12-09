@@ -40,9 +40,9 @@ public:
     // interrupt the waiting for events (from another thread)
     void interrupt(InterruptAction action) override;
 
-    void addIoEventListener(IioEventListener *iol) override;
-    void removeIoEventListener(IioEventListener *iol) override;
-    void setReadWriteInterest(IioEventListener *iol, bool read, bool write) override;
+    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
+    void removeFileDescriptor(FileDescriptor fd) override;
+    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
 
     // public accessor for protected member variable
     EventDispatcher *dispatcher() const { return m_dispatcher; }
@@ -50,11 +50,7 @@ public:
     bool exiting = false;
     ForeignEventLoopIntegrator *m_integrator;
 
-    struct RwEnabled {
-        bool readEnabled : 1;
-        bool writeEnabled : 1;
-    };
-    std::unordered_map<FileDescriptor, RwEnabled> m_fds;
+    std::unordered_map<FileDescriptor, uint32 /* ioRW */> m_fds;
 };
 
 ForeignEventLoopIntegratorPrivate::ForeignEventLoopIntegratorPrivate(ForeignEventLoopIntegrator *integrator,
@@ -75,35 +71,37 @@ void ForeignEventLoopIntegratorPrivate::interrupt(InterruptAction /* action */)
     // do nothing, it can't possibly work (and it is *sometimes* a benign error to call this)
 }
 
-void ForeignEventLoopIntegratorPrivate::addIoEventListener(IioEventListener *iol)
+void ForeignEventLoopIntegratorPrivate::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
 {
     if (!exiting) {
-        RwEnabled rw = { false, false };
-        m_fds.emplace(iol->fileDescriptor(), rw);
+        m_fds.emplace(fd, ioRw);
     }
 }
 
-void ForeignEventLoopIntegratorPrivate::removeIoEventListener(IioEventListener *iol)
+void ForeignEventLoopIntegratorPrivate::removeFileDescriptor(FileDescriptor fd)
 {
     if (!exiting) {
-        m_fds.erase(iol->fileDescriptor());
+        m_fds.erase(fd);
     }
 }
 
-void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
+void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
 {
     if (exiting) {
         return;
     }
-    RwEnabled &rw = m_fds.at(iol->fileDescriptor());
-    if (rw.readEnabled != read) {
-        rw.readEnabled = read;
-        m_integrator->setWatchRead(iol->fileDescriptor(), read);
+    const uint32 oldRw = m_fds.at(fd);
+    const bool oldRead = oldRw & uint32(IO::RW::Read);
+    const bool read = ioRw & uint32(IO::RW::Read);
+    if (oldRead != read) {
+        m_integrator->setWatchRead(fd, read);
     }
-    if (rw.writeEnabled != write) {
-        rw.writeEnabled = write;
-        m_integrator->setWatchWrite(iol->fileDescriptor(), write);
+    const bool oldWrite = oldRw & uint32(IO::RW::Write);
+    const bool write = ioRw & uint32(IO::RW::Write);
+    if (oldWrite != write) {
+        m_integrator->setWatchWrite(fd, write);
     }
+    m_fds.at(fd) = ioRw;
 }
 
 ForeignEventLoopIntegrator::ForeignEventLoopIntegrator()
@@ -131,14 +129,13 @@ ForeignEventLoopIntegrator::~ForeignEventLoopIntegrator()
 void ForeignEventLoopIntegrator::removeAllWatches()
 {
     for (auto it = d->m_fds.begin(); it != d->m_fds.end(); ++it) {
-        if (it->second.readEnabled) {
-            it->second.readEnabled = false;
+        if (it->second & uint32(IO::RW::Read)) {
             setWatchRead(it->first, false);
         }
-        if (it->second.writeEnabled) {
-            it->second.writeEnabled = false;
+        if (it->second & uint32(IO::RW::Write)) {
             setWatchWrite(it->first, false);
         }
+        it->second = 0;
     }
     watchTimeout(-1);
     if (d) {
@@ -163,13 +160,13 @@ void ForeignEventLoopIntegrator::handleTimeout()
 void ForeignEventLoopIntegrator::handleReadyRead(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForReading(fd);
+        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Read);
     }
 }
 
 void ForeignEventLoopIntegrator::handleReadyWrite(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForWriting(fd);
+        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Write);
     }
 }

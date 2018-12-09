@@ -37,120 +37,93 @@
 #include <cassert>
 
 ITransport::ITransport()
-   : m_supportsFileDescriptors(false),
-     m_eventDispatcher(0),
-     m_readNotificationEnabled(false),
-     m_writeNotificationEnabled(false)
 {
 }
 
 ITransport::~ITransport()
 {
-    std::vector<ITransportListener *> listenersCopy = m_listeners;
-    for (size_t i = listenersCopy.size() - 1; i + 1 > 0; i--) {
-        removeListener(listenersCopy[i]); // LIFO (stack) order seems safest...
-    }
+    setReadListener(nullptr);
+    setWriteListener(nullptr);
 }
 
-chunk ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *)
+IO::Result ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *)
 {
     return read(buffer, maxSize);
 }
 
-uint32 ITransport::writeWithFileDescriptors(chunk data, const std::vector<int> &)
+IO::Result ITransport::writeWithFileDescriptors(chunk data, const std::vector<int> &)
 {
     return write(data);
 }
 
-void ITransport::addListener(ITransportListener *listener)
+void ITransport::setReadListener(ITransportListener *listener)
 {
-    if (find(m_listeners.begin(), m_listeners.end(), listener) != m_listeners.end()) {
+    if (m_readListener != listener) {
+        if (m_readListener) {
+            m_readListener->m_readTransport = nullptr;
+        }
+        if (listener) {
+            if (listener->m_readTransport) {
+                listener->m_readTransport->setReadListener(nullptr);
+            }
+            assert(!listener->m_readTransport);
+            listener->m_readTransport = this;
+        }
+        m_readListener = listener;
+    }
+    updateTransportIoInterest();
+}
+
+void ITransport::setWriteListener(ITransportListener *listener)
+{
+    if (m_writeListener != listener) {
+        if (m_writeListener) {
+            m_writeListener->m_writeTransport = nullptr;
+        }
+        if (listener) {
+            if (listener->m_writeTransport) {
+                listener->m_writeTransport->setWriteListener(nullptr);
+            }
+            assert(!listener->m_writeTransport);
+            listener->m_writeTransport = this;
+        }
+        m_writeListener = listener;
+    }
+    updateTransportIoInterest();
+}
+
+void ITransport::updateTransportIoInterest()
+{
+    setIoInterest((m_readListener ? uint32(IO::RW::Read) : 0) |
+                  (m_writeListener ? uint32(IO::RW::Write) : 0));
+}
+
+void ITransport::close()
+{
+    if (!isOpen()) {
         return;
     }
-    m_listeners.push_back(listener);
-    listener->m_transport = this;
-    if (m_eventDispatcher) {
-        updateReadWriteInterest();
+    if (ioEventSource()) {
+        ioEventSource()->removeIoListener(this);
     }
+    platformClose();
 }
 
-void ITransport::removeListener(ITransportListener *listener)
+IO::Status ITransport::handleIoReady(IO::RW rw)
 {
-    std::vector<ITransportListener *>::iterator it = find(m_listeners.begin(), m_listeners.end(), listener);
-    if (it == m_listeners.end()) {
-        return;
+    IO::Status ret = IO::Status::OK;
+    assert(uint32(rw) & ioInterest()); // only get notified about events we requested
+    if (rw == IO::RW::Read && m_readListener) {
+        ret = m_readListener->handleTransportCanRead();
+    } else if (rw == IO::RW::Write && m_writeListener) {
+        ret = m_writeListener->handleTransportCanWrite();
+    } else {
+        assert(false);
     }
-    m_listeners.erase(it);
-    listener->m_transport = nullptr;
-    if (m_eventDispatcher) {
-        updateReadWriteInterest();
+    if (ret != IO::Status::OK) {
+        // TODO call some common close, cleanup & report error method
     }
-}
-
-void ITransport::updateReadWriteInterest()
-{
-    bool readInterest = false;
-    bool writeInterest = false;
-    for (ITransportListener *listener : m_listeners) {
-        if (listener->readNotificationEnabled()) {
-            readInterest = true;
-        }
-        if (listener->writeNotificationEnabled()) {
-            writeInterest = true;
-        }
-    }
-    if (readInterest != m_readNotificationEnabled || writeInterest != m_writeNotificationEnabled) {
-        m_readNotificationEnabled = readInterest;
-        m_writeNotificationEnabled = writeInterest;
-        if (m_eventDispatcher) {
-            EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-            ep->setReadWriteInterest(this, m_readNotificationEnabled, m_writeNotificationEnabled);
-        }
-    }
-}
-
-void ITransport::setEventDispatcher(EventDispatcher *ed)
-{
-    if (m_eventDispatcher == ed) {
-        return;
-    }
-    if (m_eventDispatcher) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->removeIoEventListener(this);
-    }
-    m_eventDispatcher = ed;
-    if (m_eventDispatcher) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-        ep->addIoEventListener(this);
-        m_readNotificationEnabled = false;
-        m_writeNotificationEnabled = false;
-        updateReadWriteInterest();
-    }
-}
-
-EventDispatcher *ITransport::eventDispatcher() const
-{
-    return m_eventDispatcher;
-}
-
-void ITransport::handleCanRead()
-{
-    for (ITransportListener *listener : m_listeners) {
-        if (listener->readNotificationEnabled()) {
-            listener->handleTransportCanRead();
-            break;
-        }
-    }
-}
-
-void ITransport::handleCanWrite()
-{
-    for (ITransportListener *listener : m_listeners) {
-        if (listener->writeNotificationEnabled()) {
-            listener->handleTransportCanWrite();
-            break;
-        }
-    }
+    return ret;
 }
 
 //static

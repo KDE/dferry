@@ -71,11 +71,11 @@ EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    // Make a copy because setEventDispatcher() eventually mutates the container (removes the entry)
+    // Make a copy because removeIoListener() eventually mutates the container (removes the entry)
     {
-        std::unordered_map<FileDescriptor, IioEventListener*> ioListeners = m_ioListeners;
-        for (const std::pair<FileDescriptor, IioEventListener*> &fdListener : ioListeners) {
-            fdListener.second->setEventDispatcher(nullptr);
+        const std::unordered_map<FileDescriptor, IIoEventListener*> ioListeners = m_ioListeners;
+        for (const std::pair<FileDescriptor, IIoEventListener*> &fdListener : ioListeners) {
+            removeIoListener(fdListener.second);
         }
     }
 
@@ -128,57 +128,37 @@ void EventDispatcherPrivate::wakeForEvents()
     m_poller->interrupt(IEventPoller::ProcessAuxEvents);
 }
 
-bool EventDispatcherPrivate::addIoEventListener(IioEventListener *iol)
+void EventDispatcherPrivate::addIoListenerInternal(IIoEventListener *iol, uint32 ioRw)
 {
-    std::pair<std::unordered_map<FileDescriptor, IioEventListener*>::iterator, bool> insertResult;
+    std::pair<std::unordered_map<FileDescriptor, IIoEventListener*>::iterator, bool> insertResult;
     insertResult = m_ioListeners.insert(std::make_pair(iol->fileDescriptor(), iol));
-    const bool ret = insertResult.second;
-    if (ret) {
-        m_poller->addIoEventListener(iol);
+    if (insertResult.second) {
+        m_poller->addFileDescriptor(iol->fileDescriptor(), ioRw);
     }
-    return ret;
 }
 
-bool EventDispatcherPrivate::removeIoEventListener(IioEventListener *iol)
+void EventDispatcherPrivate::removeIoListenerInternal(IIoEventListener *iol)
 {
-    const bool ret = m_ioListeners.erase(iol->fileDescriptor());
-    if (ret) {
-        m_poller->removeIoEventListener(iol);
+    if (m_ioListeners.erase(iol->fileDescriptor())) {
+        m_poller->removeFileDescriptor(iol->fileDescriptor());
     }
-    return ret;
 }
 
-void EventDispatcherPrivate::setReadWriteInterest(IioEventListener *iol, bool read, bool write)
+void EventDispatcherPrivate::updateIoInterestInternal(IIoEventListener *iol, uint32 ioRw)
 {
-    m_poller->setReadWriteInterest(iol, read, write);
+    m_poller->setReadWriteInterest(iol->fileDescriptor(), ioRw);
 }
 
-void EventDispatcherPrivate::notifyListenerForReading(FileDescriptor fd)
+void EventDispatcherPrivate::notifyListenerForIo(FileDescriptor fd, IO::RW ioRw)
 {
-    std::unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
+    std::unordered_map<FileDescriptor, IIoEventListener *>::iterator it = m_ioListeners.find(fd);
     if (it != m_ioListeners.end()) {
-        it->second->handleCanRead();
-    } else {
-
-#ifdef IEVENTDISPATCHER_DEBUG
-        // while interesting for debugging, this is not an error if a connection was in the epoll
-        // set and disconnected in its handleCanRead() or handleCanWrite() implementation
-        std::cerr << "EventDispatcherPrivate::notifyListenerForReading(): unhandled file descriptor "
-                  <<  fd << ".\n";
-#endif
-    }
-}
-
-void EventDispatcherPrivate::notifyListenerForWriting(FileDescriptor fd)
-{
-    std::unordered_map<FileDescriptor, IioEventListener *>::iterator it = m_ioListeners.find(fd);
-    if (it != m_ioListeners.end()) {
-        it->second->handleCanWrite();
+        it->second->handleIoReady(ioRw);
     } else {
 #ifdef IEVENTDISPATCHER_DEBUG
         // while interesting for debugging, this is not an error if a connection was in the epoll
         // set and disconnected in its handleCanRead() or handleCanWrite() implementation
-        std::cerr << "EventDispatcherPrivate::notifyListenerForWriting(): unhandled file descriptor "
+        std::cerr << "EventDispatcherPrivate::notifyListenerForIo(): unhandled file descriptor "
                   <<  fd << ".\n";
 #endif
     }

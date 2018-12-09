@@ -79,19 +79,23 @@ LocalSocket::~LocalSocket()
     close();
 }
 
-void LocalSocket::close()
+void LocalSocket::platformClose()
 {
-    setEventDispatcher(nullptr);
     if (m_fd >= 0) {
         ::close(m_fd);
+        m_fd = -1;
     }
-    m_fd = -1;
 }
 
-uint32 LocalSocket::write(chunk data)
+IO::Result LocalSocket::write(chunk data)
 {
-    if (m_fd < 0 || data.length == 0) {
-        return 0; // TODO -1?
+    IO::Result ret;
+    if (data.length == 0) {
+        return ret;
+    }
+    if (m_fd < 0) {
+        ret.status = IO::Status::InternalError;
+        return ret;
     }
 
     const uint32 initialLength = data.length;
@@ -107,22 +111,29 @@ uint32 LocalSocket::write(chunk data)
                 break;
             }
             close();
-            return 0;
+            ret.status = IO::Status::RemoteClosed;
+            return ret;
         }
 
         data.ptr += nbytes;
         data.length -= size_t(nbytes);
     }
 
-    return initialLength - data.length;
+    ret.length = initialLength - data.length;
+    return ret;
 }
 
 // TODO: consider using iovec to avoid "copying together" message parts before sending; iovec tricks
 // are probably not going to help for receiving, though.
-uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors)
+IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors)
 {
-    if (m_fd < 0 || data.length == 0) {
-        return 0;
+    IO::Result ret;
+    if (data.length == 0) {
+        return ret;
+    }
+    if (m_fd < 0) {
+        ret.status = IO::Status::InternalError;
+        return ret;
     }
 
     // sendmsg  boilerplate
@@ -144,7 +155,8 @@ uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> 
     if (fileDescriptors.size() > MaxFds) {
         // TODO allow a proper error return
         close();
-        return 0;
+        ret.status = IO::Status::InternalError;
+        return ret;
     }
 
     char cmsgBuf[CMSG_SPACE(MaxFdPayloadSize)];
@@ -182,7 +194,8 @@ uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> 
                 break;
             }
             close();
-            return data.length - iov.iov_len;
+            ret.status = IO::Status::RemoteClosed;
+            break;
         } else if (nbytes > 0) {
             // control message already sent, don't send again
             send_msg.msg_control = nullptr;
@@ -193,7 +206,8 @@ uint32 LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> 
         iov.iov_len -= size_t(nbytes);
     }
 
-    return data.length - iov.iov_len;
+    ret.length = data.length - iov.iov_len;
+    return ret;
 }
 
 uint32 LocalSocket::availableBytesForReading()
@@ -205,30 +219,39 @@ uint32 LocalSocket::availableBytesForReading()
     return available;
 }
 
-chunk LocalSocket::read(byte *buffer, uint32 maxSize)
+IO::Result LocalSocket::read(byte *buffer, uint32 maxSize)
 {
-    chunk ret(buffer, 0);
+    IO::Result ret;
+    if (maxSize == 0) {
+        return ret;
+    }
+    if (m_fd < 0) {
+        ret.status = IO::Status::InternalError;
+        return ret;
+    }
 
     while (ret.length < maxSize) {
-        ssize_t nbytes = recv(m_fd, ret.ptr + ret.length, maxSize - ret.length, MSG_DONTWAIT);
+        ssize_t nbytes = recv(m_fd, buffer + ret.length, maxSize - ret.length, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
             }
             // If we were notified for reading directly by the event dispatcher, we must be able to read at
             // least one byte before getting AGAIN aka EWOULDBLOCK - *however* the event loop might notify
-            // something that is very eager to read everything (like Message::notifyRead()...) by reading
-            // multiple times and in that case, we may be called in an attempt to read more when there is
-            // currently no more data.
+            // something that tries to read everything (like Message::notifyRead()...) by calling read()
+            // in a loop, and in that case, we may be called in an attempt to read more when there is
+            // currently no more data, and it's not an error.
             // Just return zero bytes and no error in that case.
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
-            return ret;
+            ret.status = IO::Status::RemoteClosed;
+            break;
         } else if (nbytes == 0) {
             // orderly shutdown
             close();
+            ret.status = IO::Status::RemoteClosed;
             return ret;
         }
         ret.length += size_t(nbytes);
@@ -237,10 +260,15 @@ chunk LocalSocket::read(byte *buffer, uint32 maxSize)
     return ret;
 }
 
-chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors)
+IO::Result LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize,
+                                                std::vector<int> *fileDescriptors)
 {
-    chunk ret;
+    IO::Result ret;
     if (maxSize == 0) {
+        return ret;
+    }
+    if (m_fd < 0) {
+        ret.status = IO::Status::InternalError;
         return ret;
     }
 
@@ -264,9 +292,7 @@ chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::ve
 
     // end boilerplate
 
-    ret.ptr = buffer;
-    ret.length = 0;
-    iov.iov_base = ret.ptr;
+    iov.iov_base = buffer;
     iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
         ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
@@ -274,21 +300,18 @@ chunk LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::ve
             if (errno == EINTR) {
                 continue;
             }
-            // If we were notified for reading directly by the event dispatcher, we must be able to read at
-            // least one byte before getting AGAIN aka EWOULDBLOCK - *however* the event loop might notify
-            // something that is very eager to read everything (like Message::notifyRead()...) by reading
-            // multiple times and in that case, we may be called in an attempt to read more when there is
-            // currently no more data.
-            // Just return zero bytes and no error in that case.
+            // see comment in read()
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
-            return ret;
+            ret.status = IO::Status::RemoteClosed;
+            break;
         }  else if (nbytes == 0) {
             // orderly shutdown
             close();
-            return ret;
+            ret.status = IO::Status::RemoteClosed;
+            break;
         } else {
             // read any file descriptors passed via control messages
 
@@ -322,14 +345,4 @@ bool LocalSocket::isOpen()
 int LocalSocket::fileDescriptor() const
 {
     return m_fd;
-}
-
-void LocalSocket::handleCanRead()
-{
-    if (availableBytesForReading()) {
-        ITransport::handleCanRead();
-    } else {
-        // This should really only happen in error cases! ### TODO test?
-        close();
-    }
 }

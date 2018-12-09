@@ -25,29 +25,58 @@
 
 #include "connectaddress.h"
 #include "connection.h"
+#include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
+#include "iioeventforwarder.h"
 #include "inewconnectionlistener.h"
 #include "iserver.h"
 #include "itransport.h"
 
 #include <cassert>
 
-#include <iostream>
-
-class ServerPrivate : public ICompletionListener
+class ServerPrivate : public IIoEventForwarder, public ICompletionListener
 {
 public:
+    ServerPrivate(EventDispatcher *dispatcher);
+
+    // IIOEventInterposer
+    IO::Status handleIoReady(IO::RW rw) override;
+
+    // ICompletionListener
     void handleCompletion(void *transportServer) override;
 
     ConnectAddress listenAddress;
     ConnectAddress concreteAddress;
+    EventDispatcher *eventDispatcher;
     Server *server;
     INewConnectionListener *newConnectionListener;
     IServer *transportServer;
 };
 
+ServerPrivate::ServerPrivate(EventDispatcher *dispatcher)
+   : IIoEventForwarder(EventDispatcherPrivate::get(dispatcher)),
+     eventDispatcher(dispatcher)
+{
+}
+
+IO::Status ServerPrivate::handleIoReady(IO::RW rw)
+{
+    const IO::Status ret = transportServer->handleIoReady(rw);
+    // TODO error handling
+    return ret;
+}
+
+void ServerPrivate::handleCompletion(void *task)
+{
+    assert(task == transportServer);
+    (void) task;
+    if (newConnectionListener) {
+        newConnectionListener->handleNewConnection(server);
+    }
+}
+
 Server::Server(EventDispatcher *dispatcher, const ConnectAddress &listenAddress)
-   : d(new ServerPrivate)
+   : d(new ServerPrivate(dispatcher))
 {
 #if 0
     if (ca.bus() == ConnectAddress::Bus::None || ca.socketType() == ConnectAddress::AddressType::None ||
@@ -62,7 +91,7 @@ Server::Server(EventDispatcher *dispatcher, const ConnectAddress &listenAddress)
     d->newConnectionListener = nullptr;
     d->transportServer = IServer::create(listenAddress, &d->concreteAddress);
     if (d->transportServer) {
-        d->transportServer->setEventDispatcher(dispatcher);
+        d->addIoListener(d->transportServer);
         d->transportServer->setNewConnectionListener(d);
     }
 }
@@ -95,8 +124,8 @@ Connection *Server::takeNextClient()
     if (!newTransport) {
         return nullptr;
     }
-    newTransport->setEventDispatcher(d->transportServer->eventDispatcher());
-    return new Connection(newTransport, d->concreteAddress);
+
+    return new Connection(newTransport, d->eventDispatcher, d->concreteAddress);
 }
 
 bool Server::isListening() const
@@ -112,13 +141,4 @@ ConnectAddress Server::listenAddress() const
 ConnectAddress Server::concreteAddress() const
 {
     return d->concreteAddress;
-}
-
-void ServerPrivate::handleCompletion(void *task)
-{
-    assert(task == transportServer);
-    (void) task;
-    if (newConnectionListener) {
-        newConnectionListener->handleNewConnection(server);
-    }
 }

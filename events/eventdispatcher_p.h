@@ -26,6 +26,7 @@
 
 #include "eventdispatcher.h"
 
+#include "iioeventsource.h"
 #include "message.h"
 #include "platform.h"
 #include "spinlock.h"
@@ -37,7 +38,7 @@
 #include <vector>
 
 struct Event;
-class IioEventListener;
+class IIoEventListener;
 class IEventPoller;
 class Message;
 class PendingReplyPrivate;
@@ -46,7 +47,7 @@ class ConnectionPrivate;
 
 // note that the main purpose of EventDispatcher so far is dispatching I/O events; dispatching Event
 // instances is secondary
-class EventDispatcherPrivate
+class EventDispatcherPrivate : public IIoEventSource
 {
 public:
     static EventDispatcherPrivate *get(EventDispatcher *ed) { return ed->d; }
@@ -57,15 +58,20 @@ public:
     uint nextTimerSerial();
     void triggerDueTimers();
 
-    // for IioEventListener
-    friend class IioEventListener;
-    bool addIoEventListener(IioEventListener *iol);
-    bool removeIoEventListener(IioEventListener *iol);
-    void setReadWriteInterest(IioEventListener *iol, bool read, bool write);
+protected:
+    // IIoEventSource
+    void addIoListenerInternal(IIoEventListener *iol, uint32 ioRw) override;
+    void removeIoListenerInternal(IIoEventListener *iol) override;
+    void updateIoInterestInternal(IIoEventListener *iol, uint32 ioRw) override;
+
+public:
+
+    bool addIoEventListener(IIoEventListener *iol);
+    bool removeIoEventListener(IIoEventListener *iol);
+    void setReadWriteInterest(IIoEventListener *iol, bool read, bool write);
     // for IEventPoller
     friend class IEventPoller;
-    void notifyListenerForReading(FileDescriptor fd);
-    void notifyListenerForWriting(FileDescriptor fd);
+    void notifyListenerForIo(FileDescriptor fd, IO::RW ioRw);
     // for Timer
     friend class Timer;
     void addTimer(Timer *timer);
@@ -81,7 +87,7 @@ public:
 
     IEventPoller *m_poller = nullptr;
     ForeignEventLoopIntegrator *m_integrator = nullptr;
-    std::unordered_map<FileDescriptor, IioEventListener*> m_ioListeners;
+    std::unordered_map<FileDescriptor, IIoEventListener*> m_ioListeners;
 
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set
     uint m_lastTimerSerial = s_maxTimerSerial;

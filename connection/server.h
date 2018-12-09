@@ -42,7 +42,7 @@ public:
     Connection *takeNextClient();
 
     bool isListening() const;
-    // The listenAddress passed in
+    // The listenAddress passed in - it may be incomplete / a wildcard and as such not a concrete address
     ConnectAddress listenAddress() const;
     // The address clients can connect to, which may be (usually is...) different from serverAddress
     ConnectAddress concreteAddress() const;

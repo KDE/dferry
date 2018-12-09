@@ -29,6 +29,7 @@
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
+#include "iioeventforwarder.h"
 #include "spinlock.h"
 
 #include <deque>
@@ -73,18 +74,36 @@ class ClientConnectedHandler;
     has been destroyed, communication will fail gracefully and there will be no crash or undefined
     behavior. Any pending replies that cannot finish successfully anymore will finish with an
     LocalDisconnect error.
- */
+*/
 
-class ConnectionPrivate : public ICompletionListener
+class ConnectionStateChanger;
+
+// This class sits between EventDispatcher and ITransport for I/O event forwarding purposes,
+// which is why it is both a listener (for EventDispatcher) and a source (mainly for ITransport)
+class ConnectionPrivate : public IIoEventForwarder, public ICompletionListener
 {
 public:
+    enum State {
+        Unconnected = 0,
+        ServerWaitingForClient,
+        Authenticating,
+        AwaitingUniqueName,
+        Connected
+    };
+
     static ConnectionPrivate *get(Connection *c) { return c->d; }
 
     ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher);
-    void close();
+    void close(Error withError);
+
+    // from IIOEventInterposer
+    IO::Status handleIoReady(IO::RW rw) override;
 
     void startAuthentication();
     void handleHelloReply();
+    // invokes m_connectionStateListener, if any
+    void notifyStateChange(Connection::State oldUserState, Connection::State newUserState);
+
     void handleClientConnected();
 
     uint32 takeNextSerial();
@@ -97,25 +116,20 @@ public:
     void receiveNextMessage();
 
     void unregisterPendingReply(PendingReplyPrivate *p);
-    void cancelAllPendingReplies();
+    void cancelAllPendingReplies(Error withError);
     void discardPendingRepliesForSecondaryThread(ConnectionPrivate *t);
 
     // For cross-thread communication between thread Connections. We could have a more complete event
     // system, but there is currently no need, so keep it simple and limited.
     void processEvent(Event *evt); // called from thread-local EventDispatcher
 
-    enum {
-        Unconnected,
-        ServerWaitingForClient,
-        Authenticating,
-        AwaitingUniqueName,
-        Connected
-    } m_state = Unconnected;
+    State m_state = Unconnected;
 
     Connection *m_connection = nullptr;
     IMessageReceiver *m_client = nullptr;
-    Message *m_receivingMessage = nullptr;
+    IConnectionStateListener *m_connectionStateListener = nullptr;
 
+    Message *m_receivingMessage = nullptr;
     std::deque<Message> m_sendQueue; // waiting to be sent
 
     // only one of them can be non-null. exception: in the main thread, m_mainThreadConnection
@@ -160,6 +174,34 @@ public:
 
     ConnectionPrivate *m_mainThreadConnection = nullptr;
     CommutexPeer m_mainThreadLink;
+};
+
+// This class helps with notifying a Connection's StateChanegListener when connection state changes.
+// Its benefits are:
+// - Tracks state changes in a few easily verified pieces of code
+// - Prevents crashes from the  following scenario: IConnectionStateListener is notified about a change. As a
+//   reaction, it may delete the Connection. The listener returns and control passes back into Connection
+//   code. Connection code touches some of its (or rather, ConnectionPrivate's) data, which has been deleted
+//   at that point. Undefined behavior ensues.
+//   With the help of this class, the IConnectionStateListener is always called just before exit, so that no
+//   member data can be touched afterwards. (This pattern is a good idea for almost any kind of callback.)
+class ConnectionStateChanger
+{
+public:
+    ConnectionStateChanger(ConnectionPrivate *cp);
+    ConnectionStateChanger(ConnectionPrivate *cp, ConnectionPrivate::State newState);
+
+    ConnectionStateChanger(const ConnectionStateChanger &) = delete;
+    ConnectionStateChanger &operator=(const ConnectionStateChanger &) = delete;
+
+    ~ConnectionStateChanger();
+
+    void setNewState(ConnectionPrivate::State newState);
+    void disable();
+
+private:
+    ConnectionPrivate *m_connPrivate;
+    int32 m_oldState = -1; // either -1 or a valid ConnectionPrivate::State
 };
 
 #endif // CONNECTION_P_H

@@ -46,8 +46,7 @@ AuthClient::AuthClient(ITransport *transport)
    : m_state(InitialState),
      m_completionListener(nullptr)
 {
-    transport->addListener(this);
-    setReadNotificationEnabled(true);
+    transport->setReadListener(this);
     byte nullBuf[1] = { 0 };
     transport->write(chunk(nullBuf, 1));
 
@@ -88,18 +87,20 @@ void AuthClient::setCompletionListener(ICompletionListener *listener)
     m_completionListener = listener;
 }
 
-void AuthClient::handleTransportCanRead()
+IO::Status AuthClient::handleTransportCanRead()
 {
     const bool wasFinished = isFinished();
     while (!isFinished() && readLine()) {
         advanceState();
     }
-    if (!transport()->isOpen()) {
+    if (!readTransport()->isOpen()) {
         m_state = AuthenticationFailedState;
+        return IO::Status::RemoteClosed;
     }
     if (isFinished() && !wasFinished && m_completionListener) {
         m_completionListener->handleCompletion(this);
     }
+    return IO::Status::OK;
 }
 
 bool AuthClient::readLine()
@@ -108,11 +109,13 @@ bool AuthClient::readLine()
     if (isEndOfLine()) {
         m_line.clear(); // start a new line
     }
-    while (transport()->availableBytesForReading()) {
+    while (readTransport()->availableBytesForReading()) {
         byte readBuf[1];
-        chunk in = transport()->read(readBuf, 1);
-        assert(in.length == 1);
-        m_line += char(in.ptr[0]);
+        const IO::Result iores = readTransport()->read(readBuf, 1);
+        if (iores.length != 1 || iores.status != IO::Status::OK) {
+            return false;
+        }
+        m_line += char(readBuf[0]);
 
         if (isEndOfLine()) {
             return true;
@@ -129,6 +132,11 @@ bool AuthClient::isEndOfLine() const
 
 void AuthClient::advanceState()
 {
+    // Note: since the connection is new and send buffers are typically several megabytes, there is basically
+    // no chance that writing will block or write only partial data. Therefore we simplify things by doing
+    // write synchronously, which means that we don't need to register as write readiness listener.
+    // Therefore, writeTransport() is nullptr, so we have to do the unintuitive readTransport()->write().
+
     // TODO authentication ping-pong done *properly* (grammar / some simple state machine),
     //      but hey, this works for now!
     // some findings:
@@ -139,18 +147,18 @@ void AuthClient::advanceState()
         // TODO check the OK
 #ifdef __unix__
         cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
-        transport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
+        readTransport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
         m_state = ExpectUnixFdResponseState;
         break; }
     case ExpectUnixFdResponseState: {
 #endif
         // TODO check the response
         cstring beginLine("BEGIN\r\n");
-        transport()->write(chunk(beginLine.ptr, beginLine.length));
+        readTransport()->write(chunk(beginLine.ptr, beginLine.length));
         m_state = AuthenticatedState;
         break; }
     default:
         m_state = AuthenticationFailedState;
-        transport()->close();
+        readTransport()->close();
     }
 }

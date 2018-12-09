@@ -51,9 +51,9 @@ public:
     void interrupt(IEventPoller::InterruptAction) override;
 
     // reimplemented from IEventPoller
-    void addIoEventListener(IioEventListener *iol) override;
-    void removeIoEventListener(IioEventListener *iol) override;
-    void setReadWriteInterest(IioEventListener *iol, bool read, bool write) override;
+    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
+    void removeFileDescriptor(FileDescriptor fd) override;
+    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
 
 private:
     void notifyRead(int fd);
@@ -66,12 +66,7 @@ private:
     FileDescriptor m_interruptSocket;
     IEventPoller::InterruptAction m_interruptAction;
 
-    struct RwEnabled {
-        bool readEnabled : 1;
-        bool writeEnabled : 1;
-    };
-
-    std::unordered_map<FileDescriptor, RwEnabled> m_fds;
+    std::unordered_map<FileDescriptor, uint32 /*ioRw*/> m_fds;
 
     fd_set m_readSet;
     fd_set m_writeSet;

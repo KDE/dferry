@@ -47,6 +47,7 @@ set(DFER_SOURCES
     connection/authclient.cpp
     connection/connectaddress.cpp
     connection/connection.cpp
+    connection/iconnectionstatelistener.cpp
     connection/imessagereceiver.cpp
     connection/inewconnectionlistener.cpp
     connection/pendingreply.cpp
@@ -55,7 +56,9 @@ set(DFER_SOURCES
     events/eventdispatcher.cpp
     events/foreigneventloopintegrator.cpp
     events/ieventpoller.cpp
+    events/iioeventforwarder.cpp
     events/iioeventlistener.cpp
+    events/iioeventsource.cpp
     events/platformtime.cpp
     events/timer.cpp
     serialization/arguments.cpp
@@ -80,6 +83,7 @@ endif()
 set(DFER_PUBLIC_HEADERS
     connection/connectaddress.h
     connection/connection.h
+    connection/iconnectionstatelistener.h
     connection/imessagereceiver.h
     connection/inewconnectionlistener.h
     connection/pendingreply.h
@@ -101,7 +105,9 @@ set(DFER_PRIVATE_HEADERS
     connection/authclient.h
     events/event.h
     events/ieventpoller.h
+    events/iioeventforwarder.h
     events/iioeventlistener.h
+    events/iioeventsource.h
     events/platformtime.h
     serialization/basictypeio.h
     transport/ipserver.h

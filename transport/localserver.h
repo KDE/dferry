@@ -38,12 +38,11 @@ public:
 
     bool isListening() const override;
 
-    void close() override;
+    void platformClose() override;
 
     FileDescriptor fileDescriptor() const override;
 
-    void handleCanRead() override;
-    void handleCanWrite() override;
+    IO::Status handleIoReady(IO::RW rw) override;
 
 private:
     int m_listenFd;

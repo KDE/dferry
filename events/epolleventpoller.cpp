@@ -69,9 +69,11 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
 
     for (int i = 0; i < nresults; i++) {
         struct epoll_event *evt = results + i;
-        if (evt->events & EPOLLIN) {
+        // Check the same notification conditions as select: a client can call read() or write() without
+        // blocking if the socket was closed in some way.
+        if (evt->events & (EPOLLIN | EPOLLERR | EPOLLHUP)) {
             if (evt->data.fd != m_interruptPipe[0]) {
-                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForReading(evt->data.fd);
+                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Read);
             } else {
                 // interrupt; read bytes from pipe to clear buffers and get the interrupt type
                 ret = IEventPoller::ProcessAuxEvents;
@@ -88,8 +90,8 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
                 }
             }
         }
-        if (evt->events & EPOLLOUT) {
-            EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForWriting(evt->data.fd);
+        if (evt->events & (EPOLLOUT | EPOLLERR | EPOLLHUP)) {
+            EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Write);
         }
     }
     return ret;
@@ -104,32 +106,36 @@ void EpollEventPoller::interrupt(IEventPoller::InterruptAction action)
     write(m_interruptPipe[1], &buf, 1);
 }
 
-void EpollEventPoller::addIoEventListener(IioEventListener *iol)
+static uint32_t epeventsFromIoRw(uint32 ioRw)
 {
-    struct epoll_event epevt;
-    epevt.events = 0;
-    epevt.data.u64 = 0; // clear high bits in the union
-    epevt.data.fd = iol->fileDescriptor();
-    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, iol->fileDescriptor(), &epevt);
+    return ((ioRw & uint32(IO::RW::Read)) ? uint32(EPOLLIN) : 0) |
+           ((ioRw & uint32(IO::RW::Write)) ? uint32(EPOLLOUT) : 0);
 }
 
-void EpollEventPoller::removeIoEventListener(IioEventListener *iol)
+void EpollEventPoller::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
 {
-    const int fd = iol->fileDescriptor();
+    struct epoll_event epevt;
+    epevt.events = epeventsFromIoRw(ioRw);
+    epevt.data.u64 = 0; // clear high bits in the union
+    epevt.data.fd = fd;
+    epoll_ctl(m_epollFd, EPOLL_CTL_ADD, fd, &epevt);
+}
+
+void EpollEventPoller::removeFileDescriptor(FileDescriptor fd)
+{
     // Connection should call us *before* resetting its fd on failure
     assert(fd >= 0);
     struct epoll_event epevt; // required in Linux < 2.6.9 even though it's ignored
     epoll_ctl(m_epollFd, EPOLL_CTL_DEL, fd, &epevt);
 }
 
-void EpollEventPoller::setReadWriteInterest(IioEventListener *iol, bool readEnabled, bool writeEnabled)
+void EpollEventPoller::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
 {
-    FileDescriptor fd = iol->fileDescriptor();
     if (!fd) {
         return;
     }
     struct epoll_event epevt;
-    epevt.events = (readEnabled ? uint32(EPOLLIN) : 0) | (writeEnabled ? uint32(EPOLLOUT) : 0);
+    epevt.events = epeventsFromIoRw(ioRw);
     epevt.data.u64 = 0; // clear high bits in the union
     epevt.data.fd = fd;
     epoll_ctl(m_epollFd, EPOLL_CTL_MOD, fd, &epevt);

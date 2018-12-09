@@ -39,15 +39,15 @@ public:
     ~LocalSocket() override;
 
     // virtuals from ITransport
-    uint32 write(chunk data) override;
-    uint32 writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors) override;
+    IO::Result write(chunk data) override;
+    IO::Result writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors) override;
     uint32 availableBytesForReading() override;
-    chunk read(byte *buffer, uint32 maxSize) override;
-    chunk readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
-    void close() override;
+    IO::Result read(byte *buffer, uint32 maxSize) override;
+    IO::Result readWithFileDescriptors(byte *buffer, uint32 maxSize,
+                                       std::vector<int> *fileDescriptors) override;
+    void platformClose() override;
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
-    void handleCanRead() override;
     // end ITransport
 
     LocalSocket() = delete;

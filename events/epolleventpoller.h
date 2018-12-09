@@ -37,9 +37,9 @@ public:
     void interrupt(IEventPoller::InterruptAction) override;
 
     // reimplemented from IEventPoller
-    void addIoEventListener(IioEventListener *iol) override;
-    void removeIoEventListener(IioEventListener *iol) override;
-    void setReadWriteInterest(IioEventListener *iol, bool read, bool write) override;
+    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
+    void removeFileDescriptor(FileDescriptor fd) override;
+    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
 
 private:
     void notifyRead(int fd);

@@ -27,6 +27,7 @@
 #include "eventdispatcher.h"
 
 #include "platform.h"
+#include "types.h"
 
 class IioEventListener;
 
@@ -48,9 +49,9 @@ public:
     // interrupt the waiting for events (from another thread)
     virtual void interrupt(InterruptAction action) = 0;
 
-    virtual void addIoEventListener(IioEventListener *iol) = 0;
-    virtual void removeIoEventListener(IioEventListener *iol) = 0;
-    virtual void setReadWriteInterest(IioEventListener *iol, bool read, bool write) = 0;
+    virtual void addFileDescriptor(FileDescriptor fd, uint32 ioRw) = 0;
+    virtual void removeFileDescriptor(FileDescriptor fd) = 0;
+    virtual void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) = 0;
 
 protected:
     EventDispatcher *m_dispatcher;

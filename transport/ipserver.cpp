@@ -83,13 +83,16 @@ IpServer::~IpServer()
     close();
 }
 
-void IpServer::handleCanRead()
+IO::Status IpServer::handleIoReady(IO::RW rw)
 {
-    setEventDispatcher(nullptr);
+    if (rw != IO::RW::Read) {
+        assert(false);
+        return IO::Status::InternalError;
+    }
     FileDescriptor connFd = accept(m_listenFd, nullptr, nullptr);
     if (!isValidFileDescriptor(connFd)) {
         std::cerr << "\nIpServer::notifyRead(): accept() failed.\n\n";
-        return;
+        return IO::Status::RemoteClosed;
     }
 #ifdef __unix__
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
@@ -98,12 +101,7 @@ void IpServer::handleCanRead()
     if (m_newConnectionListener) {
         m_newConnectionListener->handleCompletion(this);
     }
-}
-
-void IpServer::handleCanWrite()
-{
-    // We never registered this to be called, so...
-    assert(false);
+    return IO::Status::OK;
 }
 
 bool IpServer::isListening() const
@@ -111,7 +109,7 @@ bool IpServer::isListening() const
     return isValidFileDescriptor(m_listenFd);
 }
 
-void IpServer::close()
+void IpServer::platformClose()
 {
     if (isValidFileDescriptor(m_listenFd)) {
 #ifdef _WIN32

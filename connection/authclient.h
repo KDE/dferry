@@ -26,6 +26,8 @@
 
 #include "itransportlistener.h"
 
+#include "iovaluetypes.h"
+
 #include <string>
 
 // TODO we are currently handling all authentication from here; later this class should only
@@ -39,8 +41,8 @@ class AuthClient : public ITransportListener
 public:
     explicit AuthClient(ITransport *transport);
 
-    // reimplemented from ITransportClient
-    void handleTransportCanRead() override;
+    // reimplemented from ITransportListener
+    IO::Status handleTransportCanRead() override;
 
     bool isFinished() const;
     bool isAuthenticated() const;

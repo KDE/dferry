@@ -25,59 +25,40 @@
 
 #include "itransport.h"
 
+#include <cassert>
 
 ITransportListener::ITransportListener()
-   : m_readNotificationEnabled(false),
-     m_writeNotificationEnabled(false),
-     m_transport(0)
 {
 }
 
 ITransportListener::~ITransportListener()
 {
-    if (m_transport) {
-        m_transport->removeListener(this);
+    if (m_readTransport) {
+        m_readTransport->setReadListener(nullptr);
     }
-    m_transport = 0;
-}
-
-void ITransportListener::setReadNotificationEnabled(bool enable)
-{
-    if (enable == m_readNotificationEnabled) {
-        return;
+    assert(!m_readTransport);
+    if (m_writeTransport) {
+        m_writeTransport->setWriteListener(nullptr);
     }
-    m_readNotificationEnabled = enable;
-    m_transport->updateReadWriteInterest();
+    assert(!m_writeTransport);
 }
 
-bool ITransportListener::readNotificationEnabled() const
+ITransport *ITransportListener::readTransport() const
 {
-    return m_readNotificationEnabled;
+    return m_readTransport;
 }
 
-void ITransportListener::setWriteNotificationEnabled(bool enable)
+ITransport *ITransportListener::writeTransport() const
 {
-    if (enable == m_writeNotificationEnabled) {
-        return;
-    }
-    m_writeNotificationEnabled = enable;
-    m_transport->updateReadWriteInterest();
+    return m_writeTransport;
 }
 
-bool ITransportListener::writeNotificationEnabled() const
+IO::Status ITransportListener::handleTransportCanRead()
 {
-    return m_writeNotificationEnabled;
+    return IO::Status::OK;
 }
 
-void ITransportListener::handleTransportCanRead()
+IO::Status ITransportListener::handleTransportCanWrite()
 {
-}
-
-void ITransportListener::handleTransportCanWrite()
-{
-}
-
-ITransport *ITransportListener::transport() const
-{
-    return m_transport;
+    return IO::Status::OK;
 }

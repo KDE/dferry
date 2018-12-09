@@ -29,6 +29,7 @@
 #include "event.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
+#include "iconnectionstatelistener.h"
 #include "imessagereceiver.h"
 #include "iserver.h"
 #include "localsocket.h"
@@ -40,7 +41,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 
 class HelloReceiver : public IMessageReceiver
 {
@@ -73,10 +73,88 @@ public:
     ConnectionPrivate *m_parent;
 };
 
+static Connection::State userState(ConnectionPrivate::State ps)
+{
+    switch (ps) {
+    case ConnectionPrivate::Unconnected:
+        return Connection::Unconnected;
+    case ConnectionPrivate::ServerWaitingForClient:
+    case ConnectionPrivate::Authenticating:
+    case ConnectionPrivate::AwaitingUniqueName:
+        return Connection::Connecting;
+    case ConnectionPrivate::Connected:
+        return Connection::Connected;
+    }
+    assert(false);
+    return Connection::Unconnected;
+}
+
+ConnectionStateChanger::ConnectionStateChanger(ConnectionPrivate *cp)
+   : m_connPrivate(cp)
+{
+}
+
+ConnectionStateChanger::ConnectionStateChanger(ConnectionPrivate *cp, ConnectionPrivate::State newState)
+   : m_connPrivate(cp),
+     m_oldState(cp->m_state)
+{
+    cp->m_state = newState;
+}
+
+ConnectionStateChanger::~ConnectionStateChanger()
+{
+    if (m_oldState < 0) {
+        return;
+    }
+    const Connection::State oldUserState = userState(static_cast<ConnectionPrivate::State>(m_oldState));
+    const Connection::State newUserState = userState(m_connPrivate->m_state);
+    if (oldUserState != newUserState) {
+        m_connPrivate->notifyStateChange(oldUserState, newUserState);
+    }
+}
+
+void ConnectionStateChanger::setNewState(ConnectionPrivate::State newState)
+{
+    // Ensure that, in the destructor, the new state is always compared to the original old state
+    if (m_oldState < 0) {
+        m_oldState = m_connPrivate->m_state;
+    }
+    m_connPrivate->m_state = newState;
+}
+
+void ConnectionStateChanger::disable()
+{
+    m_oldState = -1;
+}
+
 ConnectionPrivate::ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher)
-   : m_connection(connection),
+   : IIoEventForwarder(EventDispatcherPrivate::get(dispatcher)),
+     m_connection(connection),
      m_eventDispatcher(dispatcher)
 {
+}
+
+IO::Status ConnectionPrivate::handleIoReady(IO::RW rw)
+{
+    IO::Status status;
+    IIoEventListener *const downstream = downstreamListener();
+    if (m_state == ServerWaitingForClient) {
+        assert(downstream == m_clientConnectedHandler->m_server);
+    } else {
+        assert(downstream == m_transport);
+    }
+    if (downstream) {
+        status = downstream->handleIoReady(rw);
+    } else {
+        status = IO::Status::InternalError;
+    }
+
+    ConnectionStateChanger stateChanger(this);
+    if (status != IO::Status::OK) {
+        stateChanger.setNewState(ConnectionPrivate::Unconnected);
+        close(Error::RemoteDisconnect);
+    }
+    return status;
 }
 
 Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
@@ -87,31 +165,33 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
     if (ca.type() == ConnectAddress::Type::None || ca.role() == ConnectAddress::Role::None) {
-        std::cerr << "\nConnection: connection constructor Exit A\n\n";
         return;
     }
+
+    ConnectionStateChanger stateChanger(d);
 
     if (ca.role() == ConnectAddress::Role::PeerServer) {
         // this sets up a server that will be destroyed after accepting exactly one connection
         d->m_clientConnectedHandler = new ClientConnectedHandler;
         ConnectAddress dummyClientAddress;
-        d->m_clientConnectedHandler->m_server = IServer::create(ca, &dummyClientAddress);
-        d->m_clientConnectedHandler->m_server->setEventDispatcher(dispatcher);
-        d->m_clientConnectedHandler->m_server->setNewConnectionListener(d->m_clientConnectedHandler);
+        IServer *const is = IServer::create(ca, &dummyClientAddress);
+        d->addIoListener(is);
+        is->setNewConnectionListener(d->m_clientConnectedHandler);
+        d->m_clientConnectedHandler->m_server = is;
         d->m_clientConnectedHandler->m_parent = d;
 
-        d->m_state = ConnectionPrivate::ServerWaitingForClient;
+        stateChanger.setNewState(ConnectionPrivate::ServerWaitingForClient);
     } else {
         d->m_transport = ITransport::create(ca);
-        d->m_transport->setEventDispatcher(dispatcher);
+        d->addIoListener(d->m_transport);
         if (ca.role() == ConnectAddress::Role::BusClient) {
             d->startAuthentication();
-            d->m_state = ConnectionPrivate::Authenticating;
+            stateChanger.setNewState(ConnectionPrivate::Authenticating);
         } else {
             assert(ca.role() == ConnectAddress::Role::PeerClient);
             // get ready to receive messages right away
             d->receiveNextMessage();
-            d->m_state = ConnectionPrivate::Connected;
+            stateChanger.setNewState(ConnectionPrivate::Connected);
         }
     }
 }
@@ -127,7 +207,6 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
     Commutex *const id = d->m_mainThreadLink.id();
     if (!id) {
         assert(false);
-        std::cerr << "\nConnection: slave constructor Exit A\n\n";
         return; // stay in Unconnected state
     }
 
@@ -149,19 +228,21 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
 }
 
-Connection::Connection(ITransport *transport, const ConnectAddress &address)
-   : d(new ConnectionPrivate(this, transport->eventDispatcher()))
+Connection::Connection(ITransport *transport, EventDispatcher *ed, const ConnectAddress &address)
+   : d(new ConnectionPrivate(this, ed))
 {
     // TODO FULLY validate address, also in the other constructors and in ITransport::create()
     //      and in IServer::create()!
     assert(address.role() == ConnectAddress::Role::PeerServer);
     assert(d->m_eventDispatcher);
     d->m_transport = transport;
+    d->addIoListener(d->m_transport);
     d->m_connectAddress = address;
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
 #if 0
     // TODO make the client authenticate itself, roughly along these lines
+    //      (not yet investigated whether peer auth is out of spec, optional or mandatory)
     // this sets up a server that will be destroyed after accepting exactly one connection
     d->m_clientConnectedHandler = new ClientConnectedHandler;
     d->m_clientConnectedHandler->m_server = IServer::create(ca);
@@ -170,7 +251,7 @@ Connection::Connection(ITransport *transport, const ConnectAddress &address)
     d->m_clientConnectedHandler->m_parent = d;
 #endif
     d->receiveNextMessage();
-    d->m_state = ConnectionPrivate::Connected;
+    ConnectionStateChanger stateChanger(d, ConnectionPrivate::Connected);
 }
 
 Connection::Connection(Connection &&other)
@@ -198,7 +279,7 @@ Connection::~Connection()
     if (!d) {
         return;
     }
-    d->close();
+    d->close(Error::LocalDisconnect);
 
     delete d->m_transport;
     delete d->m_authClient;
@@ -209,12 +290,17 @@ Connection::~Connection()
     d = nullptr;
 }
 
-void Connection::close()
+Connection::State Connection::state() const
 {
-    d->close();
+    return userState(d->m_state);
 }
 
-void ConnectionPrivate::close()
+void Connection::close()
+{
+    d->close(Error::LocalDisconnect);
+}
+
+void ConnectionPrivate::close(Error withError)
 {
     // Can't be main and secondary at the main time - it could be made to work, but what for?
     assert(m_secondaryThreadLinks.empty() || !m_mainThreadConnection);
@@ -238,6 +324,7 @@ void ConnectionPrivate::close()
             if (unlinker.willSucceed()) {
                 if (unlinker.hasLock()) {
                     MainConnectionDisconnectEvent *evt = new MainConnectionDisconnectEvent();
+                    evt->error = withError;
                     EventDispatcherPrivate::get(it->first->m_eventDispatcher)
                         ->queueEvent(std::unique_ptr<Event>(evt));
                 }
@@ -249,9 +336,13 @@ void ConnectionPrivate::close()
         }
     }
 
-    cancelAllPendingReplies();
+    cancelAllPendingReplies(withError);
 
     EventDispatcherPrivate::get(m_eventDispatcher)->m_connectionToNotify = nullptr;
+    if (m_transport) {
+        m_transport->close();
+    }
+    ConnectionStateChanger stateChanger(this, Unconnected);
 }
 
 void ConnectionPrivate::startAuthentication()
@@ -262,10 +353,12 @@ void ConnectionPrivate::startAuthentication()
 
 void ConnectionPrivate::handleHelloReply()
 {
+    ConnectionStateChanger stateChanger(this);
+
     if (!m_helloReceiver->m_helloReply.hasNonErrorReply()) {
         delete m_helloReceiver;
         m_helloReceiver = nullptr;
-        m_state = Unconnected;
+        stateChanger.setNewState(Unconnected);
         // TODO set an error, provide access to it, also set it on messages when trying to send / receive them
         return;
     }
@@ -290,7 +383,14 @@ void ConnectionPrivate::handleHelloReply()
         }
     }
 
-    m_state = Connected;
+    stateChanger.setNewState(Connected);
+}
+
+void ConnectionPrivate::notifyStateChange(Connection::State oldUserState, Connection::State newUserState)
+{
+    if (m_connectionStateListener) {
+        m_connectionStateListener->handleConnectionChanged(m_connection, oldUserState, newUserState);
+    }
 }
 
 void ConnectionPrivate::handleClientConnected()
@@ -300,10 +400,10 @@ void ConnectionPrivate::handleClientConnected()
     m_clientConnectedHandler = nullptr;
 
     assert(m_transport);
-    m_transport->setEventDispatcher(m_eventDispatcher);
+    addIoListener(m_transport);
     receiveNextMessage();
 
-    m_state = Connected;
+    ConnectionStateChanger stateChanger(this, Connected);
 }
 
 void Connection::setDefaultReplyTimeout(int msecs)
@@ -434,6 +534,11 @@ Error Connection::sendNoReply(Message m)
     return Error::NoError;
 }
 
+size_t Connection::sendQueueLength() const
+{
+    return d->m_sendQueue.size();
+}
+
 void Connection::waitForConnectionEstablished()
 {
     if (d->m_state != ConnectionPrivate::Authenticating) {
@@ -486,13 +591,25 @@ void Connection::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
     d->m_client = receiver;
 }
 
+IConnectionStateListener *Connection::connectionStateListener() const
+{
+    return d->m_connectionStateListener;
+}
+
+void Connection::setConnectionStateListener(IConnectionStateListener *listener)
+{
+    d->m_connectionStateListener = listener;
+}
+
 void ConnectionPrivate::handleCompletion(void *task)
 {
+    ConnectionStateChanger stateChanger(this);
+
     switch (m_state) {
     case Authenticating: {
         assert(task == m_authClient);
         if (!m_authClient->isAuthenticated()) {
-            m_state = Unconnected;
+            stateChanger.setNewState(Unconnected);
         }
         delete m_authClient;
         m_authClient = nullptr;
@@ -500,7 +617,7 @@ void ConnectionPrivate::handleCompletion(void *task)
             break;
         }
 
-        m_state = AwaitingUniqueName;
+        stateChanger.setNewState(AwaitingUniqueName);
 
         // Announce our presence to the bus and have it send some introductory information of its own
         Message hello = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello");
@@ -540,7 +657,9 @@ void ConnectionPrivate::handleCompletion(void *task)
 
             receiveNextMessage();
 
-            if (!maybeDispatchToPendingReply(receivedMessage)) {
+            if (receivedMessage->type() == Message::InvalidMessage) {
+                delete receivedMessage;
+            } else if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {
                     m_client->handleSpontaneousMessageReceived(Message(std::move(*receivedMessage)),
                                                                m_connection);
@@ -636,7 +755,7 @@ void ConnectionPrivate::unregisterPendingReply(PendingReplyPrivate *p)
     m_pendingReplies.erase(p->m_serial);
 }
 
-void ConnectionPrivate::cancelAllPendingReplies()
+void ConnectionPrivate::cancelAllPendingReplies(Error withError)
 {
     // No locking because we should have no connections to other threads anymore at this point.
     // No const iteration followed by container clear because that has different semantics - many
@@ -648,7 +767,7 @@ void ConnectionPrivate::cancelAllPendingReplies()
         PendingReplyPrivate *pendingPriv = it->second.asPendingReply();
         it = m_pendingReplies.erase(it);
         if (pendingPriv) { // if from this thread
-            pendingPriv->handleError(Error::LocalDisconnect);
+            pendingPriv->handleError(withError);
         }
     }
 }
@@ -743,12 +862,13 @@ void ConnectionPrivate::processEvent(Event *evt)
         discardPendingRepliesForSecondaryThread(sde->connection);
         break;
     }
-    case Event::MainConnectionDisconnect:
+    case Event::MainConnectionDisconnect: {
         // since the main thread *sent* us the event, it already knows to drop all our PendingReplies
         m_mainThreadConnection = nullptr;
-        cancelAllPendingReplies();
+        MainConnectionDisconnectEvent *mcde = static_cast<MainConnectionDisconnectEvent *>(evt);
+        cancelAllPendingReplies(mcde->error);
         break;
-
+    }
     case Event::UniqueNameReceived:
         // We get this when the unique name became available after we were linked up with the main thread
         m_uniqueName = static_cast<UniqueNameReceivedEvent *>(evt)->uniqueName;

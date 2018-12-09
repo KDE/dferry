@@ -35,7 +35,7 @@ class EventDispatcher;
 class ITransport;
 class ICompletionListener;
 
-class IServer : public IioEventListener
+class IServer : public IIoEventListener
 {
 public:
     IServer(); // TODO event dispatcher as constructor argument?
@@ -46,10 +46,7 @@ public:
     void setNewConnectionListener(ICompletionListener *listener); // notified once on every new connection
 
     ITransport *takeNextClient();
-    virtual void close() = 0;
-
-    void setEventDispatcher(EventDispatcher *ed) override;
-    EventDispatcher *eventDispatcher() const override;
+    void close();
 
     // listenAddress may be a concrete address (in which case *concreteAddress will be set to a copy of it)
     // or it may be a "listen-only address", which is an underspecified or wildcard address. In the latter
@@ -57,14 +54,13 @@ public:
     static IServer *create(const ConnectAddress &listenAddress, ConnectAddress *concreteAddress);
 
 protected:
+    virtual void platformClose() = 0;
+
     friend class EventDispatcher;
     // handleCanRead() and handleCanWrite() from IioEventListener stay pure virtual
 
     std::deque<ITransport *> m_incomingConnections;
     ICompletionListener *m_newConnectionListener;
-
-private:
-    EventDispatcher *m_eventDispatcher;
 };
 
 #endif // ISERVER_H

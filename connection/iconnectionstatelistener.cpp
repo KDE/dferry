@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2018 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,42 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iioeventlistener.h"
+#include "iconnectionstatelistener.h"
 
-#include "iioeventsource.h"
-
-#include <cassert>
-
-IIoEventListener::~IIoEventListener()
+IConnectionStateListener::~IConnectionStateListener()
 {
-    // ### we would like to remove ourself from any IIoEventSource here, but we "are" only
-    //     the base class at this point, so it can't be done here. However, we can check!
-    assert(!m_eventSource);
-#if 0
-    if (m_eventSource) {
-        // can't do this, it calls fileDescriptor() which is a pure virtual at this point
-        m_eventSource->removeIoListener(this);
-    }
-#endif
-}
-
-IIoEventSource *IIoEventListener::ioEventSource() const
-{
-    return m_eventSource;
-}
-
-uint32 IIoEventListener::ioInterest() const
-{
-    return m_ioInterest;
-}
-
-void IIoEventListener::setIoInterest(uint32 ioRw)
-{
-    if (m_ioInterest == ioRw) {
-        return;
-    }
-    m_ioInterest = ioRw;
-    if (m_eventSource) {
-        m_eventSource->updateIoInterest(this);
-    }
 }
