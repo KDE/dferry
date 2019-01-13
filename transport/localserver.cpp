@@ -76,9 +76,22 @@ IO::Status LocalServer::handleIoReady(IO::RW rw)
         assert(false);
         return IO::Status::InternalError;
     }
-    int connFd = accept(m_listenFd, nullptr, nullptr);
-    if (connFd < 0) {
-        return IO::Status::RemoteClosed;
+    if (m_listenFd < 0) {
+        return IO::Status::LocalClosed;
+    }
+    int connFd = -1;
+    while (true) {
+        connFd = accept(m_listenFd, nullptr, nullptr);
+        if (connFd >= 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        // After listen() succeeded, the only possible errors are invalid parameters (we don't do that,
+        // right?), EINTR, out of resource errors (which can be temporary), or aborted connection
+        // attempt. Just give up on this connection attempt and stay in listening state.
+        return IO::Status::OK;
     }
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
 

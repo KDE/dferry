@@ -62,7 +62,7 @@ ServerPrivate::ServerPrivate(EventDispatcher *dispatcher)
 IO::Status ServerPrivate::handleIoReady(IO::RW rw)
 {
     const IO::Status ret = transportServer->handleIoReady(rw);
-    // TODO error handling
+    // ### error handling? But there is no possible permanent error with an already listening socket.
     return ret;
 }
 
