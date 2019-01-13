@@ -347,6 +347,9 @@ void ConnectionPrivate::close(Error withError)
 
 void ConnectionPrivate::startAuthentication()
 {
+    // Reserve serial 1 for the "hello" message - technically not necessary, there is no required ordering
+    // of serials.
+    takeNextSerial();
     m_authClient = new AuthClient(m_transport);
     m_authClient->setCompletionListener(this);
 }
@@ -621,6 +624,7 @@ void ConnectionPrivate::handleCompletion(void *task)
 
         // Announce our presence to the bus and have it send some introductory information of its own
         Message hello = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello");
+        hello.setSerial(1);
         hello.setExpectsReply(false);
         hello.setDestination(std::string("org.freedesktop.DBus"));
         MessagePrivate *const helloPriv = MessagePrivate::get(&hello);
