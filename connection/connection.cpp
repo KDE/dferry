@@ -636,10 +636,11 @@ void ConnectionPrivate::handleCompletion(void *task)
         helloPriv->send(m_transport);
         // Also ensure that the hello message is sent before any other messages that may have been
         // already enqueued by an API client
-        hello = std::move(m_sendQueue.back());
-        m_sendQueue.pop_back();
-        m_sendQueue.push_front(std::move(hello));
-
+        if (m_sendQueue.size() > 1) {
+            hello = std::move(m_sendQueue.back());
+            m_sendQueue.pop_back();
+            m_sendQueue.push_front(std::move(hello));
+        }
         m_helloReceiver->m_helloReply.setReceiver(m_helloReceiver);
         m_helloReceiver->m_parent = this;
         // get ready to receive the first message, the hello reply
