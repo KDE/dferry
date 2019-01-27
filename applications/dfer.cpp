@@ -27,22 +27,13 @@
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
 #include "message.h"
+#include "pendingreply.h"
 #include "connection.h"
 
 #include <iostream>
 #include <string>
 
-static Message createEavesdropMessage(const char *messageType)
-{
-    Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
-    ret.setDestination("org.freedesktop.DBus");
-    Arguments::Writer writer;
-    std::string str = "eavesdrop=true,type=";
-    str += messageType;
-    writer.writeString(cstring(str.c_str()));
-    ret.setArguments(writer.finish());
-    return ret;
-}
+#include "setupeavesdropping.h"
 
 class ReplyPrinter : public IMessageReceiver
 {
@@ -85,20 +76,13 @@ int main(int argc, char *argv[])
     }
 
     Connection connection(&dispatcher, bus);
+
+    if (setupEavesdropping(&connection) == FailedEavesdropping) {
+        return -1;
+    }
+
     ReplyPrinter receiver;
     connection.setSpontaneousMessageReceiver(&receiver);
-    {
-        static const int messageTypeCount = 4;
-        const char *messageType[messageTypeCount] = {
-            "signal",
-            "method_call",
-            "method_return",
-            "error"
-        };
-        for (int i = 0; i < messageTypeCount; i++) {
-            connection.sendNoReply(createEavesdropMessage(messageType[i]));
-        }
-    }
 
     while (true) {
         dispatcher.poll();

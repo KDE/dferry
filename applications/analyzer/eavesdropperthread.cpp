@@ -30,7 +30,10 @@
 #include "eventdispatcher.h"
 #include "localsocket.h"
 #include "message.h"
+#include "pendingreply.h"
 #include "connection.h"
+
+#include "../setupeavesdropping.h"
 
 EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
 {
@@ -50,39 +53,14 @@ EavesdropperThread::~EavesdropperThread()
     delete m_dispatcher;
 }
 
-static Message createEavesdropMessage(const char *messageType)
-{
-    Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
-    ret.setDestination("org.freedesktop.DBus");
-    Arguments::Writer writer;
-    std::string str = "eavesdrop=true,type=";
-    str += messageType;
-    writer.writeString(cstring(str.c_str()));
-    ret.setArguments(writer.finish());
-    return ret;
-}
-
 void EavesdropperThread::run()
 {
     m_timer.start();
     m_dispatcher = new EventDispatcher;
-
     m_connection = new Connection(m_dispatcher, ConnectAddress::StandardBus::Session);
-    m_connection->setSpontaneousMessageReceiver(this);
-    {
-        static const int messageTypeCount = 4;
-        const char *messageType[messageTypeCount] = {
-            "signal",
-            "method_call",
-            "method_return",
-            "error"
-        };
-        for (int i = 0; i < messageTypeCount; i++) {
-            m_connection->sendNoReply(createEavesdropMessage(messageType[i]));
-        }
-    }
 
-    Q_ASSERT(m_connection->isConnected());
+    setupEavesdropping(m_connection);
+    m_connection->setSpontaneousMessageReceiver(this);
 
     while (m_dispatcher->poll()) {
     }
