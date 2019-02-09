@@ -117,11 +117,16 @@ qint64 MessageRecord::roundtripTime(const std::vector<MessageRecord> &container)
     return -1;
 }
 
+static bool isNumericAddress(const std::string &address)
+{
+    return !address.empty() && address[0] == ':';
+}
+
 QString MessageRecord::niceSender(const std::vector<MessageRecord> &container) const
 {
     // this does something like ":1.2" -> ":1.2 (org.freedesktop.fooInterface)"
     std::string sender = message->sender();
-    if (isReplyToKnownCall()) {
+    if (isNumericAddress(sender) && isReplyToKnownCall()) {
         const std::string otherDest = container[otherMessageIndex].message->destination();
         if (!otherDest.empty() && otherDest[0] != ':') {
             sender += " (";
@@ -140,7 +145,7 @@ bool MessageRecord::couldHaveNicerDestination(const std::vector<MessageRecord> &
         return false;
     }
     const std::string dest = message->destination();
-    if (!dest.empty() && dest[0] == ':') {
+    if (isNumericAddress(dest)) {
         return false;
     }
     const std::string otherSender = container[otherMessageIndex].message->sender();
