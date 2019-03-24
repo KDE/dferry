@@ -50,24 +50,22 @@ static void test_signatureHeader()
 class PrintAndTerminateClient : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg, Connection *) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *connection) override
     {
         std::cout << msg.prettyPrint();
-        m_eventDispatcher->interrupt();
+        connection->eventDispatcher()->interrupt();
     }
-    EventDispatcher *m_eventDispatcher;
 };
 
 class PrintAndReplyClient : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg, Connection *) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *connection) override
     {
         std::cout << msg.prettyPrint();
-        m_connection->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
-        //m_connection->eventDispatcher()->interrupt();
+        connection->sendNoReply(Message::createErrorReplyTo(msg, "Unable to get out of hammock!"));
+        //connection->eventDispatcher()->interrupt();
     }
-    Connection *m_connection;
 };
 
 // used during implementation, is supposed to not crash and be valgrind-clean afterwards
@@ -84,11 +82,9 @@ void testBasic(const ConnectAddress &clientAddress)
     std::cout << "Created client connection. " << &clientConnection << std::endl;
 
     PrintAndReplyClient printAndReplyClient;
-    printAndReplyClient.m_connection = &serverConnection;
     serverConnection.setSpontaneousMessageReceiver(&printAndReplyClient);
 
     PrintAndTerminateClient printAndTerminateClient;
-    printAndTerminateClient.m_eventDispatcher = &dispatcher;
     clientConnection.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
@@ -206,7 +202,7 @@ enum {
 class FileDescriptorTestReceiver : public IMessageReceiver
 {
 public:
-    void handleSpontaneousMessageReceived(Message msg, Connection *) override
+    void handleSpontaneousMessageReceived(Message msg, Connection *connection) override
     {
         // we're on the session bus, so we'll receive all kinds of notifications we don't care about here
         if (msg.type() != Message::MethodCallMessage
@@ -223,10 +219,8 @@ public:
             TEST(readBuf == i);
         }
         Message reply = Message::createReplyTo(msg);
-        m_connection->sendNoReply(std::move(reply));
+        connection->sendNoReply(std::move(reply));
     }
-
-    Connection *m_connection = nullptr;
 };
 
 void testFileDescriptorsForDataTransfer()
@@ -255,7 +249,6 @@ void testFileDescriptorsForDataTransfer()
     PendingReply reply = conn.send(std::move(msg), 500 /* fail quickly */);
     FileDescriptorTestReceiver fdTestReceiver;
     conn.setSpontaneousMessageReceiver(&fdTestReceiver);
-    fdTestReceiver.m_connection = &conn;
 
     while (!reply.isFinished()) {
         eventDispatcher.poll();

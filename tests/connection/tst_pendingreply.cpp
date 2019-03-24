@@ -45,8 +45,7 @@ static void addressMessageToBus(Message *msg)
 class ReplyCheck : public IMessageReceiver
 {
 public:
-    EventDispatcher *m_eventDispatcher;
-    void handlePendingReplyFinished(PendingReply *pr, Connection *) override
+    void handlePendingReplyFinished(PendingReply *pr, Connection *connection) override
     {
         pr->dumpState();
         std::cout << "got it!\n" << pr->reply()->arguments().prettyPrint();
@@ -56,7 +55,7 @@ public:
         // This is really a different test, it used to reproduce a memory leak under Valgrind
         Message reply = pr->takeReply();
 
-        m_eventDispatcher->interrupt();
+        connection->eventDispatcher()->interrupt();
     }
 };
 
@@ -83,7 +82,6 @@ static void testBusAddress(bool waitForConnected)
 
     PendingReply busNameReply = conn.send(std::move(msg));
     ReplyCheck replyCheck;
-    replyCheck.m_eventDispatcher = &eventDispatcher;
     busNameReply.setReceiver(&replyCheck);
 
     while (eventDispatcher.poll()) {
@@ -93,14 +91,13 @@ static void testBusAddress(bool waitForConnected)
 class TimeoutCheck : public IMessageReceiver
 {
 public:
-    EventDispatcher *m_eventDispatcher;
-    void handlePendingReplyFinished(PendingReply *reply, Connection *) override
+    void handlePendingReplyFinished(PendingReply *reply, Connection *connection) override
     {
         TEST(reply->isFinished());
         TEST(!reply->hasNonErrorReply());
         TEST(reply->error().code() == Error::Timeout);
         std::cout << "We HAVE timed out.\n";
-        m_eventDispatcher->interrupt();
+        connection->eventDispatcher()->interrupt();
     }
 };
 
@@ -120,7 +117,6 @@ static void testTimeout()
 
     PendingReply neverGonnaGetReply = conn.send(std::move(msg), 200);
     TimeoutCheck timeoutCheck;
-    timeoutCheck.m_eventDispatcher = &eventDispatcher;
     neverGonnaGetReply.setReceiver(&timeoutCheck);
 
     while (eventDispatcher.poll()) {

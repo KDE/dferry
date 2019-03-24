@@ -132,7 +132,7 @@ public:
     }
 
     // IMessageReceiver
-    void handlePendingReplyFinished(PendingReply *pr, Connection *) override
+    void handlePendingReplyFinished(PendingReply *pr, Connection *connection) override
     {
         std::cerr << "Client thread: received pong" << " " << pr->hasNonErrorReply() << std::endl;
         if (pr->hasNonErrorReply()) {
@@ -140,10 +140,9 @@ public:
         } else {
             m_receivedErrorReplies++;
         }
-        m_eventDispatcher->interrupt();
+        connection->eventDispatcher()->interrupt();
     }
 
-    EventDispatcher *m_eventDispatcher = nullptr;
     int m_testRunIndex = 0;
     int m_serverClosedConnections = 0;
     int m_receivedSuccessReplies = 0;
@@ -155,7 +154,6 @@ static void clientThreadRun(ConnectAddress address, int testRunIndex)
 {
     EventDispatcher eventDispatcher;
     ClientSideHandlers clientHandlers;
-    clientHandlers.m_eventDispatcher = &eventDispatcher;
     clientHandlers.m_testRunIndex = testRunIndex;
 
     // Client-side connections - these call listeners in ClientSideHandlers when closing during

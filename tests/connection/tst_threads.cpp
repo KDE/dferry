@@ -50,9 +50,7 @@ static const char *pongPayload = "<- J. Random Pong";
 class PongSender : public IMessageReceiver
 {
 public:
-    Connection *m_connection;
-
-    void handleSpontaneousMessageReceived(Message ping, Connection *) override
+    void handleSpontaneousMessageReceived(Message ping, Connection *connection) override
     {
         if (ping.interface() != echoInterface) {
             // This is not the ping... it is probably still something from connection setup.
@@ -75,10 +73,10 @@ public:
             pong.setArguments(writer.finish());
 
             std::cout << "\n\nSending pong!\n\n";
-            Error replyError = m_connection->sendNoReply(std::move(pong));
+            Error replyError = connection->sendNoReply(std::move(pong));
             TEST(!replyError.isError());
 
-            m_connection->eventDispatcher()->interrupt();
+            connection->eventDispatcher()->interrupt();
         }
     }
 };
@@ -90,8 +88,6 @@ static void pongThreadRun(Connection::CommRef mainConnectionRef, std::atomic<boo
     Connection conn(&eventDispatcher, std::move(mainConnectionRef));
 
     PongSender pongSender;
-    pongSender.m_connection = &conn;
-
     conn.setSpontaneousMessageReceiver(&pongSender);
 
     while (eventDispatcher.poll()) {
