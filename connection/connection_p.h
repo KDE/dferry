@@ -113,6 +113,7 @@ public:
 
     void handleCompletion(void *task) override;
     bool maybeDispatchToPendingReply(Message *m);
+    bool maybeDispatchToPendingReply(uint32 serial, Error error);
     void receiveNextMessage();
 
     void unregisterPendingReply(PendingReplyPrivate *p);

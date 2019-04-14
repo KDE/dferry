@@ -45,7 +45,7 @@ enum {
 LocalSocket::LocalSocket(const std::string &socketFilePath)
    : m_fd(-1)
 {
-    m_supportsFileDescriptors = true;
+    m_supportedUnixFdsCount = MaxFds;
     const int fd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
         return;
@@ -113,6 +113,8 @@ IO::Result LocalSocket::write(chunk data)
             close();
             ret.status = IO::Status::RemoteClosed;
             return ret;
+        } else if (nbytes == 0) {
+            break;
         }
 
         data.ptr += nbytes;
@@ -195,6 +197,8 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
             }
             close();
             ret.status = IO::Status::RemoteClosed;
+            break;
+        } else if (nbytes == 0) {
             break;
         } else if (nbytes > 0) {
             // control message already sent, don't send again

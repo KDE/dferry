@@ -46,9 +46,6 @@ typedef SSIZE_T ssize_t;
 
 #include <iostream>
 
-// HACK, put this somewhere else (get the value from original d-bus? or is it infinite?)
-static const int maxFds = 12;
-
 // TODO implement address family (IPv4 / IPv6) support
 IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
@@ -163,6 +160,8 @@ IO::Result IpSocket::write(chunk a)
             close();
             ret.status = IO::Status::InternalError;
             return ret;
+        } else if (nbytes == 0) {
+            break;
         }
 
         a.ptr += nbytes;
@@ -203,12 +202,17 @@ IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
                 continue;
             }
             // see comment in LocalSocket for rationale of EAGAIN behavior
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
-            ret.status = IO::Status::RemoteClosed; // TODO
-            return ret;
+            ret.status = IO::Status::RemoteClosed;
+            break;
+        } else if (nbytes == 0) {
+            // orderly shutdown
+            close();
+            ret.status = IO::Status::RemoteClosed;
+            break;
         }
         ret.length += uint32(nbytes);
         buffer += nbytes;

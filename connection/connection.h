@@ -83,7 +83,7 @@ public:
 
     CommRef createCommRef();
 
-    bool supportsPassingFileDescriptors() const;
+    uint32 supportedFileDescriptorsPerMessage() const;
 
     void setDefaultReplyTimeout(int msecs);
     int defaultReplyTimeout() const;

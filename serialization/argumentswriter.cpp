@@ -974,16 +974,17 @@ Arguments Arguments::Writer::finish()
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - close the signature by adding the terminating null
-    // TODO set error in returned Arguments in error cases
 
     Arguments args;
 
     if (m_state == InvalidData) {
-        return args;
+        args.d->m_error = d->m_error;
+        return args; // heavily relying on NRVO in all returns here!
     }
     if (d->m_nesting.total() != 0) {
         m_state = InvalidData;
         d->m_error.setCode(Error::CannotEndArgumentsHere);
+        args.d->m_error = d->m_error;
         return args;
     }
     assert(!d->m_nilArrayNesting);
@@ -999,7 +1000,6 @@ Arguments Arguments::Writer::finish()
 
     d->m_signature.length = d->m_signaturePosition;
     d->m_signature.ptr[d->m_signature.length] = '\0';
-    args.d->m_error = d->m_error;
 
     // OK, so this length check is more of a sanity check. The actual limit limits the size of the
     // full message. Here we take the size of the "payload" and don't add the size of the signature -
@@ -1022,13 +1022,14 @@ Arguments Arguments::Writer::finish()
         d->m_data = nullptr; // now owned by Arguments and later freed there
     }
 
-    if (!success) {
+    if (success) {
+        args.d->m_fileDescriptors = std::move(d->m_fileDescriptors);
+        m_state = Finished;
+    } else {
         m_state = InvalidData;
-        return Arguments();
+        args.d->m_error = d->m_error;
     }
-    args.d->m_fileDescriptors = std::move(d->m_fileDescriptors);
-    m_state = Finished;
-    return std::move(args);
+    return args;
 }
 
 struct ArrayLengthField

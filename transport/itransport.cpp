@@ -48,12 +48,19 @@ ITransport::~ITransport()
 
 IO::Result ITransport::readWithFileDescriptors(byte *buffer, uint32 maxSize, std::vector<int> *)
 {
+    // This may be OK - if the other side tried to send file descriptors we will later notice
+    // the difference between the message header declaring a nonzero FD count and the actual
+    // received FD count which will always be zero if we get here. IF the other side didn't try
+    // to send FDs, there is no problem.
     return read(buffer, maxSize);
 }
 
-IO::Result ITransport::writeWithFileDescriptors(chunk data, const std::vector<int> &)
+IO::Result ITransport::writeWithFileDescriptors(chunk, const std::vector<int> &)
 {
-    return write(data);
+    // Just don't call this on a transport that doesn't support passing file descriptors
+    IO::Result res;
+    res.status = IO::Status::LocalClosed;
+    return res;
 }
 
 void ITransport::setReadListener(ITransportListener *listener)

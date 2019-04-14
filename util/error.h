@@ -76,6 +76,9 @@ public:
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,
         ArrayOrDictTooLong,
+        SendingTooManyUnixFds, // The FD capacity varies by transport, so this error is only produced
+                               // when trying to send a message with too many FDs. It is fine to pass
+                               // around a message with lots of file descriptors locally.
 
         StateNotSkippable,
 

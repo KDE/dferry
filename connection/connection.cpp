@@ -151,8 +151,19 @@ IO::Status ConnectionPrivate::handleIoReady(IO::RW rw)
 
     ConnectionStateChanger stateChanger(this);
     if (status != IO::Status::OK) {
-        stateChanger.setNewState(ConnectionPrivate::Unconnected);
-        close(Error::RemoteDisconnect);
+        if (status != IO::Status::PayloadError) {
+            stateChanger.setNewState(ConnectionPrivate::Unconnected);
+            close(Error::RemoteDisconnect);
+        } else {
+            assert(!m_sendQueue.empty());
+            const Message &msg = m_sendQueue.front();
+            uint32 failedSerial = msg.serial();
+            Error error = msg.error();
+            m_sendQueue.pop_front();
+            // If the following fails, there is no "spontaneously failed to send" notification mechanism.
+            // It is not a mistake in this case that it fails silently.
+            maybeDispatchToPendingReply(failedSerial, error);
+        }
     }
     return status;
 }
@@ -201,6 +212,9 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
 {
     EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
 
+    // This must be destroyed after all the Lockers so we notify with no locks held!
+    ConnectionStateChanger stateChanger(d);
+
     d->m_mainThreadLink = std::move(mainConnectionRef.commutex);
     CommutexLocker locker(&d->m_mainThreadLink);
     assert(locker.hasLock());
@@ -209,8 +223,6 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
         assert(false);
         return; // stay in Unconnected state
     }
-
-    // TODO how do we handle m_state?
 
     d->m_mainThreadConnection = mainConnectionRef.connection;
     ConnectionPrivate *mainD = d->m_mainThreadConnection;
@@ -226,6 +238,7 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
     evt->id = id;
     EventDispatcherPrivate::get(mainD->m_eventDispatcher)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
+    stateChanger.setNewState(ConnectionPrivate::AwaitingUniqueName);
 }
 
 Connection::Connection(ITransport *transport, EventDispatcher *ed, const ConnectAddress &address)
@@ -482,11 +495,14 @@ PendingReply Connection::send(Message m, int timeoutMsecs)
     // side initiated the disconnection.
     d->m_pendingReplies.emplace(m.serial(), pendingPriv);
 
-    if (error.isError()) {
+    if (error.isError() || d->m_state == ConnectionPrivate::Unconnected) {
         // Signal the error asynchronously, in order to get the same delayed completion callback as in
         // the non-error case. This should make the behavior more predictable and client code harder to
         // accidentally get wrong. To detect errors immediately, PendingReply::error() can be used.
-        pendingPriv->m_error = error;
+
+        // An intentionally locally disconnected connection is not in an error state, but trying to send
+        // a message over it is an error.
+        pendingPriv->m_error = error.isError() ? error : Error::LocalDisconnect;
         pendingPriv->m_replyTimeout.start(0);
     } else {
         if (!d->m_mainThreadConnection) {
@@ -513,8 +529,8 @@ Error Connection::sendNoReply(Message m)
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
     //     doing that is wasteful, but might be common. needs investigation.
     Error error = d->prepareSend(&m);
-    if (error.isError()) {
-        return error;
+    if (error.isError() || d->m_state == ConnectionPrivate::Unconnected) {
+        return error.isError() ? error : Error::LocalDisconnect;
     }
 
     // pass ownership to the send queue now because if the IO system decided to send the message without
@@ -730,6 +746,31 @@ bool ConnectionPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
     return true;
 }
 
+bool ConnectionPrivate::maybeDispatchToPendingReply(uint32 serial, Error error)
+{
+    assert(error.isError());
+    auto it = m_pendingReplies.find(serial);
+    if (it == m_pendingReplies.end()) {
+        return false;
+    }
+
+    if (PendingReplyPrivate *pr = it->second.asPendingReply()) {
+        m_pendingReplies.erase(it);
+        assert(!pr->m_isFinished);
+        pr->handleError(error);
+    } else {
+        // forward to other thread's Connection
+        ConnectionPrivate *connection = it->second.asConnection();
+        m_pendingReplies.erase(it);
+        assert(connection);
+        PendingReplyFailureEvent *evt = new PendingReplyFailureEvent;
+        evt->m_serial = serial;
+        evt->m_error = error;
+        EventDispatcherPrivate::get(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
+    }
+    return true;
+}
+
 void ConnectionPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
@@ -775,6 +816,7 @@ void ConnectionPrivate::cancelAllPendingReplies(Error withError)
             pendingPriv->handleError(withError);
         }
     }
+    m_sendQueue.clear();
 }
 
 void ConnectionPrivate::discardPendingRepliesForSecondaryThread(ConnectionPrivate *connection)
@@ -877,6 +919,10 @@ void ConnectionPrivate::processEvent(Event *evt)
     case Event::UniqueNameReceived:
         // We get this when the unique name became available after we were linked up with the main thread
         m_uniqueName = static_cast<UniqueNameReceivedEvent *>(evt)->uniqueName;
+        if (m_state == AwaitingUniqueName) {
+            ConnectionStateChanger stateChanger(this);
+            stateChanger.setNewState(Connected);
+        }
         break;
     }
 }
@@ -895,7 +941,7 @@ Connection::CommRef Connection::createCommRef()
     return ret;
 }
 
-bool Connection::supportsPassingFileDescriptors() const
+uint32 Connection::supportedFileDescriptorsPerMessage() const
 {
-    return d->m_transport && d->m_transport->supportsPassingFileDescriptors();
+    return d->m_transport && d->m_transport->supportedPassingUnixFdsCount();
 }

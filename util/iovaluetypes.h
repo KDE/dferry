@@ -42,6 +42,7 @@ enum class Status
     OK = 0,
     RemoteClosed,
     LocalClosed,
+    PayloadError,
     InternalError
 };
 

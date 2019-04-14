@@ -58,7 +58,7 @@ public:
             return;
         }
         {
-            Arguments args = ping.arguments();
+            const Arguments args = ping.arguments();
             Arguments::Reader reader(args);
             cstring payload = reader.readString();
             TEST(!reader.error().isError());

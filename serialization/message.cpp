@@ -24,6 +24,7 @@
 #include "message.h"
 #include "message_p.h"
 
+#include "arguments_p.h"
 #include "basictypeio.h"
 #include "malloccache.h"
 #include "stringtools.h"
@@ -272,13 +273,15 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
 #ifdef __unix__
         // TODO ensure all "actual" file descriptor handling everywhere is inside this ifdef
         // (note conditional compilation of whole file localsocket.cpp)
-        m_fileDescriptors.clear();
-        for (int fd : other.m_fileDescriptors) {
+        argUnixFds()->clear();
+        std::vector<int> *otherUnixFds = const_cast<MessagePrivate &>(other).argUnixFds();
+        argUnixFds()->reserve(otherUnixFds->size());
+        for (int fd : *otherUnixFds) {
             int fdCopy = ::dup(fd);
             if (fdCopy == -1) {
                 // TODO error...
             }
-            m_fileDescriptors.push_back(fdCopy);
+            argUnixFds()->push_back(fdCopy);
         }
 #endif
     } else {
@@ -291,7 +294,7 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
 
 MessagePrivate::~MessagePrivate()
 {
-    clearBuffer();
+    clear(/* onlyReleaseResources = */ true);
 }
 
 Message::Message()
@@ -741,10 +744,17 @@ bool Message::isReceiving() const
 void MessagePrivate::send(ITransport *transport)
 {
     if (!serialize()) {
-        // TODO
-        // m_error.setCode();
-        // notifyCompletionListener(); would call into Connection, but it's easier for Connection to handle
-        //                             the error from non-callback code, directly in the caller of send().
+        m_state = Serialized;
+        assert(m_error.isError());
+        if (!m_error.isError()) {
+            // TODO This error code makes no sense here. We don't have a "generic error" code, and a specific
+            // error code should have been set by whatever code detected the error. Hence the assertion.
+            m_error = Error::MalformedReply;
+        }
+        // Note: We don't call notifyCompletionListener(); since all our timers are internal, we can
+        // expect them to check for errors after this returns. Specifically, Connection::send() has
+        // access to the timer in the PendingReply, so it can produce a deferred error notification
+        // just like success notifications are deferred.
         return;
     }
     if (m_state != MessagePrivate::Sending) {
@@ -792,9 +802,13 @@ IO::Status MessagePrivate::handleTransportCanRead()
         const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
         if (m_bufferPos == 0) {
-            // File descriptors should arrive only with the first byte
+            // According to the DBus spec, file descriptors can arrive anywhere in the message, but
+            // (assuming the message is written in one sendmsg() call) according to UNIX domain socket
+            // documentation, file descriptors will arrive in the first byte of the sent block they are
+            // attached to. We go with the UNIX domain socket documentation.
+            // TODO review and test this for very large messages that cannot be sent in one call
             ioRes = readTransport()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
-                                                         &m_fileDescriptors);
+                                                             argUnixFds());
         } else {
             ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax);
         }
@@ -804,19 +818,18 @@ IO::Status MessagePrivate::handleTransportCanRead()
         if (!headersDone) {
             if (m_headerLength == 0 && m_bufferPos >= s_extendedFixedHeaderLength) {
                 if (!deserializeFixedHeaders()) {
-                    ret = IO::Status::InternalError; // TODO ... m_error = Error::MalformetReply?
+                    ret = IO::Status::RemoteClosed;
+                    m_error = Error::MalformedReply;
                     break;
                 }
             }
             if (m_headerLength > 0 && m_bufferPos >= m_headerLength) {
-                if (deserializeVariableHeaders()) {
-                    const uint32 fdsCount = m_varHeaders.intHeader(Message::UnixFdsHeader);
-                    if (fdsCount != m_fileDescriptors.size()) {
-                        ret = IO::Status::InternalError; // TODO
-                        break;
-                    }
-                } else {
-                    ret = IO::Status::InternalError; // TODO
+                // ### If we expected to receive the FDs at any point in the message (as opposed to just the
+                //     first byte), we'd have to verify FD count later. But we don't, so this is expedient.
+                if (!deserializeVariableHeaders() ||
+                        m_varHeaders.intHeader(Message::UnixFdsHeader) != argUnixFds()->size()) {
+                    ret = IO::Status::RemoteClosed;
+                    m_error = Error::MalformedReply;
                     break;
                 }
             }
@@ -827,26 +840,26 @@ IO::Status MessagePrivate::handleTransportCanRead()
             m_state = Serialized;
             chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
             m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
-                                        bodyData, std::move(m_fileDescriptors), m_isByteSwapped);
-            m_fileDescriptors.clear(); // put it into a well-defined state
+                                        bodyData, std::move(*argUnixFds()), m_isByteSwapped);
             assert(ioRes.status == IO::Status::OK && ret == IO::Status::OK);
             readTransport()->setReadListener(nullptr);
             notifyCompletionListener(); // do not access members after this because it might delete us!
             break;
         }
         if (!readTransport()->isOpen()) {
-            ret = IO::Status::InternalError; // TODO
+            ret = IO::Status::RemoteClosed;
             break;
         }
     } while (ioRes.status == IO::Status::OK);
 
     if (ret != IO::Status::OK) {
-        m_state = Empty;
-        clearBuffer();
+        clear();
         readTransport()->setReadListener(nullptr);
-        m_error = Error::RemoteDisconnect;
+        if (!m_error.isError()) {
+            // catch-all, we know that SOME error happened
+            m_error = Error::RemoteDisconnect;
+        }
         notifyCompletionListener();
-        // TODO reset other data members, SET ERROR, generally revisit error handling to make it robust
     }
     return ret;
 }
@@ -867,20 +880,47 @@ IO::Status MessagePrivate::handleTransportCanWrite()
         }
         IO::Result ioRes;
         if (m_bufferPos == 0) {
-            // Send file descriptors and / or credentials with first byte of message. We could call
-            // write() after checking that we don't need to send fds (easy) or credentials (which would
-            // be a slight layering violation).
-            ioRes = writeTransport()->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
-                                                               m_mainArguments.fileDescriptors());
+            const size_t sendFdsCount = m_mainArguments.fileDescriptors().size();
+            if (sendFdsCount == 0) {
+                ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+            } else if (sendFdsCount > writeTransport()->supportedPassingUnixFdsCount()) {
+                m_error.setCode(Error::SendingTooManyUnixFds);
+                m_state = Serialized;
+                writeTransport()->setWriteListener(nullptr);
+                // ### Oh well, now we have a special Error value to pass through the stack
+                // (for error handling), but also notifyCompletionListener() for sucessful completion
+                // handling. Can we get rid of one or the other, or are there actually good reasons for
+                // the difference?
+                // Pro separation:
+                // - the arguments I came up with for not doing error handling through callbacks
+                // - the ...convenience?... of using callbacks
+                // - possibly better performance of happy path
+                //
+                // Contra separation:
+                // - two different mechanisms for similar things...
+                // - inconsistency - though is that really a problem? the situations are different.
+                // - suddenly IO code needs to ~know (at least pass through and be technically exposed to)
+                //   error values it doesn't know and can't handle itself; theoretically could use some
+                //   error value wrapping mechanism to pass through opaque errors).
+                return IO::Status::PayloadError; // the connection is fine, only this message has a problem
+            } else {
+                ioRes = writeTransport()
+                    ->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
+                                               m_mainArguments.fileDescriptors());
+            }
         } else {
             ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         }
         if (ioRes.status != IO::Status::OK) {
+            // ### what about m_error?
+            // I think we only test remote disconnect while reading. We should also check while writing.
+            // - Well, actually, Connection aborts all pending replies with error when we return an error
+            // her. But due to th limited amount of info in IO::Status, it can only report errors
+            // corresponding directly to IO::Status values.
+            m_state = Serialized; // in a way... serialization has completed, unsuccessfully
             writeTransport()->setWriteListener(nullptr);
-            // TODO notifyCompletionListener() for failure?
-            // TODO state update?
+            notifyCompletionListener();
             return IO::Status::RemoteClosed;
-            break;
         }
         m_bufferPos += ioRes.length;
     }
@@ -892,7 +932,6 @@ chunk Message::serializeAndView()
 {
     chunk ret; // one return variable to enable return value optimization (RVO) in gcc
     if (!d->serialize()) {
-        // TODO report error?
         return ret;
     }
     ret = d->m_buffer;
@@ -932,8 +971,10 @@ void Message::deserializeAndTake(chunk memOwnership)
     ok = ok && d->m_buffer.length == d->m_headerLength + d->m_bodyLength;
 
     if (!ok) {
-        d->m_state = MessagePrivate::Empty;
-        d->clearBuffer();
+        if (!d->m_error.isError()) {
+            d->m_error = Error::MalformedReply;
+        }
+        d->clear();
         return;
     }
 
@@ -1127,6 +1168,9 @@ bool MessagePrivate::serialize()
     }
 
     Arguments headerArgs = serializeVariableHeaders();
+    if (headerArgs.data().length <= 0) {
+        return false;
+    }
 
     // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
     // the original dbus code aligns based on address in the final data stream
@@ -1266,12 +1310,21 @@ void MessagePrivate::clearBuffer()
         assert(m_buffer.length == 0);
         assert(m_bufferPos == 0);
     }
+}
+
+void MessagePrivate::clear(bool onlyReleaseResources)
+{
+    clearBuffer();
 #ifdef __unix__
-    for (int fd : m_fileDescriptors) {
+    for (int fd : *argUnixFds()) {
         ::close(fd);
     }
 #endif
-    m_fileDescriptors.clear();
+    if (!onlyReleaseResources) { // get into a clean state again
+        m_state = Empty;
+        m_mainArguments = Arguments();
+        m_varHeaders = VarHeaderStorage();
+    }
 }
 
 static uint32 nextPowerOf2(uint32 x)
@@ -1309,4 +1362,9 @@ void MessagePrivate::reserveBuffer(uint32 newLen)
     }
 
     m_buffer.length = newLen;
+}
+
+std::vector<int> *MessagePrivate::argUnixFds()
+{
+    return &Arguments::Private::get(&m_mainArguments)->m_fileDescriptors;
 }

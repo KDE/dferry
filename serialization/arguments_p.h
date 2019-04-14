@@ -36,6 +36,8 @@ public:
          m_memOwnership(nullptr)
     {}
 
+    static inline Private *get(Arguments *args) { return args->d; }
+
     Private(const Private &other);
     Private &operator=(const Private &other);
     void initFrom(const Private &other);

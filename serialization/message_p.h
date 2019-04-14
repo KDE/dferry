@@ -104,14 +104,16 @@ public:
     Arguments serializeVariableHeaders();
 
     void clearBuffer();
+    void clear(bool onlyReleaseResources = false);
     void reserveBuffer(uint32 newSize);
 
     void notifyCompletionListener();
 
+    std::vector<int> *argUnixFds();
+
     Message *m_message;
     chunk m_buffer;
     uint32 m_bufferPos;
-    std::vector<int> m_fileDescriptors;
 
     bool m_isByteSwapped;
     enum { // ### we don't have an error state, the need hasn't arisen yet. strange!

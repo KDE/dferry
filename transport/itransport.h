@@ -40,7 +40,7 @@ class ITransport : public IIoEventListener
 public:
     // An ITransport subclass must have a file descriptor after construction and it must not change
     // except to the invalid file descriptor when disconnected.
-    ITransport(); // TODO event dispatcher as constructor argument?
+    ITransport();
     ~ITransport() override;
 
     // This listener interface is different from IIoEventSource / IIoEventListener because that one is
@@ -59,7 +59,7 @@ public:
     void close();
     virtual bool isOpen() = 0;
 
-    bool supportsPassingFileDescriptors() const { return m_supportsFileDescriptors; }
+    uint32 supportedPassingUnixFdsCount() const { return m_supportedUnixFdsCount; }
 
     IO::Status handleIoReady(IO::RW rw) override;
 
@@ -68,7 +68,7 @@ public:
 
 protected:
     virtual void platformClose() = 0;
-    bool m_supportsFileDescriptors = false;
+    uint32 m_supportedUnixFdsCount = 0;
 
 private:
     void updateTransportIoInterest(); // "Transport" in name to avoid confusion with IIoEventSource
