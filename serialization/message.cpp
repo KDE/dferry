@@ -60,25 +60,25 @@ thread_local static MsgAllocCaches msgAllocCaches;
 
 static const byte s_storageForHeader[Message::UnixFdsHeader + 1] = {
     0, // dummy entry: there is no enum value for 0
-    0xf0 | 0, // PathHeader
-    0xf0 | 1, // InterfaceHeader
-    0xf0 | 2, // MethodHeader
-    0xf0 | 3, // ErrorNameHeader
+    0x80 | 0, // PathHeader
+    0x80 | 1, // InterfaceHeader
+    0x80 | 2, // MethodHeader
+    0x80 | 3, // ErrorNameHeader
        0 | 0, // ReplySerialHeader
-    0xf0 | 4, // DestinationHeader
-    0xf0 | 5, // SenderHeader
-    0xf0 | 6, // SignatureHeader
+    0x80 | 4, // DestinationHeader
+    0x80 | 5, // SenderHeader
+    0x80 | 6, // SignatureHeader
        0 | 1  // UnixFdsHeader
 };
 
 static bool isStringHeader(int field)
 {
-    return s_storageForHeader[field] & 0xf0;
+    return s_storageForHeader[field] & 0x80;
 }
 
 static int indexOfHeader(int field)
 {
-    return s_storageForHeader[field] & ~0xf0;
+    return s_storageForHeader[field] & 0x7f;
 }
 
 static const Message::VariableHeader s_stringHeaderAtIndex[VarHeaderStorage::s_stringHeaderCount] = {
