@@ -260,6 +260,22 @@ void testFileDescriptorsForDataTransfer()
     }
 }
 
+void testAssignment()
+{
+    Message msg1 = Message::createCall("/foo", "org.foo.bar", "someMethod");
+    msg1.setSender("sender1");
+    Message msg2 = Message::createSignal("/bar", "org.xyz.abc", "thingHappened");
+    msg2.setReplySerial(1234);
+
+    msg2 = msg1;
+    TEST(msg2.type() == Message::MethodCallMessage);
+    TEST(msg2.path() == "/foo");
+    TEST(msg2.interface() == "org.foo.bar");
+    TEST(msg2.method() == "someMethod");
+    TEST(msg2.sender() == "sender1");
+    TEST(msg2.replySerial() == 0);
+}
+
 int main(int, char *[])
 {
     test_signatureHeader();
@@ -287,6 +303,8 @@ int main(int, char *[])
     testTooManyFileDescriptors();
     testFileDescriptorsHeader();
     testFileDescriptorsForDataTransfer();
+
+    testAssignment();
 
     // TODO testSaveLoad();
     // TODO testDeepCopy();
