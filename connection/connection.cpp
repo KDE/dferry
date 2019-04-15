@@ -378,7 +378,8 @@ void ConnectionPrivate::handleHelloReply()
         // TODO set an error, provide access to it, also set it on messages when trying to send / receive them
         return;
     }
-    Arguments argList = m_helloReceiver->m_helloReply.reply()->arguments();
+    Message msg = m_helloReceiver->m_helloReply.takeReply();
+    const Arguments &argList = msg.arguments();
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 
