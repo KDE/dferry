@@ -29,6 +29,10 @@
 
 #include <cstring>
 
+#ifdef HAVE_BOOST
+#include <boost/container/small_vector.hpp>
+#endif
+
 enum {
     StructAlignment = 8
 };
@@ -218,7 +222,7 @@ public:
 
     // this keeps track of which aggregates we are currently in
 #ifdef HAVE_BOOST
-    boost::small_vector<AggregateInfo, 8> m_aggregateStack;
+    boost::container::small_vector<AggregateInfo, 8> m_aggregateStack;
 #else
     std::vector<AggregateInfo> m_aggregateStack;
 #endif

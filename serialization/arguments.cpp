@@ -38,10 +38,6 @@
 #include <cstring>
 #include <sstream>
 
-#ifdef HAVE_BOOST
-#include <boost/container/small_vector.hpp>
-#endif
-
 const TypeInfo &typeInfo(char letterCode)
 {
     assert(letterCode >= '(');
