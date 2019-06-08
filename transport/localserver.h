@@ -34,7 +34,7 @@ public:
     // This is for now intended only for client to client connections, so UID (via SCM_CREDENTIALS)
     // is not checked - instead socketFilePath should only be accessible by the appropriate user(s).
     LocalServer(const std::string &socketFilePath);
-    ~LocalServer();
+    ~LocalServer() override;
 
     bool isListening() const override;
 

@@ -61,7 +61,7 @@ public:
 class ClientConnectedHandler : public ICompletionListener
 {
 public:
-    ~ClientConnectedHandler()
+    ~ClientConnectedHandler() override
     {
         delete m_server;
     }

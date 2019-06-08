@@ -36,7 +36,7 @@ public:
     // Use an already open file descriptor
     LocalSocket(int fd);
 
-    ~LocalSocket();
+    ~LocalSocket() override;
 
     // virtuals from ITransport
     uint32 write(chunk data) override;

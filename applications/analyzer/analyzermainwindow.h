@@ -33,7 +33,7 @@ class AnalyzerMainWindow : public QMainWindow
     Q_OBJECT
 public:
     AnalyzerMainWindow();
-    virtual ~AnalyzerMainWindow();
+    ~AnalyzerMainWindow() override;
  
 public slots:
     void load();

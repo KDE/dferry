@@ -32,7 +32,7 @@ class EpollEventPoller : public IEventPoller
 {
 public:
     EpollEventPoller(EventDispatcher *dispatcher);
-    ~EpollEventPoller();
+    ~EpollEventPoller() override;
     IEventPoller::InterruptAction poll(int timeout) override;
     void interrupt(IEventPoller::InterruptAction) override;
 

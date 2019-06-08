@@ -39,7 +39,7 @@ class IServer : public IioEventListener
 {
 public:
     IServer(); // TODO event dispatcher as constructor argument?
-    virtual ~IServer();
+    ~IServer() override;
 
     virtual bool isListening() const = 0;
 
@@ -48,8 +48,8 @@ public:
     ITransport *takeNextClient();
     virtual void close() = 0;
 
-    virtual void setEventDispatcher(EventDispatcher *ed) override;
-    virtual EventDispatcher *eventDispatcher() const override;
+    void setEventDispatcher(EventDispatcher *ed) override;
+    EventDispatcher *eventDispatcher() const override;
 
     static IServer *create(const ConnectAddress &connectAddress);
 

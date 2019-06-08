@@ -40,7 +40,7 @@ public:
     explicit AuthClient(ITransport *transport);
 
     // reimplemented from ITransportClient
-    virtual void handleTransportCanRead();
+    void handleTransportCanRead() override;
 
     bool isFinished() const;
     bool isAuthenticated() const;

@@ -34,7 +34,7 @@ class IpServer : public IServer
 {
 public:
     IpServer(const ConnectAddress &ca);
-    ~IpServer();
+    ~IpServer() override;
 
     bool isListening() const override;
 

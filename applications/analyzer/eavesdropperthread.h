@@ -43,7 +43,7 @@ class EavesdropperThread : public QObject, public IMessageReceiver
 Q_OBJECT
 public:
     EavesdropperThread(EavesdropperModel *model);
-    ~EavesdropperThread();
+    ~EavesdropperThread() override;
 
     // reimplemented IMessageReceiver method
     void handleSpontaneousMessageReceived(Message message) override;

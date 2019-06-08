@@ -83,7 +83,7 @@ public:
 
     MessagePrivate(Message *parent);
     MessagePrivate(const MessagePrivate &other, Message *parent);
-    ~MessagePrivate();
+    ~MessagePrivate() override;
 
     void handleTransportCanRead() override;
     void handleTransportCanWrite() override;

@@ -38,7 +38,7 @@ public:
     // Use an already open file descriptor
     IpSocket(FileDescriptor fd);
 
-    ~IpSocket();
+    ~IpSocket() override;
 
     // pure virtuals from ITransport
     uint32 write(chunk data) override;

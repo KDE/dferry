@@ -41,7 +41,7 @@ public:
     // An ITransport subclass must have a file descriptor after construction and it must not change
     // except to the invalid file descriptor when disconnected.
     ITransport(); // TODO event dispatcher as constructor argument?
-    virtual ~ITransport();
+    ~ITransport() override;
 
     // usually, the maximum sensible number of listeners is two: one for reading and one for writing.
     // avoiding (independent) readers and writers blocking each other is good for IO efficiency.

@@ -39,7 +39,7 @@ class DFERRY_EXPORT CompletionFunc : public ICompletionListener
 {
 public:
     CompletionFunc(std::function<void(void *)> func) : m_func(func) {}
-    ~CompletionFunc() {}
+    ~CompletionFunc() override {}
     void handleCompletion(void *task) override { if (m_func) { m_func(task); } }
 
     std::function<void(void *)> m_func;
