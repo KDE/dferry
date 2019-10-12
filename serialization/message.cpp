@@ -126,6 +126,28 @@ VarHeaderStorage::~VarHeaderStorage()
     }
 }
 
+VarHeaderStorage &VarHeaderStorage::operator=(const VarHeaderStorage &other)
+{
+    // ### very suboptimal
+    for (int i = 0; i < Message::UnixFdsHeader + 1; i++) {
+        Message::VariableHeader vh = static_cast<Message::VariableHeader>(i);
+        if (other.hasHeader(vh)) {
+            if (isStringHeader(vh)) {
+                setStringHeader(vh, other.stringHeader(vh));
+            } else {
+                setIntHeader(vh, other.intHeader(vh));
+            }
+        } else {
+            if (isStringHeader(vh)) {
+                clearStringHeader(vh);
+            } else {
+                clearIntHeader(vh);
+            }
+        }
+    }
+    return *this;
+}
+
 bool VarHeaderStorage::hasHeader(Message::VariableHeader header) const
 {
     return m_headerPresenceBitmap & (1u << header);

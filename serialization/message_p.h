@@ -39,6 +39,7 @@ public:
     VarHeaderStorage();
     VarHeaderStorage(const VarHeaderStorage &other);
     ~VarHeaderStorage();
+    VarHeaderStorage &operator=(const VarHeaderStorage &other);
 
     bool hasHeader(Message::VariableHeader header) const;
 
