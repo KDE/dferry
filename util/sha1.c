@@ -200,7 +200,7 @@ uint8_t* sha1_resultHmac(sha1nfo *s) {
 
 /* self-test */
 
-#if SHA1TEST
+#ifdef SHA1TEST
 #include <stdio.h>
 
 uint8_t hmacKey1[]={
