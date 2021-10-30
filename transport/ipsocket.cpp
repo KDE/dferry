@@ -116,6 +116,10 @@ IpSocket::IpSocket(const ConnectAddress &ca)
 IpSocket::IpSocket(FileDescriptor fd)
    : m_fd(fd)
 {
+    if (!setNonBlocking(m_fd)) {
+        closeSocket(fd);
+        m_fd = -1;
+    }
 }
 
 IpSocket::~IpSocket()
