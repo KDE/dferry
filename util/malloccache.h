@@ -19,7 +19,7 @@ public:
     ~MallocCache()
     {
 #ifndef MALLOCCACHE_PASSTHROUGH
-        assert(m_blocksCached >= 0 && m_blocksCached <= blockCount);
+        assert(m_blocksCached <= blockCount);
         for (size_t i = 0; i < m_blocksCached; i++) {
             ::free(m_blocks[i]);
         }
@@ -29,7 +29,7 @@ public:
     void *allocate()
     {
 #ifndef MALLOCCACHE_PASSTHROUGH
-        assert(m_blocksCached >= 0 && m_blocksCached <= blockCount);
+        assert(m_blocksCached <= blockCount);
         if (m_blocksCached) {
             return m_blocks[--m_blocksCached];
         } else {
@@ -43,7 +43,7 @@ public:
     void free(void *allocation)
     {
 #ifndef MALLOCCACHE_PASSTHROUGH
-        assert(m_blocksCached >= 0 && m_blocksCached <= blockCount);
+        assert(m_blocksCached <= blockCount);
         if (m_blocksCached < blockCount) {
             m_blocks[m_blocksCached++] = allocation;
         } else {
