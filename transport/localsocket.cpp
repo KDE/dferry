@@ -101,7 +101,7 @@ IO::Result LocalSocket::write(chunk data)
     const uint32 initialLength = data.length;
 
     while (data.length > 0) {
-        ssize_t nbytes = send(m_fd, data.ptr, data.length, MSG_DONTWAIT);
+        ssize_t nbytes = send(m_fd, data.ptr, data.length, MSG_DONTWAIT | MSG_NOSIGNAL);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;

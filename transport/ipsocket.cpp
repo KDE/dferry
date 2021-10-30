@@ -68,6 +68,15 @@ static bool setNonBlocking(int fd)
     return true;
 }
 
+static int sendFlags()
+{
+#ifdef _WIN32
+    return 0;
+#else
+    return MSG_NOSIGNAL;
+#endif
+}
+
 static void closeSocket(int fd)
 {
 #ifdef _WIN32
@@ -150,7 +159,7 @@ IO::Result IpSocket::write(chunk a)
     const uint32 initialLength = a.length;
 
     while (a.length > 0) {
-        ssize_t nbytes = send(m_fd, reinterpret_cast<char *>(a.ptr), a.length, 0);
+        ssize_t nbytes = send(m_fd, reinterpret_cast<char *>(a.ptr), a.length, sendFlags());
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
