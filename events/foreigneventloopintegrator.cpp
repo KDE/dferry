@@ -74,13 +74,17 @@ void ForeignEventLoopIntegratorPrivate::interrupt(InterruptAction /* action */)
 void ForeignEventLoopIntegratorPrivate::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
 {
     if (!exiting) {
-        m_fds.emplace(fd, ioRw);
+        m_fds.emplace(fd, 0);
+        if (ioRw) {
+            setReadWriteInterest(fd, ioRw);
+        }
     }
 }
 
 void ForeignEventLoopIntegratorPrivate::removeFileDescriptor(FileDescriptor fd)
 {
     if (!exiting) {
+        setReadWriteInterest(fd, 0);
         m_fds.erase(fd);
     }
 }
