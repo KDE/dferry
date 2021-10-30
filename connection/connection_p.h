@@ -96,7 +96,7 @@ public:
     ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher);
     void close(Error withError);
 
-    // from IIOEventInterposer
+    // from IIOEventForwarder
     IO::Status handleIoReady(IO::RW rw) override;
 
     void startAuthentication();

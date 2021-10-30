@@ -39,7 +39,7 @@ class ServerPrivate : public IIoEventForwarder, public ICompletionListener
 public:
     ServerPrivate(EventDispatcher *dispatcher);
 
-    // IIOEventInterposer
+    // IIOEventForwarder
     IO::Status handleIoReady(IO::RW rw) override;
 
     // ICompletionListener
