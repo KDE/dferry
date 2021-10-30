@@ -46,6 +46,37 @@ typedef SSIZE_T ssize_t;
 
 #include <iostream>
 
+static bool setNonBlocking(int fd)
+{
+#ifdef _WIN32
+    unsigned long value = 1; // 0 blocking, != 0 non-blocking
+    if (ioctlsocket(fd, FIONBIO, &value) != NO_ERROR) {
+        return false;
+    }
+#else
+    // don't let forks inherit the file descriptor - that can cause confusion...
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+    // To be able to use the same send() and recv() calls as Windows, also set the non-blocking
+    // property on the socket descriptor here instead of passing MSG_DONTWAIT to send() and recv().
+    const int oldFlags = fcntl(fd, F_GETFL);
+    if (oldFlags == -1) {
+        return false;
+    }
+    fcntl(fd, F_SETFL, oldFlags | O_NONBLOCK);
+#endif
+    return true;
+}
+
+static void closeSocket(int fd)
+{
+#ifdef _WIN32
+    closesocket(fd);
+#else
+    ::close(fd);
+#endif
+}
+
 // TODO implement address family (IPv4 / IPv6) support
 IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
@@ -71,43 +102,14 @@ IpSocket::IpSocket(const ConnectAddress &ca)
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     bool ok = connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;
-
     // only make it non-blocking after connect() because Winsock returns
     // WSAEWOULDBLOCK when connecting a non-blocking socket
-#ifdef _WIN32
-    unsigned long value = 1; // 0 blocking, != 0 non-blocking
-    if (ioctlsocket(fd, FIONBIO, &value) != NO_ERROR) {
-        // something along the lines of... WS_ERROR_DEBUG(WSAGetLastError());
-        std::cerr << "IpSocket contruction failed C.\n";
-        closesocket(fd);
-        return;
-    }
-#else
-    // don't let forks inherit the file descriptor - that can cause confusion...
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-
-    // To be able to use the same send() and recv() calls as Windows, also set the non-blocking
-    // property on the socket descriptor here instead of passing MSG_DONTWAIT to send() and recv().
-    const int oldFlags = fcntl(fd, F_GETFL);
-    if (oldFlags == -1) {
-        ::close(fd);
-        std::cerr << "IpSocket contruction failed D.\n";
-        return;
-    }
-    fcntl(fd, F_SETFL, oldFlags & O_NONBLOCK);
-#endif
-
+    ok = ok && setNonBlocking(fd);
 
     if (ok) {
         m_fd = fd;
     } else {
-#ifdef _WIN32
-        std::cerr << "IpSocket contruction failed E. Error is " << WSAGetLastError() << ".\n";
-        closesocket(fd);
-#else
-        std::cerr << "IpSocket contruction failed E. Error is " << errno << ".\n";
-        ::close(fd);
-#endif
+        closeSocket(fd);
     }
 }
 
@@ -127,11 +129,7 @@ IpSocket::~IpSocket()
 void IpSocket::platformClose()
 {
     if (isValidFileDescriptor(m_fd)) {
-#ifdef _WIN32
-        closesocket(m_fd);
-#else
-        ::close(m_fd);
-#endif
+        closeSocket(m_fd);
         m_fd = InvalidFileDescriptor;
     }
 }
