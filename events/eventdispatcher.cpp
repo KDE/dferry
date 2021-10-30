@@ -71,17 +71,23 @@ EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
 
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
-    // Make a copy because removeIoListener() eventually mutates the container (removes the entry)
+    // removeIoListener is going to remove the current entry from m_ioListeners, so use this funny
+    // way to "iterate"...
+    for (auto it = m_ioListeners.cbegin(); it != m_ioListeners.cend(); it = m_ioListeners.cbegin())
     {
-        const std::unordered_map<FileDescriptor, IIoEventListener*> ioListeners = m_ioListeners;
-        for (const std::pair<FileDescriptor, IIoEventListener*> &fdListener : ioListeners) {
-            removeIoListener(fdListener.second);
+        const size_t sizeBefore = m_ioListeners.size();
+        removeIoListener(it->second);
+        if (m_ioListeners.size() == sizeBefore)
+        {
+            // this should never happen, however, avoid an infinite loop if it somehow does...
+            assert(false);
+            m_ioListeners.erase(it);
         }
     }
 
-    for (const std::pair<uint64 /* due */, Timer*> &dt : m_timers) {
-        dt.second->m_eventDispatcher = nullptr;
-        dt.second->m_isRunning = false;
+    for (auto it = m_timers.cbegin(); it != m_timers.cend(); ++it) {
+        it->second->m_eventDispatcher = nullptr;
+        it->second->m_isRunning = false;
     }
 
     if (!m_integrator) {
