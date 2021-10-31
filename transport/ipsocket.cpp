@@ -165,7 +165,7 @@ IO::Result IpSocket::write(chunk a)
                 continue;
             }
             // see EAGAIN comment in LocalSocket::read()
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
             close();
