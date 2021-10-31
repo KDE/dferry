@@ -186,23 +186,32 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
         d->m_clientConnectedHandler = new ClientConnectedHandler;
         ConnectAddress dummyClientAddress;
         IServer *const is = IServer::create(ca, &dummyClientAddress);
-        d->addIoListener(is);
-        is->setNewConnectionListener(d->m_clientConnectedHandler);
-        d->m_clientConnectedHandler->m_server = is;
-        d->m_clientConnectedHandler->m_parent = d;
+        if (is && is->isListening()) {
+            d->addIoListener(is);
+            is->setNewConnectionListener(d->m_clientConnectedHandler);
+            d->m_clientConnectedHandler->m_server = is;
+            d->m_clientConnectedHandler->m_parent = d;
 
-        stateChanger.setNewState(ConnectionPrivate::ServerWaitingForClient);
+            stateChanger.setNewState(ConnectionPrivate::ServerWaitingForClient);
+        } else {
+            delete is;
+        }
     } else {
         d->m_transport = ITransport::create(ca);
-        d->addIoListener(d->m_transport);
-        if (ca.role() == ConnectAddress::Role::BusClient) {
-            d->startAuthentication();
-            stateChanger.setNewState(ConnectionPrivate::Authenticating);
+        if (d->m_transport && d->m_transport->isOpen()) {
+            d->addIoListener(d->m_transport);
+            if (ca.role() == ConnectAddress::Role::BusClient) {
+                d->startAuthentication();
+                stateChanger.setNewState(ConnectionPrivate::Authenticating);
+            } else {
+                assert(ca.role() == ConnectAddress::Role::PeerClient);
+                // get ready to receive messages right away
+                d->receiveNextMessage();
+                stateChanger.setNewState(ConnectionPrivate::Connected);
+            }
         } else {
-            assert(ca.role() == ConnectAddress::Role::PeerClient);
-            // get ready to receive messages right away
-            d->receiveNextMessage();
-            stateChanger.setNewState(ConnectionPrivate::Connected);
+            delete d->m_transport;
+            d->m_transport = nullptr;
         }
     }
 }

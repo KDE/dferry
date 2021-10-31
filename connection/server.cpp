@@ -90,10 +90,14 @@ Server::Server(EventDispatcher *dispatcher, const ConnectAddress &listenAddress)
     d->server = this;
     d->newConnectionListener = nullptr;
     d->transportServer = IServer::create(listenAddress, &d->concreteAddress);
-    if (d->transportServer) {
+    if (d->transportServer && d->transportServer->isListening()) {
         d->addIoListener(d->transportServer);
         d->transportServer->setNewConnectionListener(d);
+    } else {
+        delete d->transportServer;
+        d->transportServer = nullptr;
     }
+
 }
 
 Server::~Server()
