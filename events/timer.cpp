@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <limits>
 
 Timer::Timer(EventDispatcher *dispatcher)
    : m_eventDispatcher(dispatcher),
@@ -39,7 +40,8 @@ Timer::Timer(EventDispatcher *dispatcher)
      m_interval(0),
      m_isRunning(false),
      m_isRepeating(true),
-     m_tag(0)
+     m_nextDueTime(0),
+     m_serial(0)
 {
 }
 
@@ -129,8 +131,11 @@ int Timer::remainingTime() const
     if (!m_isRunning) {
         return -1;
     }
-    uint64 currentTime = PlatformTime::monotonicMsecs();
-    return std::max(int((m_tag >> 10) - currentTime), 0);
+    const uint64 currentTime = PlatformTime::monotonicMsecs();
+    if (currentTime > m_nextDueTime) {
+        return 0;
+    }
+    return std::min(uint64(std::numeric_limits<int>::max()), m_nextDueTime - currentTime);
 }
 
 void Timer::trigger()

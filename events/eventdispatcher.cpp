@@ -202,8 +202,8 @@ uint EventDispatcherPrivate::nextTimerSerial()
 
 void EventDispatcherPrivate::addTimer(Timer *timer)
 {
-    if (timer->m_tag == 0) {
-        timer->m_tag = nextTimerSerial();
+    if (timer->tag() == 0) {
+        timer->m_serial = nextTimerSerial();
     }
 
     uint64 dueTime = PlatformTime::monotonicMsecs() + uint64(timer->m_interval);
@@ -231,15 +231,15 @@ void EventDispatcherPrivate::addTimer(Timer *timer)
     if (m_triggerTime && dueTime == m_triggerTime) {
         dueTime = m_triggerTime - 1;
     }
-    timer->m_tag = (dueTime << 10) + (timer->m_tag & s_maxTimerSerial);
+    timer->m_nextDueTime = dueTime;
 
-    m_timers.emplace(timer->m_tag, timer);
+    m_timers.emplace(timer->tag(), timer);
     maybeSetTimeoutForIntegrator();
 }
 
 void EventDispatcherPrivate::removeTimer(Timer *timer)
 {
-    assert(timer->m_tag != 0);
+    assert(timer->tag() != 0);
 
     // We cannot toggle m_isTriggeredTimerPendingRemoval back and forth, we can only set it once.
     // Because after the timer has been removed once, the next time we see the same pointer value,
@@ -260,7 +260,7 @@ void EventDispatcherPrivate::removeTimer(Timer *timer)
         removingTriggeredTimer = true;
     }
 
-    auto iterRange = m_timers.equal_range(timer->m_tag);
+    auto iterRange = m_timers.equal_range(timer->tag());
     for (; iterRange.first != iterRange.second; ++iterRange.first) {
         if (iterRange.first->second == timer) {
             if (!removingTriggeredTimer) {
@@ -317,10 +317,9 @@ void EventDispatcherPrivate::triggerDueTimers()
                 // iterator position. It's also good for performance. Win-win!
                 ++it;
             } else {
-                timer->m_tag = ((m_triggerTime + uint64(timer->m_interval)) << 10) +
-                               (timer->m_tag & s_maxTimerSerial);
+                timer->m_nextDueTime = m_triggerTime + timer->m_interval;
                 m_timers.erase(it++);
-                m_timers.emplace(timer->m_tag, timer);
+                m_timers.emplace(timer->tag(), timer);
             }
         } else {
             m_timers.erase(it++);

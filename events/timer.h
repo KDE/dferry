@@ -68,7 +68,9 @@ private:
     bool m_isRunning : 1;
     bool m_isRepeating : 1;
     uint32 m_reserved : sizeof(uint32) - 2;
-    uint64 m_tag;
+    inline uint64 tag() { return (m_nextDueTime << 10) + m_serial; }
+    uint64 m_nextDueTime : 54;
+    uint32 m_serial : 10;
 };
 
 #endif // TIMER_H
