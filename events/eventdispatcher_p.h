@@ -56,6 +56,7 @@ public:
 
     int timeToFirstDueTimer() const;
     uint nextTimerSerial();
+    void tryCompactTimerSerials();
     void triggerDueTimers();
 
 protected:
@@ -93,7 +94,7 @@ public:
     // in the correct order, make sure that testSerialWraparound() still tests the ordering technique where
     // it's likely to break.
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set
-    uint m_lastTimerSerial = s_maxTimerSerial;
+    uint m_currentTimerSerial = 0;
     // the highest 54 bits in "due" encode due time, the lowest 10 bits act like a serial number to reduce
     // (not eliminate - the serial eventually wraps around) collisions of timers with the same timeout
     // (this is not expressed as a struct/class to avoid compiler pessimization in the multimap code)

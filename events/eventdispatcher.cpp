@@ -178,6 +178,7 @@ int EventDispatcherPrivate::timeToFirstDueTimer() const
     }
     if (it->second == nullptr) {
         // this is the dead entry of the currently triggered, and meanwhile removed timer
+        // ### when is this entry removed?! Do we ever do that??
         if (++it == m_timers.cend()) {
             return -1;
         }
@@ -194,17 +195,44 @@ int EventDispatcherPrivate::timeToFirstDueTimer() const
 
 uint EventDispatcherPrivate::nextTimerSerial()
 {
-    if (++m_lastTimerSerial > s_maxTimerSerial) {
-        m_lastTimerSerial = 0;
+    if (m_currentTimerSerial > s_maxTimerSerial) {
+        tryCompactTimerSerials();
     }
-    return m_lastTimerSerial;
+    return m_currentTimerSerial++;
+}
+
+void EventDispatcherPrivate::tryCompactTimerSerials()
+{
+    // don't bother trying to compact when there won't be much room anyway (we are probably heading for an
+    // unavoidable overflow / duplicates)
+    const size_t timersCount = m_timers.size();
+    if (timersCount >= s_maxTimerSerial * 0.9) {
+        std::cerr << timersCount << "are too many active timers! Timers timing out at the same time are "
+                                    "not guaranteed to trigger in a predictable order anymore.\n";
+        m_currentTimerSerial = 0;
+        return;
+    }
+
+    auto it = m_timers.begin();
+    for (uint newSerial = 0; newSerial < timersCount; newSerial++) {
+        Timer *const timer = it->second;
+        // ### not sure about that one... does anything else remove such entries? It looks like we leave
+        // them to rot. That shouldn't be like that.
+        if (timer == nullptr) {
+            it = m_timers.erase(it);
+            continue;
+        }
+        timer->m_serial = newSerial;
+        it = m_timers.erase(it);
+        m_timers.emplace(timer->tag(), timer);
+    }
+
+    m_currentTimerSerial = timersCount;
 }
 
 void EventDispatcherPrivate::addTimer(Timer *timer)
 {
-    if (timer->tag() == 0) {
-        timer->m_serial = nextTimerSerial();
-    }
+    timer->m_serial = nextTimerSerial();
 
     uint64 dueTime = PlatformTime::monotonicMsecs() + uint64(timer->m_interval);
 
