@@ -148,7 +148,7 @@ public:
         if (insideVariant()) {
             m_queuedData.push_back(QueuedDataInfo(alignment, 0));
         }
-        zeroPad(m_data, alignment, &m_dataPosition);
+        m_dataPosition = zeroPad(m_data, alignment, m_dataPosition);
     }
 
     uint32 m_dataElementsCountBeforeNilArray;
@@ -361,7 +361,7 @@ uint32 Arguments::Writer::currentSignaturePosition() const
 void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
 {
     d->reserveData(d->m_dataPosition + (alignAndSize << 1), &m_state);
-    zeroPad(d->m_data, alignAndSize, &d->m_dataPosition);
+    d->m_dataPosition = zeroPad(d->m_data, alignAndSize, d->m_dataPosition);
 
     switch(type) {
     case Boolean: {
@@ -421,9 +421,9 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
                  Error::InvalidSignature);
     }
 
-    d->reserveData(d->m_dataPosition + (lengthPrefixSize << 1) + m_u.String.length + 1, &m_state);
+    d->reserveData(d->m_dataPosition + 16 + m_u.String.length, &m_state);
 
-    zeroPad(d->m_data, lengthPrefixSize, &d->m_dataPosition);
+    d->m_dataPosition = zeroPad(d->m_data, lengthPrefixSize, d->m_dataPosition);
 
     if (lengthPrefixSize == 1) {
         d->m_data[d->m_dataPosition] = m_u.String.length;
@@ -691,11 +691,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
 
-        d->reserveData(d->m_dataPosition + (sizeof(uint32) << 1), &m_state);
+        d->reserveData(d->m_dataPosition + 16, &m_state);
         if (m_state == InvalidData) {
             break; // should be excessive length error from reserveData - do not unset error state
         }
-        zeroPad(d->m_data, sizeof(uint32), &d->m_dataPosition);
+        d->m_dataPosition = zeroPad(d->m_data, sizeof(uint32), d->m_dataPosition);
         basic::writeUint32(d->m_data + d->m_dataPosition, 0);
         aggregateInfo.arr.lengthFieldPosition = d->m_dataPosition;
         d->m_dataPosition += sizeof(uint32);
@@ -1062,13 +1062,13 @@ void Arguments::Writer::flushQueuedData()
         switch (ei.size) {
         case 0: {
                 inPos = align(inPos, ei.alignment());
-                zeroPad(buffer, ei.alignment(), &outPos);
+                outPos = zeroPad(buffer, ei.alignment(), outPos);
             }
             break;
         default: {
                 assert(ei.size && ei.size <= Private::QueuedDataInfo::LargestSize);
                 inPos = align(inPos, ei.alignment());
-                zeroPad(buffer, ei.alignment(), &outPos);
+                outPos = zeroPad(buffer, ei.alignment(), outPos);
                 // copy data chunk
                 memmove(buffer + outPos, buffer + inPos, ei.size);
                 inPos += ei.size;
@@ -1079,7 +1079,7 @@ void Arguments::Writer::flushQueuedData()
                 //   start of an array
                 // alignment padding before length field
                 inPos = align(inPos, ei.alignment());
-                zeroPad(buffer, ei.alignment(), &outPos);
+                outPos = zeroPad(buffer, ei.alignment(), outPos);
                 // reserve length field
                 ArrayLengthField al;
                 al.lengthFieldPosition = outPos;
@@ -1089,7 +1089,7 @@ void Arguments::Writer::flushQueuedData()
                 assert(i + 1 < d->m_queuedData.size());
                 const uint32 contentsAlignment = d->m_queuedData[i + 1].alignment();
                 inPos = align(inPos, contentsAlignment);
-                zeroPad(buffer, contentsAlignment, &outPos);
+                outPos = zeroPad(buffer, contentsAlignment, outPos);
                 // array data starts at the first array element position after alignment
                 al.dataStartPosition = outPos;
                 lengthFieldStack.push_back(al);
