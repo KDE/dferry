@@ -884,7 +884,7 @@ void Arguments::Writer::endVariant()
 
 void Arguments::Writer::writeVariantForMessageHeader(char sig)
 {
-    // Note: the sugnature we're vorking with there is a(yv)
+    // Note: the signature we're working with there is a(yv)
     // If we know that and can trust the client, this can be very easy and fast...
     d->m_signature.ptr[3] = 'v';
     d->m_signature.length = 4;
