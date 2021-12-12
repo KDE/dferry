@@ -330,6 +330,8 @@ void EavesdropperModel::clearInternal()
     m_messages.clear();
 }
 
+// TODO make the header 32 (or 16) bytes long in the next version - right now, the alignment doesn't
+// make a big difference because message data is copied at least once, but still - would be cleaner.
 static const char *fileHeader = "Dferry binary DBus dump v0001";
 
 void EavesdropperModel::saveToFile(const QString &path)
@@ -380,12 +382,15 @@ bool EavesdropperModel::loadFromFile(const QString &path)
         }
 
         // serialized message just like it would appear on the bus
-        std::vector<byte> msgData(messageDataSize, 0);
-        if (file.read(reinterpret_cast<char*>(&msgData[0]), messageDataSize) != messageDataSize) {
+        chunk msgBuf;
+        msgBuf.length = messageDataSize;
+        msgBuf.ptr = reinterpret_cast<byte *>(malloc(msgBuf.length));
+        if (file.read(reinterpret_cast<char*>(msgBuf.ptr), messageDataSize) != messageDataSize) {
             return false;
         }
         record.message = new Message();
-        record.message->load(msgData);
+        record.message->deserializeAndTake(msgBuf);
+
         loadedRecords.push_back(record);
     }
 
