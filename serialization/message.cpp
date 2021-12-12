@@ -1016,6 +1016,7 @@ void Message::load(const std::vector<byte> &data)
     chunk buf;
     buf.length = data.size();
     buf.ptr = reinterpret_cast<byte *>(malloc(buf.length));
+    memcpy(buf.ptr, &data[0], buf.length);
 
     deserializeAndTake(buf);
 }
