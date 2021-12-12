@@ -46,7 +46,7 @@
 #endif
 
 #ifdef BIGENDIAN
-static const byte s_thisMachineEndianness = 'b';
+static const byte s_thisMachineEndianness = 'B';
 #else
 static const byte s_thisMachineEndianness = 'l';
 #endif
