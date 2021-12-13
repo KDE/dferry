@@ -151,8 +151,6 @@ IO::Status ConnectionPrivate::handleIoReady(IO::RW rw)
 
     if (status != IO::Status::OK) {
         if (status != IO::Status::PayloadError) {
-            ConnectionStateChanger stateChanger(this);
-            stateChanger.setNewState(ConnectionPrivate::Unconnected);
             close(Error::RemoteDisconnect);
         } else {
             assert(!m_sendQueue.empty());
