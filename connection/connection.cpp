@@ -149,9 +149,9 @@ IO::Status ConnectionPrivate::handleIoReady(IO::RW rw)
         status = IO::Status::InternalError;
     }
 
-    ConnectionStateChanger stateChanger(this);
     if (status != IO::Status::OK) {
         if (status != IO::Status::PayloadError) {
+            ConnectionStateChanger stateChanger(this);
             stateChanger.setNewState(ConnectionPrivate::Unconnected);
             close(Error::RemoteDisconnect);
         } else {
@@ -632,10 +632,9 @@ void Connection::setConnectionStateListener(IConnectionStateListener *listener)
 
 void ConnectionPrivate::handleCompletion(void *task)
 {
-    ConnectionStateChanger stateChanger(this);
-
     switch (m_state) {
     case Authenticating: {
+        ConnectionStateChanger stateChanger(this);
         assert(task == m_authClient);
         if (!m_authClient->isAuthenticated()) {
             stateChanger.setNewState(Unconnected);
