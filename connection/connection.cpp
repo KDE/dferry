@@ -927,8 +927,7 @@ void ConnectionPrivate::processEvent(Event *evt)
         // We get this when the unique name became available after we were linked up with the main thread
         m_uniqueName = static_cast<UniqueNameReceivedEvent *>(evt)->uniqueName;
         if (m_state == AwaitingUniqueName) {
-            ConnectionStateChanger stateChanger(this);
-            stateChanger.setNewState(Connected);
+            ConnectionStateChanger stateChanger(this, Connected);
         }
         break;
     }
