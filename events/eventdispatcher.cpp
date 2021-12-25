@@ -366,11 +366,11 @@ void EventDispatcherPrivate::triggerDueTimers()
                 ++it;
             } else {
                 timer->m_nextDueTime = m_triggerTime + timer->m_interval;
-                m_timers.erase(it++);
+                it = m_timers.erase(it);
                 m_timers.emplace(timer->tag(), timer);
             }
         } else {
-            m_timers.erase(it++);
+            it = m_timers.erase(it);
         }
     }
     m_triggerTime = 0;
