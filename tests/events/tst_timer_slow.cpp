@@ -438,6 +438,47 @@ static void testReEnableNonRepeatingInTrigger()
     TEST(fastCounter >= 200); // ### hopefully low enough even for really slow machines and / or valgrind
 }
 
+static void testSerialWraparound()
+{
+    EventDispatcher dispatcher;
+
+    constexpr int timersCount = 17;
+    Timer* timers[timersCount];
+    int lastTriggeredTimer;
+
+    CompletionFunc orderCheck([&timers, &lastTriggeredTimer] (void *task) {
+        int timerIndex = 0;
+        for (; timerIndex < timersCount; timerIndex++) {
+            if (timers[timerIndex] == task) {
+                break;
+            }
+        }
+        TEST(timerIndex < timersCount);
+        TEST(++lastTriggeredTimer == timerIndex);
+    });
+
+    // Glassbox testing: we know that the maximum timer serials is 1023, so testing 10k * 17 timers
+    // is plenty. This should be adapted if / when the implementation changes.
+    for (int i = 0; i < 10000; i++) {
+        for (int j = 0; j < 17; j++) {
+            timers[j] = new Timer(&dispatcher);
+            timers[j]->setCompletionListener(&orderCheck);
+            timers[j]->setRunning(true);
+        }
+
+        lastTriggeredTimer = -1;
+
+        dispatcher.poll();
+
+        TEST(lastTriggeredTimer == timersCount - 1);
+
+        for (int j = 0; j < 17; j++) {
+            delete timers[j];
+            timers[j] = nullptr;
+        }
+    }
+}
+
 int main(int, char *[])
 {
     testBasic();
@@ -447,5 +488,6 @@ int main(int, char *[])
     testReAddInTrigger();
     testTriggerOnlyOncePerDispatch();
     testReEnableNonRepeatingInTrigger();
+    testSerialWraparound();
     std::cout << "Passed!\n";
 }

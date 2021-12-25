@@ -89,6 +89,9 @@ public:
     ForeignEventLoopIntegrator *m_integrator = nullptr;
     std::unordered_map<FileDescriptor, IIoEventListener*> m_ioListeners;
 
+    // Attention! When changing s_maxTimerSerial, or the general approach to ensuring that timers time out
+    // in the correct order, make sure that testSerialWraparound() still tests the ordering technique where
+    // it's likely to break.
     static const int s_maxTimerSerial = 0x3ff; // 10 bits set
     uint m_lastTimerSerial = s_maxTimerSerial;
     // the highest 54 bits in "due" encode due time, the lowest 10 bits act like a serial number to reduce
