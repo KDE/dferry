@@ -159,17 +159,21 @@ public:
     Timer m_ttl;
 };
 
-static void testDeleteInTrigger()
+static void testDeleteOrDisableInTrigger(bool deleteTimer)
 {
     EventDispatcher dispatcher;
 
     bool alreadyCalled = false;
-    CompletionFunc deleter([&alreadyCalled] (void *task)
+    CompletionFunc deleter([&alreadyCalled, deleteTimer] (void *task)
     {
         TEST(!alreadyCalled);
         alreadyCalled = true;
         Timer *timer = reinterpret_cast<Timer *>(task);
-        delete timer;
+        if (deleteTimer) {
+            delete timer;
+        } else {
+            timer->setRunning(false);
+        }
     });
 
     Timer *t1 = new Timer(&dispatcher);
@@ -180,6 +184,20 @@ static void testDeleteInTrigger()
 
     while (dispatcher.poll()) {
     }
+
+    if (!deleteTimer) {
+        delete t1;
+    }
+}
+
+static void testDeleteInTrigger()
+{
+    testDeleteOrDisableInTrigger(true);
+}
+
+static void testDisableInTrigger()
+{
+    testDeleteOrDisableInTrigger(false);
 }
 
 static void testAddInTrigger()
@@ -455,6 +473,12 @@ static void testSerialWraparound()
         }
         TEST(timerIndex < timersCount);
         TEST(++lastTriggeredTimer == timerIndex);
+        if (timerIndex % 4 == 0) {
+            delete timers[timerIndex];
+            timers[timerIndex] = nullptr;
+        } else if (timerIndex % 2 == 0) {
+            timers[timerIndex]->setRunning(false);
+        }
     });
 
     // Glassbox testing: we know that the maximum timer serials is 1023, so testing 10k * 17 timers
@@ -484,6 +508,7 @@ int main(int, char *[])
     testBasic();
     testAccuracy();
     testDeleteInTrigger();
+    testDisableInTrigger();
     testAddInTrigger();
     testReAddInTrigger();
     testTriggerOnlyOncePerDispatch();

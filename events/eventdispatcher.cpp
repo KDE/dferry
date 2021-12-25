@@ -173,15 +173,13 @@ void EventDispatcherPrivate::notifyListenerForIo(FileDescriptor fd, IO::RW ioRw)
 int EventDispatcherPrivate::timeToFirstDueTimer() const
 {
     std::multimap<uint64, Timer*>::const_iterator it = m_timers.cbegin();
+    if (it != m_timers.cend() && it->second == nullptr) {
+        // this is the dead entry of the currently triggered, currently being deleted Timer
+        ++it;
+    }
+
     if (it == m_timers.cend()) {
         return -1;
-    }
-    if (it->second == nullptr) {
-        // this is the dead entry of the currently triggered, and meanwhile removed timer
-        // ### when is this entry removed?! Do we ever do that??
-        if (++it == m_timers.cend()) {
-            return -1;
-        }
     }
 
     uint64 nextTimeout = it->first >> 10;
@@ -213,20 +211,39 @@ void EventDispatcherPrivate::tryCompactTimerSerials()
         return;
     }
 
+    bool pickNextTimer = false;
+    int numDeadEntries = 0;
     auto it = m_timers.begin();
     for (uint newSerial = 0; newSerial < timersCount; newSerial++) {
         Timer *const timer = it->second;
-        // ### not sure about that one... does anything else remove such entries? It looks like we leave
-        // them to rot. That shouldn't be like that.
-        if (timer == nullptr) {
-            it = m_timers.erase(it);
-            continue;
-        }
-        timer->m_serial = newSerial;
         it = m_timers.erase(it);
-        m_timers.emplace(timer->tag(), timer);
+        if (!pickNextTimer) {
+            if (timer && timer->m_isRunning) {
+                timer->m_serial = newSerial;
+                m_timers.emplace(timer->tag(), timer);
+            } else {
+                // Drop this timer (it was removed while triggered) and use the serial for the next timer.
+                // In that situation, we are being called from inside that timer's callback. Prepare for
+                // iteration in triggerDueTimers() to continue after the current timer.
+                newSerial--;
+                m_adjustedIteratorOfNextTimer = m_timers.end();
+                numDeadEntries++;
+                pickNextTimer = true;
+            }
+        } else {
+            // Only one timer can be currently triggered, which produces these "dead" map entries. Any not
+            // currently triggered timers that are removed simply don't occur in the map anymore.
+            assert(timer);
+            assert(timer->m_isRunning);
+            timer->m_serial = newSerial;
+            m_adjustedIteratorOfNextTimer = m_timers.emplace(timer->tag(), timer);
+            pickNextTimer = false;
+        }
     }
 
+    assert(numDeadEntries <= 1);
+
+    m_serialsCompacted = true;
     m_currentTimerSerial = timersCount;
 }
 
@@ -280,21 +297,16 @@ void EventDispatcherPrivate::removeTimer(Timer *timer)
     // On the other hand, not special-casing the currently triggered timer after it has been marked
     // for removal once is fine.  In case it  is re-added, it gets a new map entry in addTimer()
     // and from then on it can be handled like any other timer.
-    bool removingTriggeredTimer = false;
-    if (!m_isTriggeredTimerPendingRemoval && timer == m_triggeredTimer) {
-        // using this variable, we can avoid dereferencing m_triggeredTimer should it have been
-        // deleted while triggered
-        m_isTriggeredTimerPendingRemoval = true;
-        removingTriggeredTimer = true;
-    }
 
     auto iterRange = m_timers.equal_range(timer->tag());
     for (; iterRange.first != iterRange.second; ++iterRange.first) {
         if (iterRange.first->second == timer) {
-            if (!removingTriggeredTimer) {
+            if (!timer->m_reentrancyGuard) {
                 m_timers.erase(iterRange.first);
             } else {
-                // mark it as dead for query methods such as timeToFirstDueTimer()
+                // This means that this is an "emergency remove" of a timer being deleted while in its
+                // callback. Mark it as dead so we won't dereference it. The map entry will be erased
+                // in triggerDueTimers() shortly after the callback returns.
                 iterRange.first->second = nullptr;
             }
             maybeSetTimeoutForIntegrator();
@@ -314,6 +326,7 @@ void EventDispatcherPrivate::maybeSetTimeoutForIntegrator()
 void EventDispatcherPrivate::triggerDueTimers()
 {
     m_triggerTime = PlatformTime::monotonicMsecs();
+
     for (auto it = m_timers.begin(); it != m_timers.end();) {
         const uint64 timerTimeout = (it->first >> 10);
         if (timerTimeout > m_triggerTime) {
@@ -324,16 +337,23 @@ void EventDispatcherPrivate::triggerDueTimers()
         // doesn't invalidate it) and blocking changes to the timer behind that iterator
         // (so we don't mess with its data should it have been deleted outright in the callback)
 
-        m_triggeredTimer = it->second;
-        Timer *const timer = m_triggeredTimer;
-        m_isTriggeredTimerPendingRemoval = false;
+        m_serialsCompacted = false;
+
+        Timer *timer = it->second;
+        assert(timer->m_isRunning);
 
         // invariant:
-        // m_triggeredTimer.dueTime <= m_triggerTime <= currentTime(here) <= <timerAddedInTrigger>.dueTime
+        // timer.dueTime <= m_triggerTime <= currentTime(here) <= <timerAddedInTrigger>.dueTime
         timer->trigger();
 
-        m_triggeredTimer = nullptr;
-        if (!m_isTriggeredTimerPendingRemoval && timer->m_isRunning) {
+        if (m_serialsCompacted)
+        {
+            it = m_adjustedIteratorOfNextTimer;
+            continue;
+        }
+
+        timer = it->second; // reload, removeTimer() may set it to nullptr
+        if (timer && timer->m_isRunning) {
             // ### we are rescheduling timers based on triggerTime even though real time can be
             // much later - is this the desired behavior? I think so...
             if (timer->m_interval == 0) {

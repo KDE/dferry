@@ -101,10 +101,9 @@ public:
     std::multimap<uint64 /* due */, Timer*> m_timers;
     // for logic to prevent executing a timer in the dispatch run it was added
     uint64 m_triggerTime = 0;
-    // helpers that help to avoid touching the currently triggered timer after it has been deleted in
-    // a client called from trigger()
-    Timer *m_triggeredTimer = nullptr;
-    bool m_isTriggeredTimerPendingRemoval = false;
+    bool m_serialsCompacted = false;
+    decltype(m_timers)::iterator m_adjustedIteratorOfNextTimer;
+
     // for inter thread event delivery to Connection
     ConnectionPrivate *m_connectionToNotify = nullptr;
 

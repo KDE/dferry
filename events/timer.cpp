@@ -47,12 +47,15 @@ Timer::Timer(EventDispatcher *dispatcher)
 
 Timer::~Timer()
 {
+    // Rationale for "|| m_reentrancyGuard": While triggered, we must be removed from the event
+    // dispatcher's timer map before it may dereference the then dangling pointer to this Timer.
+    if (m_isRunning || m_reentrancyGuard) {
+        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
+    }
+
     if (m_reentrancyGuard) {
         *m_reentrancyGuard = false;
         m_reentrancyGuard = nullptr;
-    }
-    if (m_isRunning) {
-        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
     }
 }
 
@@ -62,13 +65,14 @@ void Timer::start(int msec)
         std::cerr << "Timer::start(): interval cannot be negative!\n";
     }
     // restart if already running
-    EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-    if (m_isRunning) {
-        ep->removeTimer(this);
+    if (!m_reentrancyGuard && m_isRunning) {
+        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
     }
     m_interval = msec;
     m_isRunning = true;
-    ep->addTimer(this);
+    if (!m_reentrancyGuard) {
+        EventDispatcherPrivate::get(m_eventDispatcher)->addTimer(this);
+    }
 }
 
 void Timer::stop()
@@ -150,8 +154,8 @@ void Timer::trigger()
         m_isRunning = false;
     }
 
-    // ### Reentrancy is not *currently* an issue, but when we have stuff like sub event loops,
-    // we need this. Also in similar event-driven classes - here is how I think it should be done...
+    // Changes to this timer while in the callback require special treatment. m_reentrancyGuard
+    // helps provide that.
     bool alive = true;
     m_reentrancyGuard = &alive;
     if (m_completionListener) {
