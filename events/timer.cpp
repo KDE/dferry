@@ -82,11 +82,13 @@ void Timer::setRunning(bool run)
         return;
     }
     m_isRunning = run;
-    EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
-    if (run) {
-        ep->addTimer(this);
-    } else {
-        ep->removeTimer(this);
+    if (!m_reentrancyGuard) {
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        if (run) {
+            ep->addTimer(this);
+        } else {
+            ep->removeTimer(this);
+        }
     }
 }
 
@@ -104,7 +106,7 @@ void Timer::setInterval(int msec)
         return;
     }
     m_interval = msec;
-    if (m_isRunning) {
+    if (m_isRunning && !m_reentrancyGuard) {
         EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
         ep->removeTimer(this);
         ep->addTimer(this);
