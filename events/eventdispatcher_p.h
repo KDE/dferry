@@ -66,7 +66,6 @@ protected:
     void updateIoInterestInternal(IIoEventListener *iol, uint32 ioRw) override;
 
 public:
-
     bool addIoEventListener(IIoEventListener *iol);
     bool removeIoEventListener(IIoEventListener *iol);
     void setReadWriteInterest(IIoEventListener *iol, bool read, bool write);
@@ -75,6 +74,7 @@ public:
     void notifyListenerForIo(FileDescriptor fd, IO::RW ioRw);
     // for Timer
     friend class Timer;
+    void printTimerMap() const;
     void addTimer(Timer *timer);
     void removeTimer(Timer *timer);
     // for ForeignEventLoopIntegrator (calls into it, not called from it)

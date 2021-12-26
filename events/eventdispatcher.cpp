@@ -247,57 +247,53 @@ void EventDispatcherPrivate::tryCompactTimerSerials()
     m_currentTimerSerial = timersCount;
 }
 
+void EventDispatcherPrivate::printTimerMap() const
+{
+    for (auto it = m_timers.cbegin(); it != m_timers.cend(); ++it) {
+        std::cerr << "tag: " << it->first
+                  << " dueTime: " << (it->first >> 10) << " serial: " << (it->first & 0x3ff)
+                  << " pointer: " << it->second << '\n';
+    }
+}
+
 void EventDispatcherPrivate::addTimer(Timer *timer)
 {
     timer->m_serial = nextTimerSerial();
 
-    uint64 dueTime = PlatformTime::monotonicMsecs() + uint64(timer->m_interval);
 
-    // ### When a timer is added from a timer callback, make sure it only runs in the *next*
-    //     iteration of the event loop. Otherwise, endless cascades of timers triggering, adding
-    //     more timers etc could occur without ever returning from triggerDueTimers().
-    //     For the condition for this hazard, see "invariant:" in triggerDueTimers(): the only way
-    //     the new timer could trigger in this event loop iteration is when:
-    //
-    //     m_triggerTime == currentTime(before call to trigger()) == timerAddedInTrigger().dueTime
-    //
-    //     note: m_triggeredTimer.dueTime < m_triggerTime is well possible; if ==, the additional
-    //           condition applies that timerAddedInTrigger().serial >= m_triggeredTimer.serial;
-    //           we ignore this and do it conservatively and less complicated.
-    //           (the additional condition comes from serials as keys and that each "slot" in multimap with
-    //           the same keys is a list where new entries are back-inserted)
-    //
-    //     As a countermeasure, tweak the new timer's timeout, putting it well before m_triggeredTimer's
-    //     iterator position in the multimap... because the new timer must have zero timeout in order for
-    //     its due time to occur within this triggerDueTimers() iteration, it is supposed to trigger ASAP
-    //     anyway. This disturbs the order of triggering a little compared to the usual, but all
-    //     timeouts are properly respected - the next event loop iteration is guaranteed to trigger
-    //     timers at times strictly greater-equal than this iteration (time goes only one way) ;)
-    if (m_triggerTime && dueTime == m_triggerTime) {
-        dueTime = m_triggerTime - 1;
+    uint64 dueTime;
+    if (timer->m_interval != 0 || !m_triggerTime) {
+        //std::cerr << "addTimer regular path " << timer << '\n';
+        dueTime = PlatformTime::monotonicMsecs() + uint64(timer->m_interval);
+    } else {
+        // A timer is added from a timer callback - make sure it only runs in the *next* iteration
+        // of the event loop. Timer users expect a timer to run at the earliest when the event loop
+        // runs *again*, not in this iteration.
+        //std::cerr << "addTimer staging path " << timer << '\n';
+        dueTime = 0;
     }
+
     timer->m_nextDueTime = dueTime;
 
+    //std::cerr << "  addTimer before:\n";
+    //printTimerMap();
     m_timers.emplace(timer->tag(), timer);
     maybeSetTimeoutForIntegrator();
+    //std::cerr << "  addTimer after:\n";
+    //printTimerMap();
 }
 
 void EventDispatcherPrivate::removeTimer(Timer *timer)
 {
     assert(timer->tag() != 0);
 
-    // We cannot toggle m_isTriggeredTimerPendingRemoval back and forth, we can only set it once.
-    // Because after the timer has been removed once, the next time we see the same pointer value,
-    // it could be an entirely different timer. Consider this:
-    // delete timer1; // calls removeTimer()
-    // Timer *timer2 = new Timer(); // accidentally gets same memory address as timer1
-    // timer2->start(...);
-    // timer2->stop(); // timer == m_triggeredTimer, uh oh
-    // The last line does not necessarily cause a problem, but just don't be excessively clever.
-    // On the other hand, not special-casing the currently triggered timer after it has been marked
-    // for removal once is fine.  In case it  is re-added, it gets a new map entry in addTimer()
-    // and from then on it can be handled like any other timer.
-
+    // If inside a timer instance T's callback, this is only called from T's destructor, never from
+    // T.setRunning(false). In the setRunning(false) case, removing is handled in triggerDueTimers()
+    // right after invoking the callback by looking at T.m_isRunning. In the destructor case, this
+    // sets the Timer pointer to nullptr(see below).
+    // It is possible that the technique for handling the destructor case could also handle the
+    // setRunning(false) case, something to consider... (Note: tryCompactTimerSerials kinda does that
+    // already.)
     auto iterRange = m_timers.equal_range(timer->tag());
     for (; iterRange.first != iterRange.second; ++iterRange.first) {
         if (iterRange.first->second == timer) {
@@ -328,7 +324,7 @@ void EventDispatcherPrivate::triggerDueTimers()
     m_triggerTime = PlatformTime::monotonicMsecs();
 
     for (auto it = m_timers.begin(); it != m_timers.end();) {
-        const uint64 timerTimeout = (it->first >> 10);
+        const uint64 timerTimeout = it->first >> 10;
         if (timerTimeout > m_triggerTime) {
             break;
         }
@@ -340,11 +336,16 @@ void EventDispatcherPrivate::triggerDueTimers()
         m_serialsCompacted = false;
 
         Timer *timer = it->second;
+        //std::cerr << "triggerDueTimers() - tag: " << it->first <<" pointer: " << timer << '\n';
         assert(timer->m_isRunning);
 
         // invariant:
         // timer.dueTime <= m_triggerTime <= currentTime(here) <= <timerAddedInTrigger>.dueTime
-        timer->trigger();
+        // (the latter except for zero interval timers added in a timer callback, which go into
+        // the staging area)
+        if (timer->m_nextDueTime != 0) { // == 0: timer is in staging area
+            timer->trigger();
+        }
 
         if (m_serialsCompacted)
         {
@@ -356,13 +357,12 @@ void EventDispatcherPrivate::triggerDueTimers()
         if (timer && timer->m_isRunning) {
             // ### we are rescheduling timers based on triggerTime even though real time can be
             // much later - is this the desired behavior? I think so...
-            if (timer->m_interval == 0) {
-                // With the other branch we might iterate over this timer again in this invocation because
-                // if there are several timers with the same tag, this entry will be back-inserted into the
-                // list of values for the current tag / key slot. We only break out of the loop if
-                // timerTimeout > m_triggerTime, so there would be an infinite loop.
-                // Instead, we just leave the iterator alone, which does not put it in front of the current
-                // iterator position. It's also good for performance. Win-win!
+            if (timer->m_interval == 0 && timer->m_nextDueTime != 0) {
+                // If we reinserted a timer with m_interval == 0, we might iterate over it again in this run
+                // of triggerDueTimers(). If we just leave it where it is and keep iterating, we prevent
+                // that problem, and it's good for performance, too!
+                // If m_nextDueTime is zero, the timer was inserted during the last run of triggerDueTimers,
+                // and it *should* be reinserted, so that the timer is triggered in this and future runs.
                 ++it;
             } else {
                 timer->m_nextDueTime = m_triggerTime + timer->m_interval;
