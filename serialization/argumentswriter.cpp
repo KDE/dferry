@@ -60,6 +60,7 @@ public:
 
     void reserveData(uint32 size, IoState *state)
     {
+        size += 16; // enough extra for anything but variable-length data such as strings and arrays
         if (likely(size <= m_dataCapacity)) {
             return;
         }
@@ -360,7 +361,6 @@ uint32 Arguments::Writer::currentSignaturePosition() const
 
 void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
 {
-    d->reserveData(d->m_dataPosition + (alignAndSize << 1), &m_state);
     d->m_dataPosition = zeroPad(d->m_data, alignAndSize, d->m_dataPosition);
 
     switch(type) {
@@ -421,7 +421,7 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
                  Error::InvalidSignature);
     }
 
-    d->reserveData(d->m_dataPosition + 16 + m_u.String.length, &m_state);
+    d->reserveData(d->m_dataPosition + m_u.String.length, &m_state);
 
     d->m_dataPosition = zeroPad(d->m_data, lengthPrefixSize, d->m_dataPosition);
 
@@ -452,15 +452,11 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     //   - know what the final binary message size will be
     //   - in finish(), create the final data stream with inline variant signatures and array lengths
 
-    if (unlikely(m_state == InvalidData)) {
-        return;
-    }
     // can't do the following because a dict is one aggregate in our counting, but two according to
     // the spec: an array (one) containing dict entries (two)
     // assert(d->m_nesting.total() == d->m_aggregateStack.size());
     assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
 
-    m_state = AnyData;
     uint32 alignment = 1;
     bool isPrimitiveType = false;
     bool isStringType = false;
@@ -471,6 +467,13 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         isPrimitiveType = ty.isPrimitive;
         isStringType = ty.isString;
     }
+
+    d->reserveData(d->m_dataPosition, &m_state);
+    if (unlikely(m_state == InvalidData)) { // this is not only for reserveData, but also pre-existing errors
+        return;
+    }
+
+    m_state = AnyData;
 
     bool isWritingSignature = d->m_signaturePosition == d->m_signature.length;
     if (isWritingSignature) {
@@ -691,10 +694,6 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         aggregateInfo.aggregateType = newState;
         aggregateInfo.arr.containedTypeBegin = d->m_signaturePosition;
 
-        d->reserveData(d->m_dataPosition + 16, &m_state);
-        if (m_state == InvalidData) {
-            break; // should be excessive length error from reserveData - do not unset error state
-        }
         d->m_dataPosition = zeroPad(d->m_data, sizeof(uint32), d->m_dataPosition);
         basic::writeUint32(d->m_data + d->m_dataPosition, 0);
         aggregateInfo.arr.lengthFieldPosition = d->m_dataPosition;
@@ -886,7 +885,7 @@ void Arguments::Writer::writeVariantForMessageHeader(char sig)
     d->m_signature.length = 4;
     d->m_signaturePosition = 4;
 
-    d->reserveData(d->m_dataPosition + 3, &m_state);
+    d->reserveData(d->m_dataPosition, &m_state);
     d->m_data[d->m_dataPosition++] = 1;
     d->m_data[d->m_dataPosition++] = sig;
     d->m_data[d->m_dataPosition++] = 0;
