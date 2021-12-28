@@ -500,8 +500,9 @@ void Arguments::Reader::advanceState()
             d->m_dataPosition += sizeof(uint32);
         }
 
-        const TypeInfo firstElementTy = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
-        m_state = firstElementTy.state() == BeginDict ? BeginDict : BeginArray;
+        if (d->m_signature.ptr[d->m_signaturePosition + 1] == '{') {
+            m_state = BeginDict;
+        }
 
         uint32 dataEnd = d->m_dataPosition;
         // In case (and we don't check this) the internal type has greater alignment requirements than the
@@ -513,7 +514,9 @@ void Arguments::Reader::advanceState()
         // TODO: unit-test this
         if (likely(!d->m_nilArrayNesting)) {
             const uint32 padStart = d->m_dataPosition;
-            d->m_dataPosition = align(d->m_dataPosition, firstElementTy.alignment);
+            const uint32 alignment = m_state == BeginDict ? uint32(StructAlignment) :
+                                     typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]).alignment;
+            d->m_dataPosition = align(d->m_dataPosition, alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
             dataEnd = d->m_dataPosition + arrayLength;
             if (unlikely(dataEnd > d->m_data.length)) {
@@ -522,7 +525,7 @@ void Arguments::Reader::advanceState()
         }
 
         VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
-        if (firstElementTy.state() == BeginDict) {
+        if (m_state == BeginDict) {
             // TODO check whether the first type is a primitive or string type! // ### isn't that already
             // checked for the main signature and / or variants, though?
             // only closed at end of dict - there is no observable difference for clients

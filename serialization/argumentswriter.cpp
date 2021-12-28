@@ -33,10 +33,6 @@
 #include <boost/container/small_vector.hpp>
 #endif
 
-enum {
-    StructAlignment = 8
-};
-
 static constexpr byte alignLog[9] = { 0, 0, 1, 0, 2, 0, 0, 0, 3 };
 inline constexpr byte alignmentLog2(uint32 alignment)
 {
@@ -733,7 +729,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_nesting.endArray();
 
         // array data starts (and in empty arrays ends) at the first array element position *after alignment*
-        const uint32 contentAlign = isDict ? 8
+        const uint32 contentAlign = isDict ? uint32(StructAlignment)
                         : typeInfo(d->m_signature.ptr[aggregateInfo.arr.containedTypeBegin]).alignment;
         const uint32 arrayDataStart = align(aggregateInfo.arr.lengthFieldPosition + sizeof(uint32),
                                             contentAlign);

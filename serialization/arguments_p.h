@@ -90,6 +90,10 @@ inline bool isAligned(uint32 value, uint32 alignment)
     return (value & (alignment - 1)) == 0;
 }
 
+enum {
+    StructAlignment = 8
+};
+
 const TypeInfo &typeInfo(char letterCode);
 
 // Macros are icky, but here every use saves three lines.
