@@ -231,8 +231,8 @@ void EventDispatcherPrivate::tryCompactTimerSerials()
                 pickNextTimer = true;
             }
         } else {
-            // Only one timer can be currently triggered, which produces these "dead" map entries. Any not
-            // currently triggered timers that are removed simply don't occur in the map anymore.
+            // Only one timer can be currently triggered, which produces a "dead" map entry. Any other
+            // timers are either running, or have already been removed from the map. Check this here.
             assert(timer);
             assert(timer->m_isRunning);
             timer->m_serial = newSerial;
@@ -290,7 +290,7 @@ void EventDispatcherPrivate::removeTimer(Timer *timer)
     // If inside a timer instance T's callback, this is only called from T's destructor, never from
     // T.setRunning(false). In the setRunning(false) case, removing is handled in triggerDueTimers()
     // right after invoking the callback by looking at T.m_isRunning. In the destructor case, this
-    // sets the Timer pointer to nullptr(see below).
+    // sets the Timer pointer to nullptr (see below).
     // It is possible that the technique for handling the destructor case could also handle the
     // setRunning(false) case, something to consider... (Note: tryCompactTimerSerials kinda does that
     // already.)
