@@ -44,14 +44,14 @@ std::string IntrospectionNode::path() const
 IntrospectionTree::IntrospectionTree()
    : m_rootNode(new IntrospectionNode)
 {
-    m_rootNode->parent = 0;
+    m_rootNode->parent = nullptr;
     // name stays empty for the root
 }
 
 IntrospectionTree::~IntrospectionTree()
 {
     delete m_rootNode;
-    m_rootNode = 0;
+    m_rootNode = nullptr;
 }
 
 bool IntrospectionTree::mergeXml(const char *xmlData, const char *_path)
@@ -101,7 +101,7 @@ IntrospectionNode *IntrospectionTree::findOrCreateParent(const char *path, std::
 {
     cstring csPath(path);
     if (!Arguments::isObjectPathValid(csPath)) {
-        return 0;
+        return nullptr;
     }
     std::string strPath(path, csPath.length); // prevent another strlen()
     std::vector<std::string> elements = split(strPath, '/', false);

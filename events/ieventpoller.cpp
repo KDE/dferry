@@ -30,5 +30,5 @@ IEventPoller::IEventPoller(EventDispatcher *dispatcher)
 
 IEventPoller::~IEventPoller()
 {
-    m_dispatcher = 0;
+    m_dispatcher = nullptr;
 }

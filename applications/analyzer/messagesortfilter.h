@@ -30,7 +30,7 @@ class MessageSortFilter : public QSortFilterProxyModel
 {
 Q_OBJECT
 public:
-    MessageSortFilter(QObject *parent = 0);
+    MessageSortFilter(QObject *parent = nullptr);
     // reimp
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
     bool filterAcceptsRow (int sourceRow, const QModelIndex &sourceParent) const override;

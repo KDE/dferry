@@ -35,8 +35,8 @@
 
 Timer::Timer(EventDispatcher *dispatcher)
    : m_eventDispatcher(dispatcher),
-     m_completionListener(0),
-     m_reentrancyGuard(0),
+     m_completionListener(nullptr),
+     m_reentrancyGuard(nullptr),
      m_interval(0),
      m_isRunning(false),
      m_isRepeating(true),

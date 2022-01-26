@@ -142,7 +142,7 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
     struct msghdr send_msg;
     struct iovec iov;
 
-    send_msg.msg_name = 0;
+    send_msg.msg_name = nullptr;
     send_msg.msg_namelen = 0;
     send_msg.msg_flags = 0;
     send_msg.msg_iov = &iov;
@@ -286,7 +286,7 @@ IO::Result LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize,
     // prevent equivalent to CVE-2014-3635 in libdbus-1: We could receive and ignore an extra file
     // descriptor, thus eventually run out of file descriptors
     recv_msg.msg_controllen = CMSG_LEN(MaxFdPayloadSize);
-    recv_msg.msg_name = 0;
+    recv_msg.msg_name = nullptr;
     recv_msg.msg_namelen = 0;
     recv_msg.msg_flags = 0;
 

@@ -56,7 +56,7 @@ MainWidget::MainWidget()
 
 void MainWidget::clear()
 {
-    m_ui.arguments->setModel(createArgumentsModel(0));
+    m_ui.arguments->setModel(createArgumentsModel(nullptr));
     m_model->clear();
 }
 

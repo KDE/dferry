@@ -65,7 +65,7 @@ public:
     // do we need this? void removePath(std::string path); / removeNode(IntrospectionNode *);
     IntrospectionNode *rootNode() const;
 private:
-    IntrospectionNode *findOrCreateParent(const char *path, std::string *leafName = 0);
+    IntrospectionNode *findOrCreateParent(const char *path, std::string *leafName = nullptr);
     void pruneBranch(IntrospectionNode *node);
     void removeNode(IntrospectionNode *node);
     void deleteChildren(IntrospectionNode *node);

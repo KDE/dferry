@@ -564,7 +564,7 @@ uint32 Message::serial() const
 
 std::string Message::path() const
 {
-    return stringHeader(PathHeader, 0);
+    return stringHeader(PathHeader, nullptr);
 }
 
 void Message::setPath(const std::string &path)
@@ -574,7 +574,7 @@ void Message::setPath(const std::string &path)
 
 std::string Message::interface() const
 {
-    return stringHeader(InterfaceHeader, 0);
+    return stringHeader(InterfaceHeader, nullptr);
 }
 
 void Message::setInterface(const std::string &interface)
@@ -584,7 +584,7 @@ void Message::setInterface(const std::string &interface)
 
 std::string Message::method() const
 {
-    return stringHeader(MethodHeader, 0);
+    return stringHeader(MethodHeader, nullptr);
 }
 
 void Message::setMethod(const std::string &method)
@@ -594,7 +594,7 @@ void Message::setMethod(const std::string &method)
 
 std::string Message::errorName() const
 {
-    return stringHeader(ErrorNameHeader, 0);
+    return stringHeader(ErrorNameHeader, nullptr);
 }
 
 void Message::setErrorName(const std::string &errorName)
@@ -604,7 +604,7 @@ void Message::setErrorName(const std::string &errorName)
 
 uint32 Message::replySerial() const
 {
-    return intHeader(ReplySerialHeader, 0);
+    return intHeader(ReplySerialHeader, nullptr);
 }
 
 void Message::setReplySerial(uint32 replySerial)
@@ -614,7 +614,7 @@ void Message::setReplySerial(uint32 replySerial)
 
 std::string Message::destination() const
 {
-    return stringHeader(DestinationHeader, 0);
+    return stringHeader(DestinationHeader, nullptr);
 }
 
 void Message::setDestination(const std::string &destination)
@@ -624,7 +624,7 @@ void Message::setDestination(const std::string &destination)
 
 std::string Message::sender() const
 {
-    return stringHeader(SenderHeader, 0);
+    return stringHeader(SenderHeader, nullptr);
 }
 
 void Message::setSender(const std::string &sender)
@@ -634,12 +634,12 @@ void Message::setSender(const std::string &sender)
 
 std::string Message::signature() const
 {
-    return stringHeader(SignatureHeader, 0);
+    return stringHeader(SignatureHeader, nullptr);
 }
 
 uint32 Message::unixFdCount() const
 {
-    return intHeader(UnixFdsHeader, 0);
+    return intHeader(UnixFdsHeader, nullptr);
 }
 
 std::string Message::stringHeader(VariableHeader header, bool *isPresent) const

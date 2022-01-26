@@ -67,7 +67,7 @@ class EavesdropperModel : public QAbstractItemModel
 {
     Q_OBJECT
 public:
-    EavesdropperModel(QObject *parent = 0);
+    EavesdropperModel(QObject *parent = nullptr);
     ~EavesdropperModel() override;
 
     QVariant data(const QModelIndex &index, int role) const override;

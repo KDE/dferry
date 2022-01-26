@@ -110,7 +110,7 @@ Arguments::Reader::Reader(Reader &&other)
      m_state(other.m_state),
      m_u(other.m_u)
 {
-    other.d = 0;
+    other.d = nullptr;
 }
 
 void Arguments::Reader::operator=(Reader &&other)
@@ -126,7 +126,7 @@ void Arguments::Reader::operator=(Reader &&other)
     m_state = other.m_state;
     m_u = other.m_u;
 
-    other.d = 0;
+    other.d = nullptr;
 }
 
 Arguments::Reader::Reader(const Reader &other)

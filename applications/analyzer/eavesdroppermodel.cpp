@@ -47,7 +47,7 @@ MessageRecord::MessageRecord(Message *msg, qint64 time)
 {}
 
 MessageRecord::MessageRecord()
-   : message(0),
+   : message(nullptr),
      otherMessageIndex(-1),
      timestamp(-1)
 {}
