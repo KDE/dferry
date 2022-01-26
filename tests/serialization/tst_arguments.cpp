@@ -383,9 +383,6 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
         }
         writer->writeSignature(signature);
         break; }
-
-        writer->writeUnixFd(reader->readUnixFd());
-        break;
     // special cases follow
     case Arguments::Finished:
         break; // You *probably* want to handle that one in the caller, but you don't have to
