@@ -144,6 +144,14 @@ int Timer::remainingTime() const
     return std::min(uint64(std::numeric_limits<int>::max()), m_nextDueTime - currentTime);
 }
 
+#if defined __GNUC__ && __GNUC__ >= 12
+#define GCC_12
+#endif
+
+#ifdef GCC_12
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
 void Timer::trigger()
 {
     assert(m_isRunning);
@@ -167,6 +175,9 @@ void Timer::trigger()
         m_reentrancyGuard = nullptr;
     }
 }
+#ifdef GCC_12
+#pragma GCC diagnostic pop
+#endif
 
 void Timer::setCompletionListener(ICompletionListener *client)
 {

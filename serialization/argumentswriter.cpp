@@ -72,9 +72,9 @@ public:
             newCapacity *= 2;
         } while (size > newCapacity);
 
-        byte *const oldDataPointer = m_data;
+        m_signature.ptr -= reinterpret_cast<size_t>(m_data);
         m_data = reinterpret_cast<byte *>(realloc(m_data, newCapacity));
-        m_signature.ptr += m_data - oldDataPointer;
+        m_signature.ptr += reinterpret_cast<size_t>(m_data);
         m_dataCapacity = newCapacity;
 
         // Here, we trade off getting an ArgumentsTooLong error as early as possible for fewer
