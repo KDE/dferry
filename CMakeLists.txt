@@ -22,6 +22,7 @@ if (UNIX)
 endif()
 
 option(DFERRY_BUILD_ANALYZER "Build the dfer-analyzer bus analyzer GUI" TRUE)
+option(DFERRY_BUILD_CLIENTLIB "Build (incomplete, experimental) introspection support" FALSE)
 
 include(GNUInstallDirs)
 
@@ -143,8 +144,10 @@ if (WIN32)
     target_link_libraries(dfer PRIVATE ws2_32)
 endif()
 
-find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
-include_directories(${LIBTINYXML2_INCLUDE_DIRS})
+if (DFER_BUILD_CLIENTLIB)
+    find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
+    include_directories(${LIBTINYXML2_INCLUDE_DIRS})
+endif()
 
 find_package(Valgrind) # for checking homemade multithreading primitives
 if (VALGRIND_INCLUDE_DIR)
@@ -164,11 +167,13 @@ set(DFERCLIENT_SOURCES
 set(DFERCLIENT_HEADERS
     client/introspection.cpp)
 
-add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
-target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
-target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
+if (DFER_BUILD_CLIENTLIB)
+    add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
+    target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
+    target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
+endif()
 
-install(TARGETS dfer dferclient EXPORT dferryExports DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS dfer EXPORT dferryExports DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION include/dferry)
 
 enable_testing() # need this here to get the "test" target in the toplevel build dir
