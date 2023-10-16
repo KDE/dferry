@@ -229,12 +229,12 @@ void SelectEventPoller::addFileDescriptor(FileDescriptor fd, uint32 ioRw)
     // The main select specific part of registration is in setReadWriteInterest().
     // Here we just check fd limits.
     if (m_fds.size() + 1 >= FD_SETSIZE) {
-        std::cerr << "SelectEventPoller::addIoEventListener() failed A.\n";
-        // TODO error...
+        std::cerr << "SelectEventPoller::addIoEventListener() failed: FD_SETSIZE too small.\n";
+        // TODO indicate the error somehow?
         return;
     }
 
-    m_fds.emplace(iol->fileDescriptor(), ioRw);
+    m_fds.emplace(fd, ioRw);
 }
 
 void SelectEventPoller::removeFileDescriptor(FileDescriptor fd)
