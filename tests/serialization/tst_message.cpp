@@ -136,6 +136,7 @@ enum {
     DummyFdOffset = 1000000
 };
 
+#ifdef __unix__
 static Arguments createArgumentsWithDummyFileDescriptors(uint fdCount)
 {
     Arguments::Writer writer;
@@ -259,6 +260,7 @@ void testFileDescriptorsForDataTransfer()
         ::close(pipeFds[2 * i + WriteSide]);
     }
 }
+#endif
 
 void testAssignment()
 {
@@ -299,11 +301,12 @@ int main(int, char *[])
 
     testMessageLength();
 
+#ifdef __unix__
     testFileDescriptorsInArguments();
     testTooManyFileDescriptors();
     testFileDescriptorsHeader();
     testFileDescriptorsForDataTransfer();
-
+#endif
     testAssignment();
 
     // TODO testSaveLoad();

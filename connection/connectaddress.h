@@ -43,15 +43,11 @@ public:
     enum class Type : unsigned char
     {
         None = 0,
-#ifdef __unix__
         UnixPath,
         UnixDir,
         RuntimeDir,
         TmpDir,
-#ifdef __linux__
         AbstractUnixPath,
-#endif
-#endif
         Tcp = 6,
         Tcp4,
         Tcp6
