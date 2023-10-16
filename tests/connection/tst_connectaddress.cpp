@@ -32,6 +32,7 @@
 
 static void testFromString()
 {
+#ifdef __unix__
     {
         ConnectAddress addr;
         addr.setAddressFromString("unix:path=/dev/null");
@@ -51,6 +52,7 @@ static void testFromString()
         TEST(addr.path() == "/tmp/dbus-XXXXXXXXXX");
         TEST(addr.guid() == "00000000000000000000000000000000");
     }
+#endif
     {
         ConnectAddress addr;
         addr.setAddressFromString("tcp:port=2233,host=localhost,guid=10000000000000000000000000000000");
@@ -77,6 +79,7 @@ static void testFromString()
 
 static void testToString()
 {
+#ifdef __unix__
     {
         ConnectAddress addr;
         addr.setType(ConnectAddress::Type::UnixPath);
@@ -96,6 +99,7 @@ static void testToString()
         addr.setGuid("00000000000000000000000000000000");
         TEST(addr.toString() =="unix:abstract=/tmp/dbus-XXXXXXXXXX,guid=00000000000000000000000000000000");
     }
+#endif
     {
         ConnectAddress addr;
         addr.setType(ConnectAddress::Type::Tcp);
