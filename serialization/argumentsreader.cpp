@@ -285,7 +285,7 @@ void Arguments::Reader::doReadPrimitiveType()
             VALID_IF(index < d->m_args->d->m_fileDescriptors.size(), Error::MalformedMessageData);
             m_u.Int32 = d->m_args->d->m_fileDescriptors[index];
         } else {
-            m_u.Int32 = InvalidFileDescriptor;
+            m_u.Int32 = int32(InvalidFileDescriptor);
         }
         break; }
     default:

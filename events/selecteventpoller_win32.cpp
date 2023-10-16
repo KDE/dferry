@@ -140,14 +140,14 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
 
     // ### doing FD_SET "manually", avoiding a scan of the whole list for each set action - there is
     //     no danger of duplicates because our input is a set which already guarantees uniqueness.
-    for (const auto &fdRw : m_fds) {
-        if (fdRw.second & IO::RW::Read) {
+    for (auto &fdRw : m_fds) {
+        if (fdRw.second & uint32(IO::RW::Read)) {
             // FD_SET(fdRw.first, &m_readSet);
             if (m_readSet.fd_count < FD_SETSIZE) {
                 m_readSet.fd_array[m_readSet.fd_count++] = fdRw.first;
             }
         }
-        if (fdRw.second & IO::RW::Write) {
+        if (fdRw.second & uint32(IO::RW::Write)) {
             // FD_SET(fdRw.first, &m_writeSet);
             if (m_writeSet.fd_count < FD_SETSIZE) {
                 m_writeSet.fd_array[m_writeSet.fd_count++] = fdRw.first;
