@@ -32,111 +32,61 @@
 #include <cassert>
 #include <cstdio>
 
-thread_local static SelectEventPoller *tls_selectPoller = nullptr;
-
-static SOCKET createInterruptSocket()
+static void socketpair(FileDescriptor fds[2])
 {
-    SOCKET ret = socket(AF_INET, SOCK_DGRAM, 0);
-    if (ret == INVALID_SOCKET) {
-        std::cerr << "createInterruptSocket() Error A.\n";
-        return ret;
-    }
-    unsigned long value = 1; // 0 blocking, != 0 non-blocking
-    if (ioctlsocket(ret, FIONBIO, &value) != NO_ERROR) {
-        // something along the lines of... WS_ERROR_DEBUG(WSAGetLastError());
-        std::cerr << "createInterruptSocket() Error B.\n";
-        closesocket(ret);
-        return INVALID_SOCKET;
-    }
-    return ret;
-}
+    struct sockaddr_in inaddr;
+    struct sockaddr addr;
+    FileDescriptor listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    memset(&inaddr, 0, sizeof(inaddr));
+    memset(&addr, 0, sizeof(addr));
 
-VOID CALLBACK triggerInterruptSocket(ULONG_PTR dwParam)
-{
-    SelectEventPoller *const sep = tls_selectPoller;
-    if (sep) {
-        sep->doInterruptSocket(dwParam != 0);
-    } else {
-        std::cerr << "triggerInterruptSocket() ignoring (apparently) spurios APC!\n";
-    }
-}
+    inaddr.sin_family = AF_INET;
+    inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    inaddr.sin_port = 0;
 
-void SelectEventPoller::doInterruptSocket(bool isStop)
-{
-    const IEventPoller::InterruptAction newAction = isStop ? IEventPoller::Stop
-                                                           : IEventPoller::ProcessAuxEvents;
-    if (newAction > m_interruptAction) {
-        m_interruptAction = newAction;
-    }
+    int trueConstant = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+               reinterpret_cast<char* >(&trueConstant), sizeof(trueConstant));
+    bind(listener, reinterpret_cast<struct sockaddr *>(&inaddr), sizeof(inaddr));
+    listen(listener, 1);
 
-    // This runs from the blocked select(). Signal the socket by closing it, thus properly interrupting
-    // the select().
+    int len = sizeof(inaddr);
+    getsockname(listener, &addr, &len);
+    fds[0] = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    connect(fds[0], &addr, len);
 
-    if (m_interruptSocket != INVALID_SOCKET) {
-        // closesocket() may enter an alertable walt, which may run APCs, which may call us *again*.
-        // Prevent that by clearing m_interruptSocket *before* possibly triggering the APC.
-        SOCKET sock = m_interruptSocket;
-        m_interruptSocket = INVALID_SOCKET;
-        closesocket(sock); // <- recursion here
-    }
+    fds[1] = accept(listener, nullptr, nullptr);
+
+    closesocket(listener);
 }
 
 SelectEventPoller::SelectEventPoller(EventDispatcher *dispatcher)
-   : IEventPoller(dispatcher),
-     m_selectThreadHandle(INVALID_HANDLE_VALUE),
-     m_interruptSocket(INVALID_SOCKET),
-     m_interruptAction(IEventPoller::NoInterrupt)
+   : IEventPoller(dispatcher)
 {
-    // IFF there is still an asynchronous procedure call queued for this thread (which usually happens
-    // in the mean thread), we want it to trigger nothing, in case any Winsock functions (say socket())...
-    // enters an alertable wait.
-    tls_selectPoller = nullptr;
-    if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
-                         &m_selectThreadHandle,
-                         0, FALSE, DUPLICATE_SAME_ACCESS)) {
-          assert(false); // H4X, gross!
-    }
-
-    // XXX TOXIC BUG!! m_selectThreadHandle = GetCurrentThread();
-
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
     if (WSAStartup(MAKEWORD(2, 0), &wsadata) != 0) {
         return;
     }
 
-    m_interruptSocket = createInterruptSocket();
-    // stupid: flush any pending APCs from previous instances; closesocket() will do a brief alertable
-    // wait, apparently.
-    closesocket(m_interruptSocket);
-
-    m_interruptSocket = createInterruptSocket();
-
-    tls_selectPoller = this;
+    socketpair(m_interruptSocket);
+    unsigned long value = 1; // 0 blocking, != 0 non-blocking
+    ioctlsocket(m_interruptSocket[0], FIONBIO, &value);
 }
 
 SelectEventPoller::~SelectEventPoller()
 {
-    tls_selectPoller = nullptr;
-    if (m_interruptSocket != INVALID_SOCKET) {
-        closesocket(m_interruptSocket);
-    }
-    CloseHandle(m_selectThreadHandle);
+    closesocket(m_interruptSocket[0]);
+    closesocket(m_interruptSocket[1]);
 }
 
 IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
 {
-    // Check if some other code called an alertable waiting function which ran our user APC,
-    // which closed m_interruptSocket and set m_interruptAction. Process it here if so.
-    IEventPoller::InterruptAction ret = m_interruptAction;
-    if (ret != IEventPoller::NoInterrupt) {
-        assert(m_interruptSocket == INVALID_SOCKET);
-        m_interruptAction = IEventPoller::NoInterrupt;
-        m_interruptSocket = createInterruptSocket(); // re-arm
-        return ret;
-    }
+    IEventPoller::InterruptAction ret = IEventPoller::NoInterrupt;
 
     resetFdSets();
+
+    m_readSet.fd_array[m_readSet.fd_count++] = m_interruptSocket[0];
 
     // ### doing FD_SET "manually", avoiding a scan of the whole list for each set action - there is
     //     no danger of duplicates because our input is a set which already guarantees uniqueness.
@@ -155,12 +105,6 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
         }
     }
 
-    if (m_interruptSocket == INVALID_SOCKET) {
-        assert(m_interruptAction != IEventPoller::NoInterrupt);
-        m_interruptSocket = createInterruptSocket();
-    }
-    FD_SET(m_interruptSocket, &m_exceptSet);
-
     struct timeval tv;
     struct timeval *tvPointer = nullptr;
     if (timeout >= 0) {
@@ -170,22 +114,21 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     }
 
     // select!
-    int numEvents = select(0, &m_readSet, &m_writeSet, &m_exceptSet, tvPointer);
+    int numEvents = select(0, &m_readSet, &m_writeSet, nullptr, tvPointer);
     if (numEvents == -1) {
-        std::cerr << "Error code is " << WSAGetLastError() << " and except set has "
-                  << m_exceptSet.fd_count << " elements.\n";
+        std::cerr << "select() failed with error code " << WSAGetLastError() << std::endl;
     }
 
     // check for interruption
-    ret = m_interruptAction;
-    if (ret != IEventPoller::NoInterrupt) {
-        assert(m_interruptSocket == INVALID_SOCKET);
-        m_interruptAction = IEventPoller::NoInterrupt;
-        m_interruptSocket = createInterruptSocket(); // re-arm
-        //numEvents--; // 1) We got here because the interrupt socket's exceptfd became active.
-        //                2) However, fds in the except set don't count as "sockets /ready/" for
-        //                   the return value of select().
-        return ret;
+    if (FD_ISSET(m_interruptSocket[0], &m_readSet)) {
+        // interrupt; read bytes from pipe to clear buffers and get the interrupt type
+        ret = IEventPoller::ProcessAuxEvents;
+        char buf;
+        while (recv(m_interruptSocket[0], &buf, 1, 0) > 0) {
+            if (buf == 'S') {
+                ret = IEventPoller::Stop;
+            }
+        }
     }
 
     // dispatch reads and writes
@@ -214,14 +157,14 @@ void SelectEventPoller::resetFdSets()
 {
     FD_ZERO(&m_readSet);
     FD_ZERO(&m_writeSet);
-    FD_ZERO(&m_exceptSet);
 }
 
 void SelectEventPoller::interrupt(IEventPoller::InterruptAction action)
 {
     assert(action == IEventPoller::ProcessAuxEvents || action == IEventPoller::Stop);
-    const ULONG_PTR dwParam = action == IEventPoller::Stop ? 0x1 : 0x0;
-    QueueUserAPC(triggerInterruptSocket, m_selectThreadHandle, dwParam);
+    // write a byte to the write end so the poll waiting on the read end returns
+    char buf = (action == IEventPoller::Stop) ? 'S' : 'N';
+    send(m_interruptSocket[1], &buf, 1, 0);
 }
 
 void SelectEventPoller::addFileDescriptor(FileDescriptor fd, uint32 ioRw)

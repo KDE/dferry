@@ -59,18 +59,12 @@ private:
     void notifyRead(int fd);
     void resetFdSets();
 
-    friend VOID CALLBACK triggerInterruptSocket(ULONG_PTR dwParam);
-    void doInterruptSocket(bool isStop);
-
-    HANDLE m_selectThreadHandle;
-    FileDescriptor m_interruptSocket;
-    IEventPoller::InterruptAction m_interruptAction;
-
     std::unordered_map<FileDescriptor, uint32 /*ioRw*/> m_fds;
 
     fd_set m_readSet;
     fd_set m_writeSet;
-    fd_set m_exceptSet;
+
+    FileDescriptor m_interruptSocket[2];
 };
 
 #endif // SELECTEVENTPOLLER_H
