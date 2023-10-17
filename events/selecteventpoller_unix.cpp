@@ -58,11 +58,11 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     FD_SET(m_interruptPipe[0], &m_readSet);
 
     for (const auto &fdRw : m_fds) {
-        if (fdRw.second & IO::RW::Read) {
+        if (fdRw.second & uint32(IO::RW::Read)) {
             nfds = std::max(nfds, fdRw.first);
             FD_SET(fdRw.first, &m_readSet);
         }
-        if (fdRw.second & IO::RW::Write) {
+        if (fdRw.second & uint32(IO::RW::Write)) {
             nfds = std::max(nfds, fdRw.first);
             FD_SET(fdRw.first, &m_writeSet);
         }
