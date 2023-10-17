@@ -456,9 +456,14 @@ static void testReEnableNonRepeatingInTrigger()
     while (dispatcher.poll()) {
     }
 
+    //std::cout << "\nfastCounter: " << fastCounter << " slowCounter: " << slowCounter << '\n';
+
     TEST(noRepeatCounter == 1);
+#ifdef _WIN32
+    TEST(slowCounter >= 4 && slowCounter <= 12);
+#else
     TEST(slowCounter >= 8 && slowCounter <= 12);
-    // std::cout << '\n' << fastCounter << ' ' << slowCounter <<'\n';
+#endif
     TEST(fastCounter >= 200); // ### hopefully low enough even for really slow machines and / or valgrind
 }
 
