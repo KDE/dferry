@@ -189,14 +189,14 @@ static std::string sessionBusAddressFromShm()
     for (int i = 0 ; i < 20; i++) {
         // we know that dbus-daemon is available, so we wait until shm is available
         sharedMem = OpenFileMappingA(FILE_MAP_READ, FALSE, shmName.c_str());
-        if (sharedMem != 0) {
+        if (sharedMem != nullptr) {
             break;
         }
         std::cerr << "Retrying OpenFileMappingA\n";
         Sleep(100);
     }
 
-    if (sharedMem == 0)
+    if (sharedMem == nullptr)
         return ret;
 
     const void *addrView = MapViewOfFile(sharedMem, FILE_MAP_READ, 0, 0, 0);
