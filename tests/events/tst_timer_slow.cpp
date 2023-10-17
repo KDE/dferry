@@ -105,8 +105,14 @@ public:
         m_lastTriggerTime = currentTime;
 
         std::cout << timer->interval() << ' ' << timeDiff << std::endl;
+        // ### This test is somewhat unreliable. It is supposed to catch wildly wrong timer trigger times,
+        // but it can fail randomly due to high system load or simply Windows scheduling timeouts with only
+        // about 15 ms resolution (for energy efficiency).
+#ifdef _WIN32
+        TEST(std::abs(timeDiff - timer->interval()) < 35); // this seems to prevent most random failures :>
+#else
         TEST(std::abs(timeDiff - timer->interval()) < 5);
-
+#endif
         m_count++;
         TEST(m_count < 26); // event loop should have stopped right at 25
 
