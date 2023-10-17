@@ -3,7 +3,7 @@ foreach(_testname connectaddress errorpropagation pendingreply server threads)
     set_target_properties(tst_${_testname}
                           PROPERTIES COMPILE_FLAGS -DTEST_DATADIR="\\"${CMAKE_CURRENT_SOURCE_DIR}\\"")
     target_link_libraries(tst_${_testname} testutil dfer)
-    add_test(connection/${_testname} tst_${_testname})
+    add_test(NAME connection/${_testname} COMMAND tst_${_testname})
 endforeach()
 
 if (UNIX)

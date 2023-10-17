@@ -1,5 +1,5 @@
 foreach(_testname arguments arguments_slow message)
     add_executable(tst_${_testname} tst_${_testname}.cpp)
     target_link_libraries(tst_${_testname} testutil dfer)
-    add_test(serialization/${_testname} tst_${_testname})
+    add_test(NAME serialization/${_testname} COMMAND tst_${_testname})
 endforeach()

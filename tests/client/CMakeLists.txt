@@ -3,5 +3,5 @@ foreach(_testname introspection)
     set_target_properties(tst_${_testname} PROPERTIES COMPILE_FLAGS
                             -DTEST_DATADIR="\\"${CMAKE_CURRENT_SOURCE_DIR}\\"")
     target_link_libraries(tst_${_testname} testutil dferclient ${LIBTINYXML2_LIBRARIES})
-    add_test(client/${_testname} tst_${_testname})
+    add_test(NAME client/${_testname} COMMAND tst_${_testname})
 endforeach()
