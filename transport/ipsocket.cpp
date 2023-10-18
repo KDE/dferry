@@ -90,7 +90,7 @@ static void closeSocket(int fd)
 IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
 {
-    assert(ca.type() == ConnectAddress::Type::Tcp);
+    assert(ca.type() == ConnectAddress::Type::Tcp || ca.type() == ConnectAddress::Type::Tcp4);
 #ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
