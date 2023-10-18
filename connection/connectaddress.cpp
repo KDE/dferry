@@ -161,6 +161,8 @@ static std::string hashOfInstallRoot()
 
 // Returns something like:
 // "tcp:host=localhost,port=52933,family=ipv4,guid=0fcf91a66520469005539fb2000001a7"
+// Implementation along the lines od libdbus-1 dbus-sysdeps-win.c, _dbus_get_autolaunch_shm and
+// CreateMutexA / WaitForSingleObject in its callers
 static std::string sessionBusAddressFromShm()
 {
     std::string ret;
@@ -216,8 +218,8 @@ static std::string sessionBusAddressFromShm()
 static std::string fetchSessionBusInfo()
 {
     std::string ret;
-#ifdef __unix__
-    // TODO: on X, the spec requires a special way to find the session bus
+
+    // TODO: on X11, the spec requires a special way to find the session bus
     //       (but nobody seems to use it?)
 
     // try the environment variable
@@ -225,6 +227,7 @@ static std::string fetchSessionBusInfo()
     if (envAddress) {
         ret = envAddress;
     } else {
+#ifdef __unix__
         // try it using a byzantine system involving files...
         std::ifstream infoFile(sessionInfoFile().c_str());
         const std::string busAddressPrefix = "DBUS_SESSION_BUS_ADDRESS=";
@@ -235,11 +238,11 @@ static std::string fetchSessionBusInfo()
                 break;
             }
         }
+#endif
+#ifdef _WIN32
+        ret = sessionBusAddressFromShm();
+#endif
     }
-#elif defined _WIN32
-    ret = sessionBusAddressFromShm();
-//#error see dbus-sysdeps-win.c, _dbus_get_autolaunch_shm and CreateMutexA / WaitForSingleObject in its callers
-#endif // no #else <some error>, some platform might not have a session bus
     return ret;
 }
 
