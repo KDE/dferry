@@ -634,9 +634,11 @@ void ConnectionPrivate::handleCompletion(void *task)
     case Authenticating: {
         ConnectionStateChanger stateChanger(this);
         assert(task == m_authClient);
+        assert(m_authClient->isFinished());
         if (!m_authClient->isAuthenticated()) {
             stateChanger.setNewState(Unconnected);
         }
+        m_unixFdPassingEnabled = m_authClient->isUnixFdPassingEnabled();
         delete m_authClient;
         m_authClient = nullptr;
         if (m_state == Unconnected) {
@@ -949,5 +951,6 @@ Connection::CommRef Connection::createCommRef()
 
 uint32 Connection::supportedFileDescriptorsPerMessage() const
 {
-    return d->m_transport && d->m_transport->supportedPassingUnixFdsCount();
+    return (d->m_transport && d->m_unixFdPassingEnabled) ?
+                d->m_transport->supportedPassingUnixFdsCount() : 0;
 }

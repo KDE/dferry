@@ -125,6 +125,7 @@ public:
     void processEvent(Event *evt); // called from thread-local EventDispatcher
 
     State m_state = Unconnected;
+    bool m_unixFdPassingEnabled = false;
 
     Connection *m_connection = nullptr;
     IMessageReceiver *m_client = nullptr;

@@ -66,6 +66,11 @@ bool AuthClient::isAuthenticated() const
     return m_state == AuthenticatedState;
 }
 
+bool AuthClient::isUnixFdPassingEnabled() const
+{
+    return m_fdPassingEnabled;
+}
+
 void AuthClient::setCompletionListener(ICompletionListener *listener)
 {
     m_completionListener = listener;
