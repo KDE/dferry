@@ -169,7 +169,7 @@ void AuthClient::advanceState()
         if (authOk) {
             // continue below, either negotiate FD passing or just send BEGIN
         } else {
-            const bool rejected =  m_line.substr(0, strlen("REJECTED")) == "REJECTED";
+            const bool rejected = m_line.substr(0, strlen("REJECTED")) == "REJECTED";
             if (rejected) {
                 m_state = ExpectOkState;
                 // TODO read possible authentication methods from REJECTED [space separated list of methods]

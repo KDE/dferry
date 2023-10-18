@@ -72,7 +72,7 @@ bool IntrospectionTree::mergeXml(const char *xmlData, const char *_path)
     }
     std::string path = _path;
     const tx2::XMLAttribute *attr = el->FirstAttribute();
-    if (attr && strequal(attr->Name(), "name"))  {
+    if (attr && strequal(attr->Name(), "name")) {
         std::string intrinsicPath = attr->Value();
         if (!path.empty() && path != intrinsicPath) {
             return false;
@@ -166,7 +166,7 @@ void IntrospectionTree::removeNode(IntrospectionNode *node)
 bool IntrospectionTree::addNode(IntrospectionNode *parent, const tx2::XMLElement *el)
 {
     const tx2::XMLAttribute *attr = el->FirstAttribute();
-    if (!attr || !strequal(attr->Name(), "name") || attr->Next())  {
+    if (!attr || !strequal(attr->Name(), "name") || attr->Next()) {
         return false;
     }
 
@@ -195,7 +195,7 @@ bool IntrospectionTree::addNode(IntrospectionNode *parent, const tx2::XMLElement
 bool IntrospectionTree::addInterface(IntrospectionNode *node, const tx2::XMLElement *el)
 {
     const tx2::XMLAttribute *attr = el->FirstAttribute();
-    if (!attr || !strequal(attr->Name(), "name") || attr->Next())  {
+    if (!attr || !strequal(attr->Name(), "name") || attr->Next()) {
         return false;
     }
 
@@ -226,7 +226,7 @@ bool IntrospectionTree::addInterface(IntrospectionNode *node, const tx2::XMLElem
 bool IntrospectionTree::addMethod(Interface *iface, const tx2::XMLElement *el, Message::Type messageType)
 {
     const tx2::XMLAttribute *attr = el->FirstAttribute();
-    if (!attr || !strequal(attr->Name(), "name") || attr->Next())  {
+    if (!attr || !strequal(attr->Name(), "name") || attr->Next()) {
         return false;
     }
 

@@ -38,7 +38,7 @@ PendingReply::PendingReply()
 
 PendingReply::~PendingReply()
 {
-    if (!d)  {
+    if (!d) {
         return;
     }
     if (!d->m_isFinished) {
