@@ -46,12 +46,14 @@ public:
 
     bool isFinished() const;
     bool isAuthenticated() const;
+    bool isUnixFdPassingEnabled() const;
 
     void setCompletionListener(ICompletionListener *);
 
 private:
     bool readLine();
     bool isEndOfLine() const;
+    void sendNextAuthMethod();
     void advanceState();
 
     enum State {
@@ -62,7 +64,15 @@ private:
         AuthenticatedState
     };
 
+    enum AuthMethods {
+        AuthExternal,
+        AuthAnonymous,
+        LastAuthMethod // keep this last!
+    };
+
     State m_state;
+    int m_nextAuthMethod;
+    bool m_fdPassingEnabled;
     std::string m_line;
     ICompletionListener *m_completionListener;
 };

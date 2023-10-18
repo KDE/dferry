@@ -28,6 +28,7 @@
 #include "stringtools.h"
 
 #include <cassert>
+#include <cstring>
 #include <sstream>
 
 #ifdef __unix__
@@ -44,32 +45,15 @@
 
 AuthClient::AuthClient(ITransport *transport)
    : m_state(InitialState),
+     m_nextAuthMethod(0),
+     m_fdPassingEnabled(false),
      m_completionListener(nullptr)
 {
     transport->setReadListener(this);
     byte nullBuf[1] = { 0 };
     transport->write(chunk(nullBuf, 1));
 
-    std::stringstream uidEncoded;
-#ifdef _WIN32
-    // Most common (or rather... actually used) authentication method on Windows:
-    // - Server publishes address of a nonce file; the file name is in a shared memory segment
-    // - Client reads nonce file
-    // - Client connects and sends the nonce data, TODO: before or after the null byte / is there a null byte?
-    // - Client uses EXTERNAL auth and says which Windows security ID (SID) it intends to have
-    uidEncoded << fetchWindowsSid();
-#else
-    // Most common (or rather... actually used) authentication method on Unix derivatives:
-    // - Client sends a null byte so the server has something to receive with recvmsg()
-    // - Server checks UID using SCM_CREDENTIALS, a mechanism of Unix local sockets
-    // - Client uses EXTERNAL auth and says which Unix user ID it intends to have
-
-    // The numeric UID is first encoded to ASCII ("1000") and the ASCII to hex... because.
-    uidEncoded << geteuid();
-#endif
-    std::string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
-    transport->write(chunk(extLine.c_str(), extLine.length()));
-    m_state = ExpectOkState;
+    sendNextAuthMethod();
 }
 
 bool AuthClient::isFinished() const
@@ -130,6 +114,40 @@ bool AuthClient::isEndOfLine() const
            m_line[m_line.length() - 2] == '\r' && m_line[m_line.length() - 1] == '\n';
 }
 
+void AuthClient::sendNextAuthMethod()
+{
+    switch (m_nextAuthMethod) {
+    case AuthExternal: {
+        std::stringstream uidEncoded;
+#ifdef _WIN32
+        uidEncoded << fetchWindowsSid();
+#else
+        // The numeric UID is first encoded to ASCII ("1000") and the ASCII to hex... because.
+        uidEncoded << geteuid();
+#endif
+        std::string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
+        readTransport()->write(chunk(extLine.c_str(), extLine.length()));
+
+        m_nextAuthMethod++;
+        m_state = ExpectOkState;
+        break;}
+    case AuthAnonymous: {
+        // This is basically "trust me bro" auth. The server must be configured to accept this, obviously.
+        // The part after ANONYMOUS seems arbitrary, we send a hex-encoded "dferry". libdbus-1 seems to send
+        // something like a hex-encoded "libdbus 1.14.10".
+
+        cstring anonLine("AUTH ANONYMOUS 646665727279\r\n");
+        readTransport()->write(chunk(anonLine.ptr, anonLine.length));
+
+        m_nextAuthMethod++;
+        m_state = ExpectOkState;
+        break; }
+    default:
+        m_state = AuthenticationFailedState;
+        break;
+    }
+}
+
 void AuthClient::advanceState()
 {
     // Note: since the connection is new and send buffers are typically several megabytes, there is basically
@@ -137,22 +155,37 @@ void AuthClient::advanceState()
     // write synchronously, which means that we don't need to register as write readiness listener.
     // Therefore, writeTransport() is nullptr, so we have to do the unintuitive readTransport()->write().
 
-    // TODO authentication ping-pong done *properly* (grammar / some simple state machine),
-    //      but hey, this works for now!
     // some findings:
     // - the string after the server OK is its UUID that also appears in the address string
 
     switch (m_state) {
     case ExpectOkState: {
-        // TODO check the OK
+        const bool authOk = m_line.substr(0, strlen("OK ")) == "OK ";
+        if (authOk) {
+            // continue below, either negotiate FD passing or just send BEGIN
+        } else {
+            const bool rejected =  m_line.substr(0, strlen("REJECTED")) == "REJECTED";
+            if (rejected) {
+                m_state = ExpectOkState;
+                // TODO read possible authentication methods from REJECTED [space separated list of methods]
+                sendNextAuthMethod();
+            } else {
+                m_state = AuthenticationFailedState; // protocol violation -> we're out
+            }
+            break;
+        }
 #ifdef __unix__
-        cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
-        readTransport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
-        m_state = ExpectUnixFdResponseState;
-        break; }
+        if (readTransport()->supportedPassingUnixFdsCount() > 0) {
+            cstring negotiateLine("NEGOTIATE_UNIX_FD\r\n");
+            readTransport()->write(chunk(negotiateLine.ptr, negotiateLine.length));
+            m_state = ExpectUnixFdResponseState;
+            break;
+        }
+        }
+        // fall through
     case ExpectUnixFdResponseState: {
+        m_fdPassingEnabled = m_line == "AGREE_UNIX_FD\r\n";
 #endif
-        // TODO check the response
         cstring beginLine("BEGIN\r\n");
         readTransport()->write(chunk(beginLine.ptr, beginLine.length));
         m_state = AuthenticatedState;
@@ -160,5 +193,6 @@ void AuthClient::advanceState()
     default:
         m_state = AuthenticationFailedState;
         readTransport()->close();
+        break;
     }
 }
