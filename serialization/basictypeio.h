@@ -27,7 +27,6 @@
 #include "types.h"
 
 #include <algorithm> // for std::min on Windows...
-#include <cstring>
 
 static inline uint32 align(uint32 index, uint32 alignment)
 {
@@ -46,11 +45,14 @@ static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 pa
     return true;
 }
 
-static inline uint32 zeroPad(byte *buffer, uint32 alignment, uint32 bufferPos)
+static inline void zeroPad(byte *buffer, uint32 alignment, uint32 *bufferPos)
 {
-    const uint32 padEnd = align(bufferPos, alignment);
-    memset(buffer + bufferPos, 0, padEnd - bufferPos);
-    return padEnd;
+    uint32 i = *bufferPos;
+    const uint32 padEnd = align(i, alignment);
+    for (; i < padEnd; i++) {
+        buffer[i] = '\0';
+    }
+    *bufferPos = padEnd;
 }
 
 // ### this is the dumb version for now (unrolled for possible performance gain)
