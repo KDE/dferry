@@ -584,7 +584,11 @@ void Connection::waitForConnectionEstablished()
 
     // Receive the hello reply
     while (d->m_state == ConnectionPrivate::AwaitingUniqueName) {
-        MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
+        IO::Status ios = MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
+        if (ios != IO::Status::OK) {
+            ConnectionStateChanger stateChanger(d, ConnectionPrivate::Unconnected);
+            break;
+        }
     }
 }
 
