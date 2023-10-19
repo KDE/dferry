@@ -256,10 +256,10 @@ void testFileDescriptorsForDataTransfer()
     }
 
     if (conn.supportedFileDescriptorsPerMessage() >= FdCountToSend) {
-        // TODO should not fail with timeout, should fail quickly and *locally* while trying to send!
         TEST(reply.hasNonErrorReply()); // otherwise timeout, the message exchange failed somehow
     } else {
         TEST(!reply.hasNonErrorReply());
+        TEST(reply.error().code() == Error::SendingTooManyUnixFds);
         for (uint i = 0; i < FdCountToSend; i++) {
             ::close(pipeFds[2 * i + ReadSide]);
         }
