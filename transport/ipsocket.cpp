@@ -26,6 +26,7 @@
 #include "connectaddress.h"
 
 #ifdef __unix__
+#include <errno.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -37,14 +38,31 @@
 typedef SSIZE_T ssize_t;
 #endif
 
-#include <errno.h>
-
 #include <cassert>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
 
 #include <iostream>
+
+static bool errorTryAgainLater()
+{
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    const int en = errno; // re-fetching errno might have a small cost
+    return en == EAGAIN || en == EWOULDBLOCK;
+#endif
+}
+
+static bool errorInterrupted()
+{
+#ifdef _WIN32
+    return WSAGetLastError() == WSAEINTR;
+#else
+    return errno == EINTR;
+#endif
+}
 
 static bool setNonBlocking(int fd)
 {
@@ -161,11 +179,11 @@ IO::Result IpSocket::write(chunk a)
     while (a.length > 0) {
         ssize_t nbytes = send(m_fd, reinterpret_cast<char *>(a.ptr), a.length, sendFlags());
         if (nbytes < 0) {
-            if (errno == EINTR) {
+            if (errorInterrupted()) {
                 continue;
             }
             // see EAGAIN comment in LocalSocket::read()
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errorTryAgainLater()) {
                 break;
             }
             close();
@@ -209,11 +227,11 @@ IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
     while (maxSize > 0) {
         ssize_t nbytes = recv(m_fd, reinterpret_cast<char *>(buffer), maxSize, 0);
         if (nbytes < 0) {
-            if (errno == EINTR) {
+            if (errorInterrupted()) {
                 continue;
             }
             // see comment in LocalSocket for rationale of EAGAIN behavior
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errorTryAgainLater()) {
                 break;
             }
             close();
