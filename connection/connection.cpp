@@ -45,15 +45,14 @@
 class HelloReceiver : public IMessageReceiver
 {
 public:
-    void handlePendingReplyFinished(PendingReply *pr, Connection *) override
+    void handlePendingReplyFinished(PendingReply *pr, Connection *connection) override
     {
         assert(pr == &m_helloReply);
         (void) pr;
-        m_parent->handleHelloReply();
+        ConnectionPrivate::get(connection)->handleHelloReply();
     }
 
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
-    ConnectionPrivate *m_parent;
 };
 
 class ClientConnectedHandler : public ICompletionListener
@@ -671,7 +670,6 @@ void ConnectionPrivate::handleCompletion(void *task)
             m_sendQueue.push_front(std::move(hello));
         }
         m_helloReceiver->m_helloReply.setReceiver(m_helloReceiver);
-        m_helloReceiver->m_parent = this;
         // get ready to receive the first message, the hello reply
         receiveNextMessage();
 
