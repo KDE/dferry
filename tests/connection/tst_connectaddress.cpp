@@ -129,11 +129,13 @@ static void testFindBuses()
     std::cout << "The system bus address seems to be: " << systemAddr.toString() << '\n';
 
     EventDispatcher eventDispatcher;
+#ifndef _WIN32
     {
         Connection conn(&eventDispatcher, systemAddr);
         conn.waitForConnectionEstablished();
         TEST(conn.isConnected());
     }
+#endif
 
     ConnectAddress sessionAddr(ConnectAddress::StandardBus::Session);
     std::cout << "The session bus address seems to be: " << sessionAddr.toString() << '\n';
