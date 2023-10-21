@@ -323,6 +323,13 @@ void ConnectionPrivate::close(Error withError)
 {
     // Can't be main and secondary at the main time - it could be made to work, but what for?
     assert(m_secondaryThreadLinks.empty() || !m_mainThreadConnection);
+    if (m_closing)
+    {
+        // Closing, especially cancelling queued messages, may cause further calls to close() from
+        // callbacks. The easiest way is to say we're already closing and ignore the additional calls.
+        return;
+    }
+    m_closing = true;
 
     if (m_mainThreadConnection) {
         CommutexUnlinker unlinker(&m_mainThreadLink);
@@ -375,13 +382,10 @@ void ConnectionPrivate::startAuthentication()
 
 void ConnectionPrivate::handleHelloReply()
 {
-    ConnectionStateChanger stateChanger(this);
-
     if (!m_helloReceiver->m_helloReply.hasNonErrorReply()) {
         delete m_helloReceiver;
         m_helloReceiver = nullptr;
-        stateChanger.setNewState(Unconnected);
-        // TODO set an error, provide access to it, also set it on messages when trying to send / receive them
+        close(Error::RemoteDisconnect);
         return;
     }
     Message msg = m_helloReceiver->m_helloReply.takeReply();
@@ -390,9 +394,12 @@ void ConnectionPrivate::handleHelloReply()
     m_helloReceiver = nullptr;
 
     Arguments::Reader reader(argList);
-    assert(reader.state() == Arguments::String);
     cstring busName = reader.readString();
-    assert(reader.state() == Arguments::Finished);
+    if (reader.state() != Arguments::Finished) {
+        handleHelloFailed();
+        // busName contains garbage here, don't access it!
+        return;
+    }
     m_uniqueName = toStdString(busName);
 
     // tell current secondaries
@@ -406,7 +413,13 @@ void ConnectionPrivate::handleHelloReply()
         }
     }
 
-    stateChanger.setNewState(Connected);
+    ConnectionStateChanger stateChanger(this, Connected);
+}
+
+void ConnectionPrivate::handleHelloFailed()
+{
+    assert(m_state == AwaitingUniqueName);
+    close(Error::RemoteDisconnect);
 }
 
 void ConnectionPrivate::notifyStateChange(Connection::State oldUserState, Connection::State newUserState)
@@ -583,11 +596,7 @@ void Connection::waitForConnectionEstablished()
 
     // Receive the hello reply
     while (d->m_state == ConnectionPrivate::AwaitingUniqueName) {
-        IO::Status ios = MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
-        if (ios != IO::Status::OK) {
-            ConnectionStateChanger stateChanger(d, ConnectionPrivate::Unconnected);
-            break;
-        }
+        MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
     }
 }
 
@@ -635,11 +644,10 @@ void ConnectionPrivate::handleCompletion(void *task)
 {
     switch (m_state) {
     case Authenticating: {
-        ConnectionStateChanger stateChanger(this);
         assert(task == m_authClient);
         assert(m_authClient->isFinished());
         if (!m_authClient->isAuthenticated()) {
-            stateChanger.setNewState(Unconnected);
+            close(Error::AuthenticationFailed);
         }
         m_unixFdPassingEnabled = m_authClient->isUnixFdPassingEnabled();
         delete m_authClient;
@@ -648,7 +656,7 @@ void ConnectionPrivate::handleCompletion(void *task)
             break;
         }
 
-        stateChanger.setNewState(AwaitingUniqueName);
+        ConnectionStateChanger stateChanger(this, AwaitingUniqueName);
 
         // Announce our presence to the bus and have it send some introductory information of its own
         Message hello = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello");
@@ -679,6 +687,13 @@ void ConnectionPrivate::handleCompletion(void *task)
     case Connected: {
         assert(!m_authClient);
         if (!m_sendQueue.empty() && task == &m_sendQueue.front()) {
+            Message *msg = static_cast<Message* >(task);
+            if (msg->error().isError()) {
+                if (m_state == AwaitingUniqueName) {
+                    handleHelloFailed();
+                }
+                // TODO else also close the connection? (maybe depending on which error it is)
+            }
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
                 MessagePrivate::get(&m_sendQueue.front())->send(m_transport);
@@ -690,6 +705,9 @@ void ConnectionPrivate::handleCompletion(void *task)
             receiveNextMessage();
 
             if (receivedMessage->type() == Message::InvalidMessage) {
+                if (m_state == AwaitingUniqueName) {
+                    handleHelloFailed();
+                }
                 delete receivedMessage;
             } else if (!maybeDispatchToPendingReply(receivedMessage)) {
                 if (m_client) {

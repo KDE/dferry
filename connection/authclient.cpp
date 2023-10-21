@@ -84,12 +84,13 @@ IO::Status AuthClient::handleTransportCanRead()
     }
     if (!readTransport()->isOpen()) {
         m_state = AuthenticationFailedState;
-        return IO::Status::RemoteClosed;
     }
+    // The handleCompletion() callback can (and in fact will) delete us. Query m_state before.
+    const IO::Status ret = m_state == AuthenticationFailedState ? IO::Status::RemoteClosed : IO::Status::OK;
     if (isFinished() && !wasFinished && m_completionListener) {
         m_completionListener->handleCompletion(this);
     }
-    return IO::Status::OK;
+    return ret;
 }
 
 bool AuthClient::readLine()
@@ -197,7 +198,6 @@ void AuthClient::advanceState()
         break; }
     default:
         m_state = AuthenticationFailedState;
-        readTransport()->close();
         break;
     }
 }

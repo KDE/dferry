@@ -76,10 +76,6 @@ public:
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,
         ArrayOrDictTooLong,
-        SendingTooManyUnixFds, // The FD capacity varies by transport, so this error is only produced
-                               // when trying to send a message with too many FDs. It is fine to pass
-                               // around a message with lots of file descriptors locally.
-
         StateNotSkippable,
 
         MissingBeginDictEntry = 1019,
@@ -94,8 +90,6 @@ public:
         // Message  / PendingReply
         DetachedPendingReply,
         Timeout,
-        RemoteDisconnect,
-        LocalDisconnect,
         MalformedReply, // Catch-all for failed reply validation - can't be corrected locally anyway.
                         // Since the reply isn't fully pre-validated for performance reasons,
                         // absence of this error is no guarantee of well-formedness.
@@ -122,9 +116,17 @@ public:
         PeerInvalidProperty,
         PeerNoSuchProperty,
         AccessDenied, // for now(?) only properties: writing to read-only / reading from write-only
-        MaxMessageError = 2047
+        MaxMessageError = 2047,
         // end Message / PendingReply errors
 
+        // Connection
+        AuthenticationFailed,
+        RemoteDisconnect,
+        LocalDisconnect,
+        SendingTooManyUnixFds, // The FD capacity varies by transport, so this error is only produced
+                               // when trying to send a message with too many FDs. It is fine to pass
+                               // around a message with lots of file descriptors locally.
+        MaxConnectionError = 3071,
 
         // errors for other occasions go here
     };

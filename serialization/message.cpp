@@ -934,11 +934,7 @@ IO::Status MessagePrivate::handleTransportCanWrite()
             ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
         }
         if (ioRes.status != IO::Status::OK) {
-            // ### what about m_error?
-            // I think we only test remote disconnect while reading. We should also check while writing.
-            // - Well, actually, Connection aborts all pending replies with error when we return an error
-            // her. But due to th limited amount of info in IO::Status, it can only report errors
-            // corresponding directly to IO::Status values.
+            m_error = Error::RemoteDisconnect;
             m_state = Serialized; // in a way... serialization has completed, unsuccessfully
             writeTransport()->setWriteListener(nullptr);
             notifyCompletionListener();

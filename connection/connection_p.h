@@ -101,6 +101,7 @@ public:
 
     void startAuthentication();
     void handleHelloReply();
+    void handleHelloFailed();
     // invokes m_connectionStateListener, if any
     void notifyStateChange(Connection::State oldUserState, Connection::State newUserState);
 
@@ -125,6 +126,7 @@ public:
     void processEvent(Event *evt); // called from thread-local EventDispatcher
 
     State m_state = Unconnected;
+    bool m_closing = false;
     bool m_unixFdPassingEnabled = false;
 
     Connection *m_connection = nullptr;
