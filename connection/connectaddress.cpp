@@ -32,7 +32,6 @@
 #include <iostream>
 #include <vector>
 
-#include <sys/stat.h>
 #include <sys/types.h>
 
 #ifdef __unix__
