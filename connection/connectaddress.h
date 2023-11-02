@@ -81,6 +81,12 @@ public:
     void setPath(const std::string &path);
     std::string path() const; // only for Unix domain sockets
 
+    void setHostname(const std::string &path);
+    std::string hostname() const; // Only for IP sockets. Only an IP address string ("192.168.0.10") is
+                                  // supported, hostname ("myhost.local") support might be added later.
+                                  // As an exception, hostname "localhost" or empty string will be
+                                  // understood as the loopback address.
+
     void setPort(int port);
     int port() const; // only for TcpSocket
 

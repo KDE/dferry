@@ -24,6 +24,7 @@
 #include "ipsocket.h"
 
 #include "connectaddress.h"
+#include "ipresolver.h"
 
 #ifdef __unix__
 #include <errno.h>
@@ -109,6 +110,10 @@ IpSocket::IpSocket(const ConnectAddress &ca)
    : m_fd(-1)
 {
     assert(ca.type() == ConnectAddress::Type::Tcp || ca.type() == ConnectAddress::Type::Tcp4);
+    if (ca.type() != ConnectAddress::Type::Tcp && ca.type() != ConnectAddress::Type::Tcp4) {
+        std::cerr << "IpSocket contruction failed 0.\n";
+        return;
+    }
 #ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
@@ -123,12 +128,11 @@ IpSocket::IpSocket(const ConnectAddress &ca)
         return;
     }
 
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(ca.port());
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    IpResolver resolver(ca);
+    bool ok = resolver.resultValid();
 
-    bool ok = connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;
+    ok = ok && connect(fd, resolver.resolved(), resolver.resolvedLength()) == 0;
+
     // only make it non-blocking after connect() because Winsock returns
     // WSAEWOULDBLOCK when connecting a non-blocking socket
     ok = ok && setNonBlocking(fd);

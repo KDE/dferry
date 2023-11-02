@@ -24,6 +24,7 @@
 #include "ipserver.h"
 
 #include "connectaddress.h"
+#include "ipresolver.h"
 
 #include "icompletionlistener.h"
 #include "ipsocket.h"
@@ -58,12 +59,10 @@ IpServer::IpServer(const ConnectAddress &ca)
     // don't let forks inherit the file descriptor - just in case
     fcntl(fd, F_SETFD, FD_CLOEXEC);
 #endif
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(ca.port());
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    IpResolver resolver(ca);
+    bool ok = resolver.resultValid();
 
-    bool ok = bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0;
+    ok = ok && bind(fd, resolver.resolved(), resolver.resolvedLength()) == 0;
     ok = ok && (::listen(fd, /* max queued incoming connections */ 64) == 0);
 
     if (ok) {

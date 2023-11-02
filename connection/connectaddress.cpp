@@ -263,6 +263,7 @@ public:
     ConnectAddress::Type m_addrType;
     ConnectAddress::Role m_role;
     std::string m_path;
+    std::string m_hostname;
     int m_port;
     std::string m_guid;
 };
@@ -355,6 +356,16 @@ void ConnectAddress::setPath(const std::string &path)
 std::string ConnectAddress::path() const
 {
     return d->m_path;
+}
+
+void ConnectAddress::setHostname(const std::string &hostname)
+{
+    d->m_hostname = hostname;
+}
+
+std::string ConnectAddress::hostname() const
+{
+    return d->m_hostname;
 }
 
 void ConnectAddress::setPort(int port)
@@ -498,9 +509,7 @@ bool ConnectAddress::setAddressFromString(const std::string &addr)
             if (!isSomeTcpType(d->m_addrType)) {
                 return false;
             }
-            if (value != "localhost" && value != "127.0.0.1") {
-                return false;
-            }
+            d->m_hostname = value;
         } else if (key == "port") {
             if (!unique.claim(UniqueCheck::Port)) {
                 return false;

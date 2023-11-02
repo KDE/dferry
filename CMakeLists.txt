@@ -69,6 +69,7 @@ set(DFER_SOURCES
     serialization/message.cpp
     transport/ipserver.cpp
     transport/ipsocket.cpp
+    transport/ipresolver.cpp
     transport/iserver.cpp
     transport/itransport.cpp
     transport/itransportlistener.cpp
@@ -114,6 +115,7 @@ set(DFER_PRIVATE_HEADERS
     serialization/basictypeio.h
     transport/ipserver.h
     transport/ipsocket.h
+    transport/ipresolver.h
     transport/iserver.h
     transport/itransport.h
     transport/itransportlistener.h
