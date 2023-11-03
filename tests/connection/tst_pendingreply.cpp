@@ -48,9 +48,10 @@ public:
     void handlePendingReplyFinished(PendingReply *pr, Connection *connection) override
     {
         pr->dumpState();
-        std::cout << "got it!\n" << pr->reply()->arguments().prettyPrint();
         TEST(pr->isFinished());
         TEST(!pr->isError());
+
+        std::cout << "got it!\n" << pr->reply()->arguments().prettyPrint();
 
         // This is really a different test, it used to reproduce a memory leak under Valgrind
         Message reply = pr->takeReply();
