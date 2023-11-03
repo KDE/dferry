@@ -41,7 +41,6 @@ public:
     // virtuals from ITransport
     IO::Result write(chunk data) override;
     IO::Result writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors) override;
-    uint32 availableBytesForReading() override;
     IO::Result read(byte *buffer, uint32 maxSize) override;
     IO::Result readWithFileDescriptors(byte *buffer, uint32 maxSize,
                                        std::vector<int> *fileDescriptors) override;

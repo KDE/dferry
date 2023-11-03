@@ -42,7 +42,6 @@ public:
 
     // pure virtuals from ITransport
     IO::Result write(chunk data) override;
-    uint32 availableBytesForReading() override;
     IO::Result read(byte *buffer, uint32 maxSize) override;
     void platformClose() override;
     bool isOpen() override;

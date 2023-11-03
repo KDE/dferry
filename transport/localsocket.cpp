@@ -214,15 +214,6 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
     return ret;
 }
 
-uint32 LocalSocket::availableBytesForReading()
-{
-    uint32 available = 0;
-    if (ioctl(m_fd, FIONREAD, &available) < 0) {
-        available = 0;
-    }
-    return available;
-}
-
 IO::Result LocalSocket::read(byte *buffer, uint32 maxSize)
 {
     IO::Result ret;

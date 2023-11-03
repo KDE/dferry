@@ -49,7 +49,6 @@ public:
     void setReadListener(ITransportListener *listener);
     void setWriteListener(ITransportListener *listener);
 
-    virtual uint32 availableBytesForReading() = 0;
     virtual IO::Result read(byte *buffer, uint32 maxSize) = 0;
     virtual IO::Result readWithFileDescriptors(byte *buffer, uint32 maxSize,
                                                std::vector<int> *fileDescriptors);

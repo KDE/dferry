@@ -205,20 +205,6 @@ IO::Result IpSocket::write(chunk a)
     return ret;
 }
 
-uint32 IpSocket::availableBytesForReading()
-{
-#ifdef _WIN32
-    u_long available = 0;
-    if (ioctlsocket(m_fd, FIONREAD, &available) != NO_ERROR) {
-#else
-    uint32 available = 0;
-    if (ioctl(m_fd, FIONREAD, &available) < 0) {
-#endif
-        available = 0;
-    }
-    return uint32(available);
-}
-
 IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
 {
     IO::Result ret;

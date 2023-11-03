@@ -99,8 +99,9 @@ bool AuthClient::readLine()
     if (isEndOfLine()) {
         m_line.clear(); // start a new line
     }
-    while (readTransport()->availableBytesForReading()) {
-        byte readBuf[1];
+
+    byte readBuf[1];
+    while (true) {
         const IO::Result iores = readTransport()->read(readBuf, 1);
         if (iores.length != 1 || iores.status != IO::Status::OK) {
             return false;
