@@ -27,7 +27,6 @@
 #include "ieventpoller.h"
 
 #include <unordered_map>
-#include <vector>
 
 #include <sys/select.h>
 
@@ -49,9 +48,6 @@ private:
     void resetFdSets();
 
     std::unordered_map<FileDescriptor, uint32 /*ioRw*/> m_fds;
-
-    std::vector<int> m_readFds;
-    std::vector<int> m_writeFds;
 
     fd_set m_readSet;
     fd_set m_writeSet;

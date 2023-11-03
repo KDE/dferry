@@ -77,7 +77,8 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     }
 
     // select!
-    int numEvents = select(nfds + 1, &m_readSet, &m_writeSet, nullptr, tvPointer);
+    nfds += 1; // see documentation of select()...
+    int numEvents = select(nfds, &m_readSet, &m_writeSet, nullptr, tvPointer);
 
     // check for interruption
     if (FD_ISSET(m_interruptPipe[0], &m_readSet)) {
@@ -99,20 +100,16 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     // dispatch reads and writes
     if (numEvents < 0) {
         // TODO error handling
-    } else if (numEvents > 0) {
-        for (auto fdListener : EventDispatcherPrivate::get(m_dispatcher)->m_ioListeners) {
-            if (FD_ISSET(fdListener.first, &m_readSet)) {
-                EventDispatcherPrivate::get(m_dispatcher)
-                    ->notifyListenerForIo(fdListener.first, IO::RW::Read);
+    } else {
+        EventDispatcherPrivate* const edpriv = EventDispatcherPrivate::get(m_dispatcher);
+        for (int i = 0; i < nfds && numEvents > 0; i++) {
+            if (FD_ISSET(i, &m_readSet)) {
+                edpriv->notifyListenerForIo(i, IO::RW::Read);
                 numEvents--;
             }
-            if (FD_ISSET(fdListener.first, &m_writeSet)) {
-                EventDispatcherPrivate::get(m_dispatcher)
-                    ->notifyListenerForIo(fdListener.first, IO::RW::Write);
+            if (FD_ISSET(i, &m_writeSet)) {
+                edpriv->notifyListenerForIo(i, IO::RW::Write);
                 numEvents--;
-            }
-            if (numEvents <= 0) {
-                break;
             }
         }
     }
