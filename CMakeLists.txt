@@ -112,6 +112,7 @@ set(DFER_PRIVATE_HEADERS
     events/iioeventlistener.h
     events/iioeventsource.h
     events/platformtime.h
+    events/socketpair.h
     serialization/basictypeio.h
     transport/ipserver.h
     transport/ipsocket.h

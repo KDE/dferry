@@ -26,7 +26,17 @@
 #include "eventdispatcher_p.h"
 #include "iioeventlistener.h"
 
+// The "arm Keil MDK Middleware Network Component" has certain quirks that we cover here. For lack
+// of a really good way to detect it, we assume that builds with the ARM compiler are for it.
+#if defined(__CC_ARM) || defined(__ARMCC_VERSION)
+#define KEIL_MDK_NETWORK
+#endif
+
+#ifndef KEIL_MDK_NETWORK
 #include <fcntl.h>
+#else
+#include "socketpair.h"
+#endif
 #include <unistd.h>
 
 #include <cassert>
@@ -36,7 +46,21 @@
 SelectEventPoller::SelectEventPoller(EventDispatcher *dispatcher)
    : IEventPoller(dispatcher)
 {
+#ifndef KEIL_MDK_NETWORK
     pipe2(m_interruptPipe, O_NONBLOCK);
+#else
+    // TODO really need to make socketpair reliable and safe!
+    socketpair(m_interruptPipe);
+    if (true /* if socketpair was successful */) {
+        unsigned long value = 1; // 0 blocking, != 0 non-blocking
+        for (int i = 0 ; i < 2; i++) {
+            if (ioctlsocket(m_interruptPipe[i], FIONBIO, &value) != NO_ERROR) {
+                return false;
+            }
+        }
+    }
+
+#endif
     resetFdSets();
 }
 

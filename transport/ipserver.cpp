@@ -29,10 +29,18 @@
 #include "icompletionlistener.h"
 #include "ipsocket.h"
 
+// The "arm Keil MDK Middleware Network Component" has certain quirks that we cover here. For lack
+// of a really good way to detect it, we assume that builds with the ARM compiler are for it.
+#if defined(__CC_ARM) || defined(__ARMCC_VERSION)
+#define KEIL_MDK_NETWORK
+#endif
+
 #ifdef __unix__
 #include <netinet/in.h>
 #include <sys/socket.h>
+#ifndef KEIL_MDK_NETWORK
 #include <fcntl.h>
+#endif
 #include <unistd.h>
 #endif
 #ifdef _WIN32
@@ -55,7 +63,7 @@ IpServer::IpServer(const ConnectAddress &ca)
         std::cerr << "IpServer contruction failed A.\n";
         return;
     }
-#ifdef __unix__
+#if !defined(_WIN32) && !defined (KEIL_MDK_NETWORK)
     // don't let forks inherit the file descriptor - just in case
     fcntl(fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -69,7 +77,7 @@ IpServer::IpServer(const ConnectAddress &ca)
         m_listenFd = fd;
     } else {
         std::cerr << "IpServer contruction failed B.\n";
-#ifdef _WIN32
+#if defined(_WIN32) || defined (KEIL_MDK_NETWORK)
         closesocket(fd);
 #else
         ::close(fd);
@@ -93,7 +101,7 @@ IO::Status IpServer::handleIoReady(IO::RW rw)
         std::cerr << "\nIpServer::notifyRead(): accept() failed.\n\n";
         return IO::Status::RemoteClosed;
     }
-#ifdef __unix__
+#if defined(__unix__) && !defined (KEIL_MDK_NETWORK)
     fcntl(connFd, F_SETFD, FD_CLOEXEC);
 #endif
     m_incomingConnections.push_back(new IpSocket(connFd));
@@ -111,7 +119,7 @@ bool IpServer::isListening() const
 void IpServer::platformClose()
 {
     if (isValidFileDescriptor(m_listenFd)) {
-#ifdef _WIN32
+#if defined(_WIN32) || defined (KEIL_MDK_NETWORK)
         closesocket(m_listenFd);
 #else
         ::close(m_listenFd);

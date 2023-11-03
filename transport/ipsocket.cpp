@@ -26,12 +26,20 @@
 #include "connectaddress.h"
 #include "ipresolver.h"
 
+// The "arm Keil MDK Middleware Network Component" has certain quirks that we cover here. For lack
+// of a really good way to detect it, we assume that builds with the ARM compiler are for it.
+#if defined(__CC_ARM) || defined(__ARMCC_VERSION)
+#define KEIL_MDK_NETWORK
+#endif
+
 #ifdef __unix__
 #include <errno.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#ifndef KEIL_MDK_NETWORK
 #include <fcntl.h>
+#endif
 #include <unistd.h>
 #endif
 #ifdef _WIN32
@@ -46,13 +54,18 @@ typedef SSIZE_T ssize_t;
 
 #include <iostream>
 
-static bool errorTryAgainLater()
+static bool errorTryAgainLater(ssize_t nbytes)
 {
+    (void) nbytes;
 #ifdef _WIN32
     return WSAGetLastError() == WSAEWOULDBLOCK;
-#else
+#elif defined(KEIL_MDK_NETWORK)
+    return nbytes == BSD_EWOULDBLOCK;
+#elif defined(__unix__)
     const int en = errno; // re-fetching errno might have a small cost
     return en == EAGAIN || en == EWOULDBLOCK;
+#else
+#error no implementation for this platform!
 #endif
 }
 
@@ -60,14 +73,19 @@ static bool errorInterrupted()
 {
 #ifdef _WIN32
     return WSAGetLastError() == WSAEINTR;
-#else
+#elif defined(KEIL_MDK_NETWORK)
+    return false;
+#elif defined(__unix__)
+    //return false;
     return errno == EINTR;
+#else
+#error no implementation for this platform!
 #endif
 }
 
 static bool setNonBlocking(int fd)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(KEIL_MDK_NETWORK)
     unsigned long value = 1; // 0 blocking, != 0 non-blocking
     if (ioctlsocket(fd, FIONBIO, &value) != NO_ERROR) {
         return false;
@@ -89,7 +107,7 @@ static bool setNonBlocking(int fd)
 
 static int sendFlags()
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(KEIL_MDK_NETWORK)
     return 0;
 #else
     return MSG_NOSIGNAL;
@@ -98,7 +116,7 @@ static int sendFlags()
 
 static void closeSocket(int fd)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(KEIL_MDK_NETWORK)
     closesocket(fd);
 #else
     ::close(fd);
@@ -187,7 +205,7 @@ IO::Result IpSocket::write(chunk a)
                 continue;
             }
             // see EAGAIN comment in LocalSocket::read()
-            if (errorTryAgainLater()) {
+            if (errorTryAgainLater(nbytes)) {
                 break;
             }
             close();
@@ -221,7 +239,7 @@ IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
                 continue;
             }
             // see comment in LocalSocket for rationale of EAGAIN behavior
-            if (errorTryAgainLater()) {
+            if (errorTryAgainLater(nbytes)) {
                 break;
             }
             close();
