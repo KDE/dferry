@@ -27,10 +27,6 @@
 // Note about invalid descriptors: On Unix they are -1 signed, on Windows they are
 // ~0 unsigned. Same bit pattern, not directly interchangeable in use.
 
-#ifdef __unix__
-typedef int FileDescriptor;
-#endif
-
 #ifdef _WIN32
 // this is ugly, but including all of winsock2.h in lots of headers is also ugly...
 #ifdef _WIN64
@@ -38,6 +34,9 @@ typedef unsigned long long int FileDescriptor;
 #else
 typedef unsigned int FileDescriptor;
 #endif
+#else
+// So far, Windows is the only supported platform where a file descriptor isn't just a (signed) int.
+typedef int FileDescriptor;
 #endif
 
 enum InvalidFileDescriptorEnum : FileDescriptor {
