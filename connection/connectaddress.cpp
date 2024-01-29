@@ -257,6 +257,7 @@ public:
     Private()
        : m_addrType(ConnectAddress::Type::None),
          m_role(ConnectAddress::Role::None),
+         m_hostname("localhost"),
          m_port(-1)
     {}
 
@@ -608,13 +609,13 @@ std::string ConnectAddress::toString() const
         ret = "unix:runtime=yes";
         break;
     case Type::Tcp:
-        ret = "tcp:host=localhost,port=";
+        ret = "tcp:host=" + d->m_hostname + ",port=";
         break;
     case Type::Tcp4:
-        ret = "tcp:host=localhost,family=ipv4,port=";
+        ret = "tcp:host=" + d->m_hostname + ",family=ipv4,port=";
         break;
     case Type::Tcp6:
-        ret = "tcp:host=localhost,family=ipv6,port=";
+        ret = "tcp:host=" + d->m_hostname + ",family=ipv6,port=";
         break;
     default:
         // invalid
