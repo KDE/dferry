@@ -64,13 +64,15 @@ static void testFromString()
         ConnectAddress addr;
         addr.setAddressFromString("tcp:family=ipv4,host=127.0.0.1,port=65535");
         TEST(addr.type() == ConnectAddress::Type::Tcp4);
+        TEST(addr.hostname() == "127.0.0.1");
         TEST(addr.port() == 65535);
         TEST(addr.guid() == "");
     }
     {
         ConnectAddress addr;
-        addr.setAddressFromString("tcp:host=localhost,port=1,family=ipv6");
+        addr.setAddressFromString("tcp:host=some_remote_host,port=1,family=ipv6");
         TEST(addr.type() == ConnectAddress::Type::Tcp6);
+        TEST(addr.hostname() == "some_remote_host");
         TEST(addr.port() == 1);
         TEST(addr.guid() == "");
     }
@@ -110,8 +112,9 @@ static void testToString()
     {
         ConnectAddress addr;
         addr.setType(ConnectAddress::Type::Tcp4);
+        addr.setHostname("some_remote_host");
         addr.setPort(65535);
-        TEST(addr.toString() == "tcp:host=localhost,family=ipv4,port=65535");
+        TEST(addr.toString() == "tcp:host=some_remote_host,family=ipv4,port=65535");
     }
     {
         ConnectAddress addr;
