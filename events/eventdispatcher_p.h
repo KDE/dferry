@@ -50,7 +50,7 @@ class ConnectionPrivate;
 class EventDispatcherPrivate : public IIoEventSource
 {
 public:
-    static EventDispatcherPrivate *get(EventDispatcher *ed) { return ed->d; }
+    static EventDispatcherPrivate *of(EventDispatcher *ed) { return ed->d; }
 
     ~EventDispatcherPrivate();
 

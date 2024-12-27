@@ -142,11 +142,11 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     // descriptor like with FD_ISSET.
     // numEvents -= m_readSet.fd_count + m_writeSet.fd_count;
     for (uint i = 0; i < m_readSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)
+        EventDispatcherPrivate::of(m_dispatcher)
             ->notifyListenerForIo(m_readSet.fd_array[i], IO::RW::Read);
     }
     for (uint i = 0; i < m_writeSet.fd_count; i++) {
-        EventDispatcherPrivate::get(m_dispatcher)
+        EventDispatcherPrivate::of(m_dispatcher)
             ->notifyListenerForIo(m_writeSet.fd_array[i], IO::RW::Write);
     }
 

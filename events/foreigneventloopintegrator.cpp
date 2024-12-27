@@ -157,20 +157,20 @@ bool ForeignEventLoopIntegrator::exiting() const
 void ForeignEventLoopIntegrator::handleTimeout()
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->triggerDueTimers();
+        EventDispatcherPrivate::of(d->dispatcher())->triggerDueTimers();
     }
 }
 
 void ForeignEventLoopIntegrator::handleReadyRead(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Read);
+        EventDispatcherPrivate::of(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Read);
     }
 }
 
 void ForeignEventLoopIntegrator::handleReadyWrite(int fd)
 {
     if (!d->exiting) {
-        EventDispatcherPrivate::get(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Write);
+        EventDispatcherPrivate::of(d->dispatcher())->notifyListenerForIo(fd, IO::RW::Write);
     }
 }

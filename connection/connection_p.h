@@ -91,7 +91,7 @@ public:
         Connected
     };
 
-    static ConnectionPrivate *get(Connection *c) { return c->d; }
+    static ConnectionPrivate *of(Connection *c) { return c->d; }
 
     ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher);
     void close(Error withError);

@@ -80,7 +80,7 @@ public:
 class MessagePrivate : public ITransportListener
 {
 public:
-    static MessagePrivate *get(Message *m) { return m->d; }
+    static MessagePrivate *of(Message *m) { return m->d; }
 
     MessagePrivate(Message *parent);
     MessagePrivate(const MessagePrivate &other, Message *parent);

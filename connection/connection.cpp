@@ -49,7 +49,7 @@ public:
     {
         assert(pr == &m_helloReply);
         (void) pr;
-        ConnectionPrivate::get(connection)->handleHelloReply();
+        ConnectionPrivate::of(connection)->handleHelloReply();
     }
 
     PendingReply m_helloReply; // keep it here so it conveniently goes away when it's done
@@ -127,7 +127,7 @@ void ConnectionStateChanger::disable()
 }
 
 ConnectionPrivate::ConnectionPrivate(Connection *connection, EventDispatcher *dispatcher)
-   : IIoEventForwarder(EventDispatcherPrivate::get(dispatcher)),
+   : IIoEventForwarder(EventDispatcherPrivate::of(dispatcher)),
      m_connection(connection),
      m_eventDispatcher(dispatcher)
 {
@@ -170,7 +170,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
 {
     d->m_connectAddress = ca;
     assert(d->m_eventDispatcher);
-    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
+    EventDispatcherPrivate::of(d->m_eventDispatcher)->m_connectionToNotify = d;
 
     if (ca.type() == ConnectAddress::Type::None || ca.role() == ConnectAddress::Role::None) {
         return;
@@ -216,7 +216,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
 Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
    : d(new ConnectionPrivate(this, dispatcher))
 {
-    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
+    EventDispatcherPrivate::of(d->m_eventDispatcher)->m_connectionToNotify = d;
 
     // This must be destroyed after all the Lockers so we notify with no locks held!
     ConnectionStateChanger stateChanger(d);
@@ -242,7 +242,7 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
     SecondaryConnectionConnectEvent *evt = new SecondaryConnectionConnectEvent();
     evt->connection = d;
     evt->id = id;
-    EventDispatcherPrivate::get(mainD->m_eventDispatcher)
+    EventDispatcherPrivate::of(mainD->m_eventDispatcher)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
     stateChanger.setNewState(ConnectionPrivate::AwaitingUniqueName);
 }
@@ -257,7 +257,7 @@ Connection::Connection(ITransport *transport, EventDispatcher *ed, const Connect
     d->m_transport = transport;
     d->addIoListener(d->m_transport);
     d->m_connectAddress = address;
-    EventDispatcherPrivate::get(d->m_eventDispatcher)->m_connectionToNotify = d;
+    EventDispatcherPrivate::of(d->m_eventDispatcher)->m_connectionToNotify = d;
 
 #if 0
     // TODO make the client authenticate itself, roughly along these lines
@@ -336,7 +336,7 @@ void ConnectionPrivate::close(Error withError)
         if (unlinker.hasLock()) {
             SecondaryConnectionDisconnectEvent *evt = new SecondaryConnectionDisconnectEvent();
             evt->connection = this;
-            EventDispatcherPrivate::get(m_mainThreadConnection->m_eventDispatcher)
+            EventDispatcherPrivate::of(m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
     }
@@ -351,7 +351,7 @@ void ConnectionPrivate::close(Error withError)
                 if (unlinker.hasLock()) {
                     MainConnectionDisconnectEvent *evt = new MainConnectionDisconnectEvent();
                     evt->error = withError;
-                    EventDispatcherPrivate::get(it->first->m_eventDispatcher)
+                    EventDispatcherPrivate::of(it->first->m_eventDispatcher)
                         ->queueEvent(std::unique_ptr<Event>(evt));
                 }
                 unlinker.unlinkNow(); // don't access the element after erasing it, finish it now
@@ -364,7 +364,7 @@ void ConnectionPrivate::close(Error withError)
 
     cancelAllPendingReplies(withError);
 
-    EventDispatcherPrivate::get(m_eventDispatcher)->m_connectionToNotify = nullptr;
+    EventDispatcherPrivate::of(m_eventDispatcher)->m_connectionToNotify = nullptr;
     if (m_transport) {
         m_transport->close();
     }
@@ -408,7 +408,7 @@ void ConnectionPrivate::handleHelloReply()
     for (auto &it : m_secondaryThreadLinks) {
         CommutexLocker otherLocker(&it.second);
         if (otherLocker.hasLock()) {
-            EventDispatcherPrivate::get(it.first->m_eventDispatcher)
+            EventDispatcherPrivate::of(it.first->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(new UniqueNameReceivedEvent(evt)));
         }
     }
@@ -479,7 +479,7 @@ Error ConnectionPrivate::prepareSend(Message *msg)
         }
     }
 
-    MessagePrivate *const mpriv = MessagePrivate::get(msg); // this is unchanged by move()ing the owning Message.
+    MessagePrivate *const mpriv = MessagePrivate::of(msg); // this is unchanged by move()ing the owning Message.
     if (!mpriv->serialize()) {
         return mpriv->m_error;
     }
@@ -488,7 +488,7 @@ Error ConnectionPrivate::prepareSend(Message *msg)
 
 void ConnectionPrivate::sendPreparedMessage(Message msg)
 {
-    MessagePrivate *const mpriv = MessagePrivate::get(&msg);
+    MessagePrivate *const mpriv = MessagePrivate::of(&msg);
     mpriv->setCompletionListener(this);
     m_sendQueue.push_back(std::move(msg));
     if (m_state == ConnectionPrivate::Connected && m_sendQueue.size() == 1) {
@@ -533,7 +533,7 @@ PendingReply Connection::send(Message m, int timeoutMsecs)
                 std::unique_ptr<SendMessageWithPendingReplyEvent> evt(new SendMessageWithPendingReplyEvent);
                 evt->message = std::move(m);
                 evt->connection = d;
-                EventDispatcherPrivate::get(d->m_mainThreadConnection->m_eventDispatcher)
+                EventDispatcherPrivate::of(d->m_mainThreadConnection->m_eventDispatcher)
                     ->queueEvent(std::move(evt));
             } else {
                 pendingPriv->m_error = Error::LocalDisconnect;
@@ -564,7 +564,7 @@ Error Connection::sendNoReply(Message m)
         if (locker.hasLock()) {
             std::unique_ptr<SendMessageEvent> evt(new SendMessageEvent);
             evt->message = std::move(m);
-            EventDispatcherPrivate::get(d->m_mainThreadConnection->m_eventDispatcher)
+            EventDispatcherPrivate::of(d->m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::move(evt));
         } else {
             return Error::LocalDisconnect;
@@ -591,12 +591,12 @@ void Connection::waitForConnectionEstablished()
     }
     // Send the hello message
     assert(!d->m_sendQueue.empty()); // the hello message should be in the queue
-    MessagePrivate *helloPriv = MessagePrivate::get(&d->m_sendQueue.front());
+    MessagePrivate *helloPriv = MessagePrivate::of(&d->m_sendQueue.front());
     helloPriv->handleTransportCanWrite();
 
     // Receive the hello reply
     while (d->m_state == ConnectionPrivate::AwaitingUniqueName) {
-        MessagePrivate::get(d->m_receivingMessage)->handleTransportCanRead();
+        MessagePrivate::of(d->m_receivingMessage)->handleTransportCanRead();
     }
 }
 
@@ -663,7 +663,7 @@ void ConnectionPrivate::handleCompletion(void *task)
         hello.setSerial(1);
         hello.setExpectsReply(false);
         hello.setDestination(std::string("org.freedesktop.DBus"));
-        MessagePrivate *const helloPriv = MessagePrivate::get(&hello);
+        MessagePrivate *const helloPriv = MessagePrivate::of(&hello);
 
         m_helloReceiver = new HelloReceiver;
         m_helloReceiver->m_helloReply = m_connection->send(std::move(hello));
@@ -696,7 +696,7 @@ void ConnectionPrivate::handleCompletion(void *task)
             }
             m_sendQueue.pop_front();
             if (!m_sendQueue.empty()) {
-                MessagePrivate::get(&m_sendQueue.front())->send(m_transport);
+                MessagePrivate::of(&m_sendQueue.front())->send(m_transport);
             }
         } else {
             assert(task == m_receivingMessage);
@@ -725,7 +725,7 @@ void ConnectionPrivate::handleCompletion(void *task)
 
                     CommutexLocker otherLocker(&it->second);
                     if (otherLocker.hasLock()) {
-                        EventDispatcherPrivate::get(it->first->m_eventDispatcher)
+                        EventDispatcherPrivate::of(it->first->m_eventDispatcher)
                             ->queueEvent(std::unique_ptr<Event>(evt));
                         ++it;
                     } else {
@@ -770,7 +770,7 @@ bool ConnectionPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
         PendingReplySuccessEvent *evt = new PendingReplySuccessEvent;
         evt->reply = std::move(*receivedMessage);
         delete receivedMessage;
-        EventDispatcherPrivate::get(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
+        EventDispatcherPrivate::of(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
     }
     return true;
 }
@@ -795,7 +795,7 @@ bool ConnectionPrivate::maybeDispatchToPendingReply(uint32 serial, Error error)
         PendingReplyFailureEvent *evt = new PendingReplyFailureEvent;
         evt->m_serial = serial;
         evt->m_error = error;
-        EventDispatcherPrivate::get(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
+        EventDispatcherPrivate::of(connection->m_eventDispatcher)->queueEvent(std::unique_ptr<Event>(evt));
     }
     return true;
 }
@@ -803,7 +803,7 @@ bool ConnectionPrivate::maybeDispatchToPendingReply(uint32 serial, Error error)
 void ConnectionPrivate::receiveNextMessage()
 {
     m_receivingMessage = new Message;
-    MessagePrivate *const mpriv = MessagePrivate::get(m_receivingMessage);
+    MessagePrivate *const mpriv = MessagePrivate::of(m_receivingMessage);
     mpriv->setCompletionListener(this);
     mpriv->receive(m_transport);
 }
@@ -815,7 +815,7 @@ void ConnectionPrivate::unregisterPendingReply(PendingReplyPrivate *p)
         if (otherLocker.hasLock()) {
             PendingReplyCancelEvent *evt = new PendingReplyCancelEvent;
             evt->serial = p->m_serial;
-            EventDispatcherPrivate::get(m_mainThreadConnection->m_eventDispatcher)
+            EventDispatcherPrivate::of(m_mainThreadConnection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
     }
@@ -919,7 +919,7 @@ void ConnectionPrivate::processEvent(Event *evt)
         if (locker.hasLock()) {
             UniqueNameReceivedEvent *evt = new UniqueNameReceivedEvent;
             evt->uniqueName = m_uniqueName;
-            EventDispatcherPrivate::get(sce->connection->m_eventDispatcher)
+            EventDispatcherPrivate::of(sce->connection->m_eventDispatcher)
                 ->queueEvent(std::unique_ptr<Event>(evt));
         }
 

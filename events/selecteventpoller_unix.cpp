@@ -101,7 +101,7 @@ IEventPoller::InterruptAction SelectEventPoller::poll(int timeout)
     if (numEvents < 0) {
         // TODO error handling
     } else {
-        EventDispatcherPrivate* const edpriv = EventDispatcherPrivate::get(m_dispatcher);
+        EventDispatcherPrivate* const edpriv = EventDispatcherPrivate::of(m_dispatcher);
         for (int i = 0; i < nfds && numEvents > 0; i++) {
             if (FD_ISSET(i, &m_readSet)) {
                 edpriv->notifyListenerForIo(i, IO::RW::Read);

@@ -50,7 +50,7 @@ Timer::~Timer()
     // Rationale for "|| m_reentrancyGuard": While triggered, we must be removed from the event
     // dispatcher's timer map before it may dereference the then dangling pointer to this Timer.
     if (m_isRunning || m_reentrancyGuard) {
-        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
+        EventDispatcherPrivate::of(m_eventDispatcher)->removeTimer(this);
     }
 
     if (m_reentrancyGuard) {
@@ -66,12 +66,12 @@ void Timer::start(int msec)
     }
     // restart if already running
     if (!m_reentrancyGuard && m_isRunning) {
-        EventDispatcherPrivate::get(m_eventDispatcher)->removeTimer(this);
+        EventDispatcherPrivate::of(m_eventDispatcher)->removeTimer(this);
     }
     m_interval = msec;
     m_isRunning = true;
     if (!m_reentrancyGuard) {
-        EventDispatcherPrivate::get(m_eventDispatcher)->addTimer(this);
+        EventDispatcherPrivate::of(m_eventDispatcher)->addTimer(this);
     }
 }
 
@@ -87,7 +87,7 @@ void Timer::setRunning(bool run)
     }
     m_isRunning = run;
     if (!m_reentrancyGuard) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::of(m_eventDispatcher);
         if (run) {
             ep->addTimer(this);
         } else {
@@ -111,7 +111,7 @@ void Timer::setInterval(int msec)
     }
     m_interval = msec;
     if (m_isRunning && !m_reentrancyGuard) {
-        EventDispatcherPrivate *const ep = EventDispatcherPrivate::get(m_eventDispatcher);
+        EventDispatcherPrivate *const ep = EventDispatcherPrivate::of(m_eventDispatcher);
         ep->removeTimer(this);
         ep->addTimer(this);
     }

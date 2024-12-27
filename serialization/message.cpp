@@ -1385,5 +1385,5 @@ void MessagePrivate::reserveBuffer(uint32 newLen)
 
 std::vector<int> *MessagePrivate::argUnixFds()
 {
-    return &Arguments::Private::get(&m_mainArguments)->m_fileDescriptors;
+    return &Arguments::Private::of(&m_mainArguments)->m_fileDescriptors;
 }

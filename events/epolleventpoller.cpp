@@ -73,7 +73,7 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
         // blocking if the socket was closed in some way.
         if (evt->events & (EPOLLIN | EPOLLERR | EPOLLHUP)) {
             if (evt->data.fd != m_interruptPipe[0]) {
-                EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Read);
+                EventDispatcherPrivate::of(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Read);
             } else {
                 // interrupt; read bytes from pipe to clear buffers and get the interrupt type
                 ret = IEventPoller::ProcessAuxEvents;
@@ -91,7 +91,7 @@ IEventPoller::InterruptAction EpollEventPoller::poll(int timeout)
             }
         }
         if (evt->events & (EPOLLOUT | EPOLLERR | EPOLLHUP)) {
-            EventDispatcherPrivate::get(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Write);
+            EventDispatcherPrivate::of(m_dispatcher)->notifyListenerForIo(evt->data.fd, IO::RW::Write);
         }
     }
     return ret;

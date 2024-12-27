@@ -54,7 +54,7 @@ public:
 };
 
 ServerPrivate::ServerPrivate(EventDispatcher *dispatcher)
-   : IIoEventForwarder(EventDispatcherPrivate::get(dispatcher)),
+   : IIoEventForwarder(EventDispatcherPrivate::of(dispatcher)),
      eventDispatcher(dispatcher)
 {
 }
