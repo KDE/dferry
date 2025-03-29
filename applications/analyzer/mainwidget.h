@@ -41,12 +41,11 @@ public:
     void load(const QString &filePath);
     void save(const QString &filePath);
 
-private slots:
+private:
     void clear();
     void setGrouping(bool enable);
     void itemClicked(const QModelIndex &index);
 
-private:
     Ui::MainWidget m_ui;
     EavesdropperModel *m_model;
     MessageSortFilter *m_sortFilter;

@@ -84,10 +84,10 @@ public slots:
     void saveToFile(const QString &path);
     bool loadFromFile(const QString &path);
 
-private slots:
+private:
+    friend class EavesdropperThread;
     void addMessage(Message *message, qint64 timestamp);
 
-private:
     void clearInternal();
 
     // for access to Message pointers to read arguments

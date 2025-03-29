@@ -35,12 +35,12 @@ MainWidget::MainWidget()
     m_sortFilter = new MessageSortFilter(m_model);
     m_sortFilter->setSourceModel(m_model);
 
-    connect(m_ui.captureButton, SIGNAL(toggled(bool)), m_model, SLOT(setRecording(bool)));
-    connect(m_ui.clearButton, SIGNAL(clicked()), this, SLOT(clear()));
-    connect(m_ui.filterText, SIGNAL(textChanged(QString)), m_sortFilter, SLOT(setFilterString(QString)));
-    connect(m_ui.unansweredCheckbox, SIGNAL(toggled(bool)), m_sortFilter, SLOT(setOnlyUnanswered(bool)));
-    connect(m_ui.groupCheckbox, SIGNAL(toggled(bool)), this, SLOT(setGrouping(bool)));
-    connect(m_ui.messageList, SIGNAL(clicked(QModelIndex)), this, SLOT(itemClicked(QModelIndex)));
+    connect(m_ui.captureButton, &QAbstractButton::toggled, m_model, &EavesdropperModel::setRecording);
+    connect(m_ui.clearButton, &QAbstractButton::clicked, this, &MainWidget::clear);
+    connect(m_ui.filterText, &QLineEdit::textChanged, m_sortFilter, &MessageSortFilter::setFilterString);
+    connect(m_ui.unansweredCheckbox, &QCheckBox::toggled, m_sortFilter, &MessageSortFilter::setOnlyUnanswered);
+    connect(m_ui.groupCheckbox, &QCheckBox::toggled, this, &MainWidget::setGrouping);
+    connect(m_ui.messageList, &QAbstractItemView::clicked, this, &MainWidget::itemClicked);
 
     m_ui.messageList->setModel(m_sortFilter);
     m_ui.messageList->setAlternatingRowColors(true);

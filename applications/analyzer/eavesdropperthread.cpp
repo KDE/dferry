@@ -39,9 +39,9 @@ EavesdropperThread::EavesdropperThread(EavesdropperModel *model)
 {
     // do not parent this to the model; it doesn't work across threads
     moveToThread(&m_thread);
-    connect(this, SIGNAL(messageReceived(Message *, qint64)),
-            model, SLOT(addMessage(Message *, qint64)), Qt::QueuedConnection);
-    connect(&m_thread, SIGNAL(started()), SLOT(run()));
+    connect(this, &EavesdropperThread::messageReceived,
+            model, &EavesdropperModel::addMessage, Qt::QueuedConnection);
+    connect(&m_thread, &QThread::started, this, &EavesdropperThread::run);
     m_thread.start();
 }
 

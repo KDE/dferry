@@ -51,10 +51,9 @@ public:
 signals:
     void messageReceived(Message *message, qint64 timestamp);
 
-private slots:
+private:
     void run();
 
-private:
     QThread m_thread;
     QElapsedTimer m_timer;
     EventDispatcher *m_dispatcher;
