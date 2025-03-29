@@ -43,9 +43,9 @@ AnalyzerMainWindow::~AnalyzerMainWindow()
 void AnalyzerMainWindow::setupActions()
 {
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(tr("&Open..."), this, SLOT(load()), QKeySequence::Open);
-    fileMenu->addAction(tr("&Save As..."), this, SLOT(saveAs()), QKeySequence::SaveAs);
-    fileMenu->addAction(tr("&Quit"), qApp, SLOT(closeAllWindows()), QKeySequence::Quit);
+    fileMenu->addAction(tr("&Open..."), QKeySequence::Open, this, &AnalyzerMainWindow::load);
+    fileMenu->addAction(tr("&Save As..."), QKeySequence::SaveAs, this, &AnalyzerMainWindow::saveAs);
+    fileMenu->addAction(tr("&Quit"), QKeySequence::Quit, qApp, &QApplication::closeAllWindows);
 }
  
 void AnalyzerMainWindow::load()

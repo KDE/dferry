@@ -10,9 +10,9 @@ set(analyzer_SOURCES
     mainwidget.cpp
     messagesortfilter.cpp)
 
-qt5_wrap_ui(analyzer_SOURCES mainwidget.ui)
+qt_wrap_ui(analyzer_SOURCES mainwidget.ui)
 
 add_executable(dfer-analyzer ${analyzer_SOURCES})
-target_link_libraries(dfer-analyzer Qt5::Widgets dfer)
+target_link_libraries(dfer-analyzer Qt6::Widgets dfer)
 
 install(TARGETS dfer-analyzer DESTINATION ${CMAKE_INSTALL_BINDIR})
