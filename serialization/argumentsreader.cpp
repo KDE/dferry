@@ -984,11 +984,11 @@ void Arguments::Reader::skipCurrentElement()
         case Arguments::NeedMoreData:
             // TODO handle this properly: rewind the state to before the aggregate - or get fancy and support
             // resuming, but that is going to get really ugly
-            // fall through
+            [[fallthrough]];
         default:
             m_state = InvalidData;
             d->m_error.setCode(Error::StateNotSkippable);
-            // fall through
+            [[fallthrough]];
         case Arguments::InvalidData:
             isDone = true;
             break;

@@ -189,7 +189,7 @@ void AuthClient::advanceState()
             break;
         }
         }
-        // fall through
+        [[fallthrough]];
     case ExpectUnixFdResponseState: {
         m_fdPassingEnabled = m_line == "AGREE_UNIX_FD\r\n";
 #endif

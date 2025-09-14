@@ -1041,7 +1041,7 @@ Error MessagePrivate::checkRequiredHeaders() const
         if (!m_varHeaders.hasStringHeader(Message::InterfaceHeader)) {
             return Error::MessageInterface;
         }
-        // fall through
+        [[fallthrough]];
     case Message::MethodCallMessage:
         // required: PathHeader, MethodHeader
         if (!m_varHeaders.hasStringHeader(Message::PathHeader)) {
@@ -1057,7 +1057,7 @@ Error MessagePrivate::checkRequiredHeaders() const
         if (!m_varHeaders.hasStringHeader(Message::ErrorNameHeader)) {
             return Error::MessageErrorName;
         }
-        // fall through
+        [[fallthrough]];
     case Message::MethodReturnMessage:
         // required: ReplySerialHeader
         if (!m_varHeaders.hasIntHeader(Message::ReplySerialHeader) ) {
