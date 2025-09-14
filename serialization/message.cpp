@@ -823,17 +823,15 @@ IO::Status MessagePrivate::handleTransportCanRead()
 
         const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
 
-        if (m_bufferPos == 0) {
-            // According to the DBus spec, file descriptors can arrive anywhere in the message, but
-            // (assuming the message is written in one sendmsg() call) according to UNIX domain socket
-            // documentation, file descriptors will arrive in the first byte of the sent block they are
-            // attached to. We go with the UNIX domain socket documentation.
-            // TODO review and test this for very large messages that cannot be sent in one call
-            ioRes = readTransport()->readWithFileDescriptors(m_buffer.ptr + m_bufferPos, readMax,
-                                                             argUnixFds());
-        } else {
-            ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax);
-        }
+
+        // According to the DBus spec, file descriptors can arrive anywhere in the message, but
+        // (assuming the message is written in one sendmsg() call) according to UNIX domain socket
+        // documentation, file descriptors will arrive in the first byte of the sent block they are
+        // attached to. We go with the UNIX domain socket documentation.
+        // TODO review and test this for very large messages that cannot be sent in one call
+        ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax,
+                                      m_bufferPos == 0 ? argUnixFds() : nullptr);
+
         m_bufferPos += ioRes.length;
         assert(m_bufferPos <= m_buffer.length);
 
@@ -926,9 +924,8 @@ IO::Status MessagePrivate::handleTransportCanWrite()
                 //   error value wrapping mechanism to pass through opaque errors).
                 return IO::Status::PayloadError; // the connection is fine, only this message has a problem
             } else {
-                ioRes = writeTransport()
-                    ->writeWithFileDescriptors(chunk(m_buffer.ptr + m_bufferPos, toWrite),
-                                               m_mainArguments.fileDescriptors());
+                ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite), nullptr,
+                                                &m_mainArguments.fileDescriptors());
             }
         } else {
             ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));

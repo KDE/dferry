@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include "sys/uio.h"
+#include <sys/uio.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -86,48 +86,7 @@ void LocalSocket::platformClose()
         m_fd = -1;
     }
 }
-
-IO::Result LocalSocket::write(chunk data)
-{
-    IO::Result ret;
-    if (data.length == 0) {
-        return ret;
-    }
-    if (m_fd < 0) {
-        ret.status = IO::Status::InternalError;
-        return ret;
-    }
-
-    const uint32 initialLength = data.length;
-
-    while (data.length > 0) {
-        ssize_t nbytes = send(m_fd, data.ptr, data.length, MSG_DONTWAIT | MSG_NOSIGNAL);
-        if (nbytes < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            // see EAGAIN comment in read()
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                break;
-            }
-            close();
-            ret.status = IO::Status::RemoteClosed;
-            return ret;
-        } else if (nbytes == 0) {
-            break;
-        }
-
-        data.ptr += nbytes;
-        data.length -= size_t(nbytes);
-    }
-
-    ret.length = initialLength - data.length;
-    return ret;
-}
-
-// TODO: consider using iovec to avoid "copying together" message parts before sending; iovec tricks
-// are probably not going to help for receiving, though.
-IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors)
+IO::Result LocalSocket::write(chunk data, const chunk *data2, const std::vector<int> *fileDescriptors)
 {
     IO::Result ret;
     if (data.length == 0) {
@@ -140,21 +99,25 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
 
     // sendmsg  boilerplate
     struct msghdr send_msg;
-    struct iovec iov;
+    struct iovec iov[2];
 
     send_msg.msg_name = nullptr;
     send_msg.msg_namelen = 0;
     send_msg.msg_flags = 0;
-    send_msg.msg_iov = &iov;
-    send_msg.msg_iovlen = 1;
+    send_msg.msg_iov = iov;
+    send_msg.msg_iovlen = data2 ? 2 : 1;
 
-    iov.iov_base = data.ptr;
-    iov.iov_len = data.length;
+    iov[0].iov_base = data.ptr;
+    iov[0].iov_len = data.length;
+    if (data2) {
+        iov[1].iov_base = data2->ptr;
+        iov[1].iov_len = data2->length;
+    }
 
     // we can only send a fixed number of fds anyway due to the non-flexible size of the control message
     // receive buffer, so we set an arbitrary limit.
-    const uint32 numFds = fileDescriptors.size();
-    if (fileDescriptors.size() > MaxFds) {
+    const uint32 numFds = fileDescriptors ? fileDescriptors->size() : 0;
+    if (numFds > MaxFds) {
         // TODO allow a proper error return
         close();
         ret.status = IO::Status::InternalError;
@@ -177,7 +140,7 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
         // set the control data to pass - this is why we don't use the simpler write()
         int *const fdPayload = reinterpret_cast<int *>(CMSG_DATA(c_msg));
         for (uint32 i = 0; i < numFds; i++) {
-            fdPayload[i] = fileDescriptors[i];
+            fdPayload[i] = fileDescriptors->at(i);
         }
     } else {
         // no file descriptor to send, no control message
@@ -185,7 +148,7 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
         send_msg.msg_controllen = 0;
     }
 
-    while (iov.iov_len > 0) {
+    while (iov[0].iov_len > 0) {
         ssize_t nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
@@ -200,21 +163,30 @@ IO::Result LocalSocket::writeWithFileDescriptors(chunk data, const std::vector<i
             break;
         } else if (nbytes == 0) {
             break;
-        } else if (nbytes > 0) {
-            // control message already sent, don't send again
+        } else {
+            // control message sent with first byte, don't send it again
             send_msg.msg_control = nullptr;
             send_msg.msg_controllen = 0;
         }
 
-        iov.iov_base = static_cast<char *>(iov.iov_base) + nbytes;
-        iov.iov_len -= size_t(nbytes);
+        ret.length += nbytes;
+
+        if (size_t(nbytes) >= iov[0].iov_len && send_msg.msg_iovlen > 1) {
+            send_msg.msg_iovlen = 1;
+            // what was read from the first iov doesn't adjust the second iov
+            nbytes -= iov[0].iov_len;
+            iov[0].iov_base = static_cast<char *>(iov[1].iov_base) + nbytes;
+            iov[0].iov_len = iov[1].iov_len - size_t(nbytes);
+        } else {
+            iov[0].iov_base = static_cast<char *>(iov[0].iov_base) + nbytes;
+            iov[0].iov_len -= size_t(nbytes);
+        }
     }
 
-    ret.length = data.length - iov.iov_len;
     return ret;
 }
 
-IO::Result LocalSocket::read(byte *buffer, uint32 maxSize)
+IO::Result LocalSocket::read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors)
 {
     IO::Result ret;
     if (maxSize == 0) {
@@ -225,8 +197,35 @@ IO::Result LocalSocket::read(byte *buffer, uint32 maxSize)
         return ret;
     }
 
-    while (ret.length < maxSize) {
-        ssize_t nbytes = recv(m_fd, buffer + ret.length, maxSize - ret.length, MSG_DONTWAIT);
+    // recvmsg-with-control-message boilerplate
+    struct msghdr recv_msg;
+    recv_msg.msg_name = nullptr;
+    recv_msg.msg_namelen = 0;
+
+    struct iovec iov;
+    recv_msg.msg_iov = &iov;
+    recv_msg.msg_iovlen = 1;
+
+    char cmsgBuf[CMSG_SPACE(sizeof(int) * MaxFds)]; // TODO use calloc inside if - or something
+    if (fileDescriptors) {
+        recv_msg.msg_control = cmsgBuf;
+        recv_msg.msg_controllen = CMSG_SPACE(MaxFdPayloadSize);
+        memset(cmsgBuf, 0, recv_msg.msg_controllen);
+        // prevent equivalent to CVE-2014-3635 in libdbus-1: We could receive and ignore an extra file
+        // descriptor, thus eventually run out of file descriptors
+        recv_msg.msg_controllen = CMSG_LEN(MaxFdPayloadSize);
+    } else {
+        recv_msg.msg_control = nullptr;
+        recv_msg.msg_controllen = 0;
+    }
+    recv_msg.msg_flags = 0;
+
+    // end boilerplate
+
+    iov.iov_base = buffer;
+    iov.iov_len = maxSize;
+    while (iov.iov_len > 0) {
+        ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
@@ -243,71 +242,12 @@ IO::Result LocalSocket::read(byte *buffer, uint32 maxSize)
             close();
             ret.status = IO::Status::RemoteClosed;
             break;
-        } else if (nbytes == 0) {
-            // orderly shutdown
-            close();
-            ret.status = IO::Status::RemoteClosed;
-            return ret;
-        }
-        ret.length += size_t(nbytes);
-    }
-
-    return ret;
-}
-
-IO::Result LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize,
-                                                std::vector<int> *fileDescriptors)
-{
-    IO::Result ret;
-    if (maxSize == 0) {
-        return ret;
-    }
-    if (m_fd < 0) {
-        ret.status = IO::Status::InternalError;
-        return ret;
-    }
-
-    // recvmsg-with-control-message boilerplate
-    struct msghdr recv_msg;
-    char cmsgBuf[CMSG_SPACE(sizeof(int) * MaxFds)];
-
-    recv_msg.msg_control = cmsgBuf;
-    recv_msg.msg_controllen = CMSG_SPACE(MaxFdPayloadSize);
-    memset(cmsgBuf, 0, recv_msg.msg_controllen);
-    // prevent equivalent to CVE-2014-3635 in libdbus-1: We could receive and ignore an extra file
-    // descriptor, thus eventually run out of file descriptors
-    recv_msg.msg_controllen = CMSG_LEN(MaxFdPayloadSize);
-    recv_msg.msg_name = nullptr;
-    recv_msg.msg_namelen = 0;
-    recv_msg.msg_flags = 0;
-
-    struct iovec iov;
-    recv_msg.msg_iov = &iov;
-    recv_msg.msg_iovlen = 1;
-
-    // end boilerplate
-
-    iov.iov_base = buffer;
-    iov.iov_len = maxSize;
-    while (iov.iov_len > 0) {
-        ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
-        if (nbytes < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            // see comment in read()
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                break;
-            }
-            close();
-            ret.status = IO::Status::RemoteClosed;
-            break;
         }  else if (nbytes == 0) {
             // orderly shutdown
             close();
             ret.status = IO::Status::RemoteClosed;
             break;
-        } else {
+        } else if (fileDescriptors) {
             // read any file descriptors passed via control messages
 
             struct cmsghdr *c_msg = CMSG_FIRSTHDR(&recv_msg);
@@ -320,6 +260,7 @@ IO::Result LocalSocket::readWithFileDescriptors(byte *buffer, uint32 maxSize,
             }
 
             // control message already received, don't receive another
+            fileDescriptors = nullptr;
             recv_msg.msg_control = nullptr;
             recv_msg.msg_controllen = 0;
         }

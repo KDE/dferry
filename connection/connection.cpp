@@ -32,7 +32,7 @@
 #include "iconnectionstatelistener.h"
 #include "imessagereceiver.h"
 #include "iserver.h"
-#include "localsocket.h"
+#include "itransport.h"
 #include "message.h"
 #include "message_p.h"
 #include "pendingreply.h"

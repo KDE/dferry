@@ -169,19 +169,22 @@ void IpSocket::platformClose()
     }
 }
 
-IO::Result IpSocket::write(chunk a)
+IO::Result IpSocket::write(chunk data, const chunk *data2, const std::vector<int> *fileDescriptors)
 {
     IO::Result ret;
     if (!isValidFileDescriptor(m_fd)) {
-        std::cerr << "\nIpSocket::write() failed A.\n\n";
+        std::cerr << "IpSocket::write(): invalid file descriptor.\n";
+        ret.status = IO::Status::InternalError;
+        return ret;
+    }
+    if (fileDescriptors && !fileDescriptors->empty()) {
+        std::cerr << "IpSocket::write(): sending file descriptors is not supported.\n";
         ret.status = IO::Status::InternalError;
         return ret;
     }
 
-    const uint32 initialLength = a.length;
-
-    while (a.length > 0) {
-        ssize_t nbytes = send(m_fd, reinterpret_cast<char *>(a.ptr), a.length, sendFlags());
+    while (data.length > 0) {
+        ssize_t nbytes = send(m_fd, reinterpret_cast<char *>(data.ptr), data.length, sendFlags());
         if (nbytes < 0) {
             if (errorInterrupted()) {
                 continue;
@@ -197,19 +200,27 @@ IO::Result IpSocket::write(chunk a)
             break;
         }
 
-        a.ptr += nbytes;
-        a.length -= uint32(nbytes);
+        data.ptr += nbytes;
+        ret.length += nbytes;
+        data.length -= uint32(nbytes);
+
+        // write the second buffer, if any, and if we haven't done it already
+        if (data.length == 0 && data2) {
+            data.ptr = data2->ptr;
+            data.length = data2->length;
+            data2 = nullptr; // don't come here again
+        }
     }
 
-    ret.length = initialLength - a.length;
     return ret;
 }
 
-IO::Result IpSocket::read(byte *buffer, uint32 maxSize)
+IO::Result IpSocket::read(byte *buffer, uint32 maxSize, std::vector<int> * /*fileDescriptors*/)
 {
+
     IO::Result ret;
     if (maxSize <= 0) {
-        std::cerr << "\nIpSocket::read() failed A.\n\n";
+        std::cerr << "IpSocket::read(): invalid file descriptor.\n";
         ret.status = IO::Status::InternalError;
         return ret;
     }

@@ -49,11 +49,13 @@ public:
     void setReadListener(ITransportListener *listener);
     void setWriteListener(ITransportListener *listener);
 
-    virtual IO::Result read(byte *buffer, uint32 maxSize) = 0;
-    virtual IO::Result readWithFileDescriptors(byte *buffer, uint32 maxSize,
-                                               std::vector<int> *fileDescriptors);
-    virtual IO::Result write(chunk data) = 0;
-    virtual IO::Result writeWithFileDescriptors(chunk data, const std::vector<int> &fileDescriptors);
+    // fileDescriptors is optional and can be used so receive open file descriptors (on supported systems).
+    virtual IO::Result read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors = nullptr) = 0;
+    // data2 is optional and can be used for scatter-gather I/O.
+    // fileDescriptors is optional and can be used so send open file descriptors (on supported systems). Must
+    // be sent with the first byte of the message according to the DBus protocol spec.
+    virtual IO::Result write(chunk data, const chunk *data2 = nullptr,
+                             const std::vector<int> *fileDescriptors = nullptr) = 0;
 
     void close();
     virtual bool isOpen() = 0;

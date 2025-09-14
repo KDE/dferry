@@ -41,8 +41,9 @@ public:
     ~IpSocket() override;
 
     // pure virtuals from ITransport
-    IO::Result write(chunk data) override;
-    IO::Result read(byte *buffer, uint32 maxSize) override;
+    IO::Result write(chunk data, const chunk *data2,
+                     const std::vector<int> *fileDescriptors = nullptr) override;
+    IO::Result read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
     void platformClose() override;
     bool isOpen() override;
     FileDescriptor fileDescriptor() const override;
