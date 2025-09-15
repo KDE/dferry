@@ -150,7 +150,7 @@ IO::Result LocalSocket::write(chunk data, const chunk *data2, const std::vector<
     }
 
     while (iov[0].iov_len > 0) {
-        ssize_t nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT);
+        ssize_t nbytes = sendmsg(m_fd, &send_msg, MSG_DONTWAIT | MSG_NOSIGNAL);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
@@ -226,7 +226,7 @@ IO::Result LocalSocket::read(byte *buffer, uint32 maxSize, std::vector<int> *fil
     iov.iov_base = buffer;
     iov.iov_len = maxSize;
     while (iov.iov_len > 0) {
-        ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT);
+        ssize_t nbytes = recvmsg(m_fd, &recv_msg, MSG_DONTWAIT | MSG_NOSIGNAL);
         if (nbytes < 0) {
             if (errno == EINTR) {
                 continue;
