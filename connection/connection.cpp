@@ -480,7 +480,7 @@ Error ConnectionPrivate::prepareSend(Message *msg)
     }
 
     MessagePrivate *const mpriv = MessagePrivate::of(msg); // this is unchanged by move()ing the owning Message.
-    if (!mpriv->serialize()) {
+    if (!mpriv->serialize(!m_transport || !m_transport->prefersMultiBufferSend())) {
         return mpriv->m_error;
     }
     return Error::NoError;

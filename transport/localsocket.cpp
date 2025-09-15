@@ -46,6 +46,7 @@ LocalSocket::LocalSocket(const std::string &socketFilePath)
    : m_fd(-1)
 {
     m_supportedUnixFdsCount = MaxFds;
+    m_preferMultiBufferSend = true;
     const int fd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
         return;

@@ -100,7 +100,7 @@ public:
     Error checkRequiredHeaders() const;
     bool deserializeFixedHeaders();
     bool deserializeVariableHeaders();
-    bool serialize();
+    bool serialize(bool forceSingleBuffer);
     void serializeFixedHeaders();
     Arguments serializeVariableHeaders();
 
@@ -133,7 +133,8 @@ public:
     };
     byte m_flags;
     byte m_protocolVersion;
-    bool m_dirty : 1;
+    bool m_dirty;
+    bool m_serializedAsMultiBuffer;
     uint32 m_headerLength;
     uint32 m_headerPadding;
     uint32 m_bodyLength;

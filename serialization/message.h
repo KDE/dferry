@@ -139,12 +139,6 @@ public:
     std::vector<byte> save();
     void load(const std::vector<byte> &data);
 
-    // TODO actual guarantees?
-    // Serialize the message and return a view on the serialized data. The view points to memory that
-    // is still owned by the Message instance. It is valid as long as no non-const methods are called
-    // on the message. Well, that's the idea. In practice, it is best to copy out the data ASAP.
-    // If the message could not be serialized, an empty chunk is returned.
-    chunk serializeAndView();
     // Deserialize the message from chunk memOwnership and take ownership. memOwnership.ptr must
     // point to the beginning of a malloc() ed block of data. memOwnership.length is the length
     // of the serialized data, but the malloc()ed chunk may be larger.

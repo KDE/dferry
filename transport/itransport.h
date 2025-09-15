@@ -61,6 +61,7 @@ public:
     virtual bool isOpen() = 0;
 
     uint32 supportedPassingUnixFdsCount() const { return m_supportedUnixFdsCount; }
+    bool prefersMultiBufferSend() const { return m_preferMultiBufferSend; }
 
     IO::Status handleIoReady(IO::RW rw) override;
 
@@ -70,6 +71,7 @@ public:
 protected:
     virtual void platformClose() = 0;
     uint32 m_supportedUnixFdsCount = 0;
+    bool m_preferMultiBufferSend = false;
 
 private:
     void updateTransportIoInterest(); // "Transport" in name to avoid confusion with IIoEventSource

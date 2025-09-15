@@ -262,6 +262,7 @@ MessagePrivate::MessagePrivate(Message *parent)
      m_flags(0),
      m_protocolVersion(1),
      m_dirty(true),
+     m_serializedAsMultiBuffer(false),
      m_headerLength(0),
      m_headerPadding(0),
      m_bodyLength(0),
@@ -277,6 +278,7 @@ MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
      m_flags(other.m_flags),
      m_protocolVersion(other.m_protocolVersion),
      m_dirty(other.m_dirty),
+     m_serializedAsMultiBuffer(other.m_serializedAsMultiBuffer),
      m_headerLength(other.m_headerLength),
      m_headerPadding(other.m_headerPadding),
      m_bodyLength(other.m_bodyLength),
@@ -765,7 +767,7 @@ bool Message::isReceiving() const
 
 void MessagePrivate::send(ITransport *transport)
 {
-    if (!serialize()) {
+    if (!serialize(!transport->prefersMultiBufferSend())) {
         m_state = Serialized;
         assert(m_error.isError());
         if (!m_error.isError()) {
@@ -889,20 +891,35 @@ IO::Status MessagePrivate::handleTransportCanWrite()
     if (m_state != Sending) {
         return IO::Status::InternalError;
     }
-    while (true) {
-        assert(m_buffer.length >= m_bufferPos);
-        const uint32 toWrite = m_buffer.length - m_bufferPos;
-        if (!toWrite) {
+
+    IO::Result ioRes;
+    do {
+        chunk bufs[2]{chunk(m_buffer.ptr + m_bufferPos, m_buffer.length - m_bufferPos), {}};
+        if (m_serializedAsMultiBuffer) {
+            bufs[1] = m_mainArguments.data();
+
+            // eliminate the second buffer and move the second buffer to first position in case we've
+            // completely written out the first one
+            if (m_bufferPos >= m_buffer.length) {
+                const uint32_t intoBuf2 = m_bufferPos - m_buffer.length;
+                bufs[0].ptr = bufs[1].ptr + intoBuf2;
+                bufs[0].length = bufs[1].length - intoBuf2;
+                bufs[1].length = 0;
+            }
+        }
+
+        if (bufs[0].length + bufs[1].length == 0) {
             m_state = Serialized;
             writeTransport()->setWriteListener(nullptr);
             notifyCompletionListener();
             break;
         }
-        IO::Result ioRes;
+        chunk* maybeBuf2 = bufs[1].length ? &bufs[1] : nullptr;
+
         if (m_bufferPos == 0) {
             const size_t sendFdsCount = m_mainArguments.fileDescriptors().size();
             if (sendFdsCount == 0) {
-                ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+                ioRes = writeTransport()->write(bufs[0], maybeBuf2);
             } else if (sendFdsCount > writeTransport()->supportedPassingUnixFdsCount()) {
                 m_error.setCode(Error::SendingTooManyUnixFds);
                 m_state = Serialized;
@@ -924,48 +941,45 @@ IO::Status MessagePrivate::handleTransportCanWrite()
                 //   error value wrapping mechanism to pass through opaque errors).
                 return IO::Status::PayloadError; // the connection is fine, only this message has a problem
             } else {
-                ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite), nullptr,
-                                                &m_mainArguments.fileDescriptors());
+                ioRes = writeTransport()->write(bufs[0], maybeBuf2, &m_mainArguments.fileDescriptors());
             }
         } else {
-            ioRes = writeTransport()->write(chunk(m_buffer.ptr + m_bufferPos, toWrite));
+            ioRes = writeTransport()->write(bufs[0], maybeBuf2);
         }
-        if (ioRes.status != IO::Status::OK) {
-            m_error = Error::RemoteDisconnect;
-            m_state = Serialized; // in a way... serialization has completed, unsuccessfully
-            writeTransport()->setWriteListener(nullptr);
-            notifyCompletionListener();
-            return IO::Status::RemoteClosed;
-        }
+
         m_bufferPos += ioRes.length;
-        if (ioRes.length == 0) {
-            break;
-        }
+    } while (ioRes.status == IO::Status::OK && ioRes.length != 0);
+
+    if (ioRes.status != IO::Status::OK) {
+        m_error = Error::RemoteDisconnect;
+        m_state = Serialized;
+        writeTransport()->setWriteListener(nullptr);
+        notifyCompletionListener();
+        return IO::Status::RemoteClosed;
     }
+
     return IO::Status::OK;
 }
 #endif // !DFERRY_SERDES_ONLY
 
-chunk Message::serializeAndView()
-{
-    chunk ret; // one return variable to enable return value optimization (RVO) in gcc
-    if (!d->serialize()) {
-        return ret;
-    }
-    ret = d->m_buffer;
-    return ret;
-}
-
 std::vector<byte> Message::save()
 {
     std::vector<byte> ret;
-    if (!d->serialize()) {
+    if (!d->serialize(false)) {
         return ret;
     }
-    ret.reserve(d->m_buffer.length);
+    ret.reserve(d->m_buffer.length + d->m_mainArguments.data().length);
     for (uint32 i = 0; i < d->m_buffer.length; i++) {
         ret.push_back(d->m_buffer.ptr[i]);
     }
+    if (d->m_serializedAsMultiBuffer) {
+        const chunk argData = d->m_mainArguments.data();
+        assert(argData.length);
+        for (uint32 i = 0; i < argData.length; i++) {
+            ret.push_back(argData.ptr[i]);
+        }
+    }
+
     return ret;
 }
 
@@ -1000,6 +1014,7 @@ void Message::deserializeAndTake(chunk memOwnership)
     d->m_mainArguments = Arguments(nullptr, d->m_varHeaders.stringHeaderRaw(SignatureHeader),
                                    bodyData, d->m_isByteSwapped);
     d->m_state = MessagePrivate::Serialized;
+    d->m_serializedAsMultiBuffer = false;
 }
 
 // This does not return bool because full validation of the main arguments would take quite
@@ -1171,7 +1186,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     return reader.isFinished();
 }
 
-bool MessagePrivate::serialize()
+bool MessagePrivate::serialize(bool forceSingleBuffer)
 {
     if ((m_state == Serialized || m_state == Sending) && !m_dirty) {
         return true;
@@ -1202,14 +1217,14 @@ bool MessagePrivate::serialize()
     const uint32 unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
     m_headerLength = align(unalignedHeaderLength, 8);
     m_bodyLength = m_mainArguments.data().length;
-    const uint32 messageLength = m_headerLength + m_bodyLength;
+    const uint32 sendBufLength = m_headerLength + (forceSingleBuffer ? m_bodyLength : 0);
 
-    if (messageLength > Arguments::MaxMessageLength) {
+    if (m_headerLength + m_bodyLength > Arguments::MaxMessageLength) {
         m_error.setCode(Error::ArgumentsTooLong);
         return false;
     }
 
-    reserveBuffer(messageLength);
+    reserveBuffer(sendBufLength);
 
     serializeFixedHeaders();
 
@@ -1223,16 +1238,16 @@ bool MessagePrivate::serialize()
     for (uint32 i = unalignedHeaderLength; i < m_headerLength; i++) {
         m_buffer.ptr[i] = '\0';
     }
-    // copy message body (if any - arguments are not mandatory)
-    if (m_mainArguments.data().length) {
-        memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_mainArguments.data().length);
-    }
-    m_bufferPos = m_headerLength + m_mainArguments.data().length;
-    assert(m_bufferPos <= m_buffer.length);
 
-    // for the upcoming message sending, "reuse" m_bufferPos for read position (formerly write position),
-    // and m_buffer.length for end of data to read (formerly buffer capacity)
-    m_buffer.length = m_bufferPos;
+    m_serializedAsMultiBuffer = m_bodyLength > 0;
+    if (forceSingleBuffer && m_bodyLength) {
+        m_serializedAsMultiBuffer = false;
+        memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_bodyLength);
+    }
+
+    // for the upcoming message sending, "reuse" m_bufferPos for (total, including payload!) read position
+    // and m_buffer.length for length of the first buffer (whether there is a second one or not)
+    m_buffer.length = sendBufLength;
     m_bufferPos = 0;
 
     m_dirty = false;
