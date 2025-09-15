@@ -111,20 +111,20 @@ IpSocket::IpSocket(const ConnectAddress &ca)
 {
     assert(ca.type() == ConnectAddress::Type::Tcp || ca.type() == ConnectAddress::Type::Tcp4);
     if (ca.type() != ConnectAddress::Type::Tcp && ca.type() != ConnectAddress::Type::Tcp4) {
-        std::cerr << "IpSocket contruction failed 0.\n";
+        std::cerr << "IpSocket construction failed 0.\n";
         return;
     }
 #ifdef _WIN32
     WSAData wsadata;
     // IPv6 requires Winsock v2.0 or better (but we're not using IPv6 - yet!)
     if (WSAStartup(MAKEWORD(2, 0), &wsadata) != 0) {
-        std::cerr << "IpSocket contruction failed A.\n";
+        std::cerr << "IpSocket construction failed A.\n";
         return;
     }
 #endif
     const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
     if (!isValidFileDescriptor(fd)) {
-        std::cerr << "IpSocket contruction failed B.\n";
+        std::cerr << "IpSocket construction failed B.\n";
         return;
     }
 

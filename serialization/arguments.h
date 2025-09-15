@@ -119,7 +119,7 @@ public:
     // (A notable user of this is Message - you can only get a const ref to its internal Arguments
     //  so you need to copy to take the Arguments away from the Message, which copies out of the
     //  borrowed memory into heap memory so the copy is safe)
-    // The copy contructor and assignment operator will always copy the data, so copying is safe
+    // The copy constructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
     Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
 

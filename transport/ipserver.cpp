@@ -52,7 +52,7 @@ IpServer::IpServer(const ConnectAddress &ca)
 
     const FileDescriptor fd = socket(AF_INET, SOCK_STREAM, 0);
     if (!isValidFileDescriptor(fd)) {
-        std::cerr << "IpServer contruction failed A.\n";
+        std::cerr << "IpServer construction failed A.\n";
         return;
     }
 #ifdef __unix__
@@ -68,7 +68,7 @@ IpServer::IpServer(const ConnectAddress &ca)
     if (ok) {
         m_listenFd = fd;
     } else {
-        std::cerr << "IpServer contruction failed B.\n";
+        std::cerr << "IpServer construction failed B.\n";
 #ifdef _WIN32
         closesocket(fd);
 #else
