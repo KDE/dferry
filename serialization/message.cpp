@@ -872,7 +872,7 @@ IO::Status MessagePrivate::handleTransportCanRead()
             ret = IO::Status::RemoteClosed;
             break;
         }
-    } while (ioRes.status == IO::Status::OK);
+    } while (ioRes.status == IO::Status::OK || ioRes.length != 0);
 
     if (ret != IO::Status::OK) {
         clear();
@@ -941,6 +941,9 @@ IO::Status MessagePrivate::handleTransportCanWrite()
             return IO::Status::RemoteClosed;
         }
         m_bufferPos += ioRes.length;
+        if (ioRes.length == 0) {
+            break;
+        }
     }
     return IO::Status::OK;
 }
