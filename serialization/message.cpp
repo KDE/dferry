@@ -253,21 +253,7 @@ void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
 
 // TODO think of copying signature from and to output!
 
-MessagePrivate::MessagePrivate(Message *parent)
-   : m_message(parent),
-     m_bufferPos(0),
-     m_isByteSwapped(false),
-     m_state(Empty),
-     m_messageType(Message::InvalidMessage),
-     m_flags(0),
-     m_protocolVersion(1),
-     m_dirty(true),
-     m_serializedAsMultiBuffer(false),
-     m_headerLength(0),
-     m_headerPadding(0),
-     m_bodyLength(0),
-     m_serial(0)
-{}
+MessagePrivate::MessagePrivate(Message *parent) = default;
 
 MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
    : m_message(parent),

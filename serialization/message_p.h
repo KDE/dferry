@@ -112,11 +112,11 @@ public:
 
     std::vector<int> *argUnixFds();
 
-    Message *m_message;
+    Message *m_message = nullptr;
     chunk m_buffer;
-    uint32 m_bufferPos;
+    uint32 m_bufferPos = 0;
 
-    bool m_isByteSwapped;
+    bool m_isByteSwapped = false;
     enum { // ### we don't have an error state, the need hasn't arisen yet. strange!
         Empty = 0,
         Serialized, // This means that marshalled and "native format" data is in sync, which is really
@@ -124,21 +124,21 @@ public:
         FirstIoState,
         Sending = FirstIoState,
         Receiving
-    } m_state;
-    Message::Type m_messageType;
+    } m_state = Empty;
+    Message::Type m_messageType = Message::InvalidMessage;
     enum {
         NoReplyExpectedFlag = 0x1,
         NoAutoStartServiceFlag = 0x2,
         NoAllowInteractiveAuthorizationFlag = 0x4
     };
-    byte m_flags;
-    byte m_protocolVersion;
-    bool m_dirty;
-    bool m_serializedAsMultiBuffer;
-    uint32 m_headerLength;
-    uint32 m_headerPadding;
-    uint32 m_bodyLength;
-    uint32 m_serial;
+    byte m_flags = 0;
+    byte m_protocolVersion = 1;
+    bool m_dirty = true;
+    bool m_serializedAsMultiBuffer = false;
+    uint32 m_headerLength = 0;
+    uint32 m_headerPadding = 0;
+    uint32 m_bodyLength = 0;
+    uint32 m_serial = 0;
 
     Error m_error;
 

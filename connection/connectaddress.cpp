@@ -254,18 +254,11 @@ static bool isSomeTcpType(ConnectAddress::Type t)
 class ConnectAddress::Private
 {
 public:
-    Private()
-       : m_addrType(ConnectAddress::Type::None),
-         m_role(ConnectAddress::Role::None),
-         m_hostname("localhost"),
-         m_port(-1)
-    {}
-
-    ConnectAddress::Type m_addrType;
-    ConnectAddress::Role m_role;
+    ConnectAddress::Type m_addrType = ConnectAddress::Type::None;
+    ConnectAddress::Role m_role = ConnectAddress::Role::None;
     std::string m_path;
-    std::string m_hostname;
-    int m_port;
+    std::string m_hostname = "localhost";
+    int m_port = -1;
     std::string m_guid;
 };
 

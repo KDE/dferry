@@ -40,19 +40,12 @@
 class Arguments::Reader::Private
 {
 public:
-    Private()
-       : m_args(nullptr),
-         m_signaturePosition(uint32(-1)),
-         m_dataPosition(0),
-         m_nilArrayNesting(0)
-    {}
-
-    const Arguments *m_args;
+    const Arguments *m_args = nullptr;
     cstring m_signature;
-    uint32 m_signaturePosition;
+    uint32 m_signaturePosition = uint32(-1);
     chunk m_data;
-    uint32 m_dataPosition;
-    uint32 m_nilArrayNesting; // this keeps track of how many nil arrays we are in
+    uint32 m_dataPosition = 0;
+    uint32 m_nilArrayNesting = 0; // this keeps track of how many nil arrays we are in
     Error m_error;
     Nesting m_nesting;
 
