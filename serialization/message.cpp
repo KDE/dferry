@@ -253,7 +253,10 @@ void VarHeaderStorage::clearIntHeader(Message::VariableHeader header)
 
 // TODO think of copying signature from and to output!
 
-MessagePrivate::MessagePrivate(Message *parent) = default;
+MessagePrivate::MessagePrivate(Message *parent)
+    : m_message(parent)
+{
+}
 
 MessagePrivate::MessagePrivate(const MessagePrivate &other, Message *parent)
    : m_message(parent),
