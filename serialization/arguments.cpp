@@ -1125,19 +1125,20 @@ static bool isVarLengthOp(FerOp op)
            op == FerOp::BeginVariant;
 }
 
-struct ArrayOptHints
+struct ArrayAlignments
 {
-    size_t beginArrayOpIndex;       // index of the BeginArray op
-    uint32 contentsBeginAddrSet;    // possible addresses for first element of array
-    uint32 contentsEndAddrSet;      // possible addresses for after last element of array
+    uint32 contentsBeginAddrSet;    // addresses before first element of array (just after the length field);
+                                    // if there are zero elements, also the end address of the array
+    uint32 afterElementAddrSet;     // addresses after any element of array
+    // Both of these addrSets are addresses *before* alignment to next array element!
 };
 
-enum ArrayPass
-{
-    NotInArray,
-    DiscoverArray,
-    FinishUpArray,
-};
+// returns how far it has processed arrays (index into ops "pointing" to an EndArray)
+static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beginArrayIndex,
+                             std::unordered_map<size_t, ArrayAlignments> *arrayAlignments);
+
+// after a variable length string, all alignments are possible - anyValues represent that (8 bits set)
+static constexpr uint32 anyAddrSet = 0b11111111;
 
 static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
 {
@@ -1146,16 +1147,15 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
     // we represent "full alignment" (8) as 8 instead of the equivalent 0 because that makes applyAddition
     // less weird (we'd have to special case 0 + n otherwise)
     uint32 addrSet = 0b10000000;
-    // after a variable length string, all alignments are possible - anyValues represent that (8 bits set)
-    static const uint32 anyAddrSet = 0b11111111;
 
-    ArrayPass arrayPass = NotInArray;
-    std::unordered_map<size_t, ArrayOptHints> arrayHints; // key: position of BeginArray in stream
+    std::unordered_map<size_t, ArrayAlignments> arrayAlignments; // key: index of BeginArray
     std::stack<size_t> beginArrayIndexes;
 
     size_t out = 0;
     FerOp prevOp = FerOp::End;
     for (size_t in = 0; in < ops->size(); in++) {
+
+        assert(out <= in); // we sometimes skip / eliminate / merge / rewrite ops, we never add new ones
 
         const uint32 prevAddrSet = addrSet;
         FerOp ferOp = (*ops)[in];
@@ -1166,36 +1166,32 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
 
             addrSet = applyAddition(addrSet, ferOp);
 
-            if (arrayPass != DiscoverArray) {
-                if (mergeContiguousCopies && isBasicAdditionOp(prevOp)) {
-                    const FerOp mergedOp = static_cast<FerOp>(uint32(prevOp) + uint32(ferOp));
-                    if (isBasicAdditionOp(mergedOp)) { // still in basic addition range?
-                        ferOp = mergedOp;
-                        out--; // overwrite previous op!
-                    }
+            if (mergeContiguousCopies && isBasicAdditionOp(prevOp)) {
+                const FerOp mergedOp = static_cast<FerOp>(uint32(prevOp) + uint32(ferOp));
+                if (isBasicAdditionOp(mergedOp)) { // still in basic addition range?
+                    ferOp = mergedOp;
+                    out--; // overwrite previous op!
                 }
-                (*ops)[out++] = ferOp;
             }
+            (*ops)[out++] = ferOp;
 
         } else if (isAlignOp(ferOp)) {
 
             addrSet = applyAlignment(addrSet, ferOp);
 
-            if (arrayPass != DiscoverArray) {
-                if (isAlignOp(prevOp)) {
-                    // Merge consecutive alignment operations (preferring the larger one even if it changes nothing)
-                    ferOp = std::max(ferOp, prevOp);
-                    // overwrite the previous operation with the new merged one
-                    out--;
+            if (isAlignOp(prevOp)) {
+                // Merge consecutive alignment operations (preferring the larger one even if it changes nothing)
+                ferOp = std::max(ferOp, prevOp);
+                // overwrite the previous operation with the new merged one
+                out--;
+                (*ops)[out++] = ferOp;
+            } else {
+                // Eliminate alignment operations that do nothing
+                if (addrSet != prevAddrSet) {
                     (*ops)[out++] = ferOp;
                 } else {
-                    // Eliminate alignment operations that do nothing
-                    if (addrSet != prevAddrSet) {
-                        (*ops)[out++] = ferOp;
-                    } else {
-                        // remove this operation from the output entirely (no out++)
-                        ferOp = prevOp;
-                    }
+                    // remove this operation from the output entirely (no out++)
+                    ferOp = prevOp;
                 }
             }
 
@@ -1204,151 +1200,159 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
             // - Array elements can repeat, and subsequent elements can start and end at differently
             //   aligned addresses from the first element
             // - There can be arrays inside arrays, oh my...
-            // To deal with this, we:
-            // - DiscoverArray: repeat each array (keep adding phantom elements) until we see no more new
-            //   alignment values. When that happens (and btw we remember all alignments that have occured)
-            //   in the outermost array, we transition to FinishUpArray.
-            // - FinishUpArray: use all the gathered alignment data for a pass of almost regular optimization
-            //   with two extras:
-            //   - fix up "back to beginning" indexes at the end of arrays to account for changes in the
-            //     FerOp vector due to any optimizations
-            //   - if an array only needs alignemnt for the first element, tweak the "back to beginning"
-            //     index to skip the alignment FerOp.
+            // To deal with this, we use optimizeArray to gather data (including for nested arrays inside
+            // the outermost one that we find) and then do a final pass where we apply the usual optimization.
 
-            beginArrayIndexes.push(in);
+            addrSet = applyAddition(addrSet, FerOp::Copy4); // array length field!
 
-            if (arrayPass == NotInArray) {
-                assert(beginArrayIndexes.size() == 1);
-                assert(arrayHints.empty());
-                arrayPass = DiscoverArray;
+            auto arrAlignIt = arrayAlignments.find(in);
+            if (arrAlignIt == arrayAlignments.cend()) {
+                // Seeing this BeginArray for the first time - pre-process it. Note that we use
+                // optimizeArrays only for data gathering, we don't skip ahead our own parsing at all.
+                optimizeArrays(ops, addrSet, in, &arrayAlignments);
+
+                arrAlignIt = arrayAlignments.find(in);
+                assert(arrAlignIt != arrayAlignments.cend());
             }
 
-            if (arrayPass == DiscoverArray) {
-                // Note: looping back to beginning of array is handled in EndArray - it's easier that way.
-                // Here, we only handle coming up to the BeginArray from the left. It may not be the first
-                // time, though, due to possible outer arrays!
+            const ArrayAlignments arrayAlign = arrAlignIt->second;
+            // We now do just *one* pass through the array in which we must consider all possible alignments
+            // (as determined by optimizeArray) at the same time. If we are before the beginning of the nth
+            // element, the address is the end of the (n - 1)th element, so afterElementAddrSet is included.
+            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
 
-                addrSet = applyAddition(addrSet, FerOp::Copy4); // for the array length field
+            // re-insert the ArrayAlignment entry under its new index in ops!
+            arrayAlignments.erase(arrAlignIt);
+            arrayAlignments.emplace(std::make_pair(out, arrayAlign));
 
-                auto it = arrayHints.find(in);
-                if (it == arrayHints.cend()) {
-                    it = arrayHints.emplace_hint(it /*hint*/, std::make_pair(in, ArrayOptHints{in, 0, 0}));
-                }
-
-                ArrayOptHints &optHints = it->second;
-                optHints.contentsBeginAddrSet |= addrSet;
-
-            } else if (arrayPass == FinishUpArray) {
-                auto it = arrayHints.find(in);
-                assert(it != arrayHints.cend());
-
-                // Note that the beginning address of the nth (n > 1) array element is the same as the end
-                // address of the (n - 1)th array element, hence the combination is needed to cover all
-                // possibl addresses for an array element.
-                ArrayOptHints &optHints = it->second;
-                addrSet = optHints.contentsBeginAddrSet | it->second.contentsEndAddrSet;
-
-                optHints.beginArrayOpIndex = out;
-                (*ops)[out++] = ferOp;
-                //... and let alignment elision based on addrSet handle the rest!
-            }
+            beginArrayIndexes.push(out);
+            (*ops)[out++] = ferOp;
 
         } else if (ferOp == FerOp::EndArray) {
 
-            assert(arrayPass != NotInArray);
-
-            const size_t beginIndex = beginArrayIndexes.top();
+            const size_t beginArrayIndex = beginArrayIndexes.top();
             beginArrayIndexes.pop();
+            assert((*ops)[beginArrayIndex] == FerOp::BeginArray);
 
-            if (arrayPass == DiscoverArray) {
-                // check if set of possible addresses changed, do another pass if so (to potentially find more)
-                bool hasAddrChanges = true;
+            auto arrAlignIt = arrayAlignments.find(beginArrayIndex);
+            assert(arrAlignIt != arrayAlignments.cend());
+            ArrayAlignments &arrayAlign = arrAlignIt->second;
 
-                auto it = arrayHints.find(beginIndex);
-                assert(it != arrayHints.cend());
-                ArrayOptHints &optHints = it->second;
+            size_t goBackIndex = beginArrayIndex + 1;
 
-                if (optHints.contentsEndAddrSet == 0) {
-                    // first pass
-                    if (addrSet == optHints.contentsBeginAddrSet) {
-                        // addresses already not changing anymore after first pass
-                        optHints.contentsEndAddrSet = addrSet;
-                        hasAddrChanges = false;
-                    }
-                } else {
-                    addrSet |= optHints.contentsEndAddrSet;
-                    if (addrSet == optHints.contentsEndAddrSet) {
-                        hasAddrChanges = false;
-                    } else {
-                        optHints.contentsEndAddrSet = addrSet;
-                    }
+            // If alignment is needed after the array length field, but not for any other elements
+            // (i.e. after the first), *skip* the alignment instruction when going back!
+            // No alignment req'd only for first element can happen, but is probably not worth handling.
+            const FerOp maybeAlignOp = (*ops)[goBackIndex];
+            if (isAlignOp(maybeAlignOp)) {
+                const uint32 afterElementAlignedAddrs = applyAlignment(arrayAlign.afterElementAddrSet,
+                                                                       maybeAlignOp);
+                if (afterElementAlignedAddrs == arrayAlign.afterElementAddrSet) {
+                    // alignment did nothing -> is not necessary -> skip it!
+                    goBackIndex += 1;
                 }
+            }
 
-                if (hasAddrChanges) {
-                    // Do another pass through the current array
+            // contentsBeginAddrSet is included because the array may contain zero elements
+            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
 
-                    // We basically handle the BeginArray here - it's easier than remembering where we're
-                    // coming from in BeginArray handling proper. That handling consists of almost nothing!
-                    // - No need to handle the array length field, we're past it
-                    // - No need to mess with addrSet, just continue from here
+            (*ops)[out++] = ferOp;
+            (*ops)[out++] = static_cast<FerOp>(goBackIndex & 0xff);
+            (*ops)[out++] = static_cast<FerOp>((goBackIndex & 0xff00) >> 8);
+            in += 2; // skip "go back index"
 
-                    in = optHints.beginArrayOpIndex; // BeginArray will be skipped because of in++
-                    beginArrayIndexes.push(in);
-
-                } else {
-                    if (beginArrayIndexes.empty()) {
-                        // Nothing changed in this pass through the outermost array, do one more pass to
-                        // finish up this one and all arrays nested inside it
-                        arrayPass = FinishUpArray;
-                        in = optHints.beginArrayOpIndex - 1 /* because of in++ */;
-                    }
-                }
-
-            } else if (arrayPass == FinishUpArray) {
-
-                auto it = arrayHints.find(beginIndex);
-                assert(it != arrayHints.cend());
-                ArrayOptHints &optHints = it->second;
-
-                size_t goBackIndex = optHints.beginArrayOpIndex;
-                assert((*ops)[goBackIndex] == FerOp::BeginArray);
-                // If alignment is needed after the array length field, but not for any other elements
-                // (i.e. after the first), *skip* the alignment instruction when going back!
-                // No alignment req'd only for first element can happen, but is probably not worth handling.
-                const FerOp maybeAlignOp = (*ops)[goBackIndex + 1];
-                if (isAlignOp(maybeAlignOp)) {
-                    const uint32 afterFirstElementAddrs = applyAlignment(optHints.contentsEndAddrSet,
-                                                                         maybeAlignOp);
-                    if (afterFirstElementAddrs == optHints.contentsEndAddrSet) {
-                        // alignment did nothing -> is not necessary -> skip it!
-                        goBackIndex += 1;
-                    }
-                }
-
-                (*ops)[out++] = ferOp;
-                (*ops)[out++] = static_cast<FerOp>(goBackIndex & 0xff);
-                (*ops)[out++] = static_cast<FerOp>((goBackIndex & 0xff00) >> 8);
-                in += 2; // skip the existing "go back instructions"
-
-                if (beginArrayIndexes.empty()) {
-                    // Done with arrays!
-                    arrayPass = NotInArray;
-                    arrayHints.clear();
-                }
+            if (beginArrayIndexes.empty()) {
+                // leaving the outermost level of nested array, we won't need that anymore
+                arrayAlignments.clear();
             }
 
         } else {
             if (isVarLengthOp(ferOp)) {
                 addrSet = anyAddrSet;
             }
-            if (arrayPass != DiscoverArray) {
-                (*ops)[out++] = ferOp;
-            }
+            (*ops)[out++] = ferOp;
         }
 
         // ### do not use "continue" in the loop because of this!
         prevOp = ferOp;
     }
 
+    assert(arrayAlignments.empty());
+    assert(beginArrayIndexes.empty());
+
     ops->resize(out);
+}
+
+static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beginArrayIndex,
+                             std::unordered_map<size_t, ArrayAlignments> *arrayAlignments)
+{
+    assert((*ops)[beginArrayIndex] == FerOp::BeginArray);
+
+    {
+        auto arrAlignIt = arrayAlignments->find(beginArrayIndex);
+        if (arrAlignIt == arrayAlignments->cend()) {
+            arrAlignIt = arrayAlignments->emplace_hint(arrAlignIt /*hint*/,
+                                                std::make_pair(beginArrayIndex, ArrayAlignments{0, 0}));
+        }
+        arrAlignIt->second.contentsBeginAddrSet |= addrSet;
+    }
+
+    for (size_t in = beginArrayIndex + 1; ; in++) {
+        const FerOp ferOp = (*ops)[in];
+
+        if (isBasicAdditionOp(ferOp)) {
+            addrSet = applyAddition(addrSet, ferOp);
+        } else if (isAlignOp(ferOp)) {
+            addrSet = applyAlignment(addrSet, ferOp);
+        } else if (ferOp == FerOp::BeginArray) {
+            // Since we skip "our" BeginArray, what we have here is another array inside the current one
+
+            addrSet = applyAddition(addrSet, FerOp::Copy4); // array length field!
+            const size_t beginArrayIndex = in;
+
+            in = optimizeArrays(ops, addrSet, in, arrayAlignments);
+            assert((*ops)[in] == FerOp::EndArray);
+            in += 2; // skip "go back index"
+
+            // Our position is now after the last element of the inner array.
+            // The array may be empty, so our position could be right after the array length field as well.
+            auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
+            assert(innerAlignIt != arrayAlignments->cend());
+            ArrayAlignments &arrayAlign = innerAlignIt->second;
+            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
+
+        } else if (ferOp == FerOp::EndArray) {
+            bool noMoreAddrSetChanges = false;
+
+            auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
+            assert(innerAlignIt != arrayAlignments->cend());
+            ArrayAlignments &arrayAlign = innerAlignIt->second;
+            if (arrayAlign.afterElementAddrSet) {
+                // this is not our first pass through that array
+                addrSet |= arrayAlign.afterElementAddrSet;
+                // if addrSet had no bits that are not in afterElementAddrSet, we have not seen any new
+                // addresses, and doing more iterations will only repeat previous results -> we're done
+                noMoreAddrSetChanges = arrayAlign.afterElementAddrSet == addrSet;
+            } else {
+                // This *is* our first pass through that array. If the alignment before and after the first
+                // element is the same, we're already done.
+                noMoreAddrSetChanges = arrayAlign.contentsBeginAddrSet == addrSet;
+            }
+
+            arrayAlign.afterElementAddrSet = addrSet;
+
+            if (noMoreAddrSetChanges) {
+                return in;
+            } else {
+                // do more passes through the array until we have seen all addresses
+                in = beginArrayIndex /* note, the for loop does in++ */;
+            }
+        } else {
+            if (isVarLengthOp(ferOp)) {
+                addrSet = anyAddrSet;
+            }
+        }
+    }
+    return 0;
+    assert(false);
 }
