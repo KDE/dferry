@@ -37,6 +37,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <stack>
+#include <unordered_map>
 
 const TypeInfo &typeInfo(char letterCode)
 {
@@ -677,7 +679,7 @@ static bool parseBasicType(cstring *s)
     case 's':
     case 'o':
     case 'g':
-    case 'h':
+    case 'h': // TODO is that really a basic type?
         chopFirst(s);
         return true;
     default:
@@ -688,7 +690,7 @@ static bool parseBasicType(cstring *s)
 bool parseSingleCompleteType(cstring *s, Nesting *nest)
 {
     assert(s->ptr);
-    // ### not cheching if zero-terminated
+    // ### not checking if zero-terminated
 
     switch (*s->ptr) {
     case 'y':
@@ -767,7 +769,7 @@ bool parseSingleCompleteType(cstring *s, Nesting *nest)
 bool Arguments::isSignatureValid(cstring signature, SignatureType type)
 {
     Nesting nest;
-    if (!signature.ptr || signature.ptr[signature.length] != 0) {
+    if (!signature.ptr || signature.length > 255 || signature.ptr[signature.length] != 0) {
         return false;
     }
     if (type == VariantSignature) {
@@ -787,9 +789,566 @@ bool Arguments::isSignatureValid(cstring signature, SignatureType type)
             }
         }
     }
-    // all aggregates must be closed at the end; if those asserts trigger the parsing code is not correct
+    // All aggregates must be closed at the end; if one of these assertions triggers the parsing code is
+    // broken (should have detected the problem earlier and returned false).
     assert(!nest.array);
     assert(!nest.paren);
     assert(!nest.variant);
     return true;
+}
+
+static bool ferEncodeBasicType(cstring *s, Nesting *nest, std::vector<FerOp>* out);
+
+static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<FerOp>* out)
+{
+    assert(s->ptr);
+    // ### not checking if zero-terminated
+
+    switch (*s->ptr) {
+    case 'y':
+    case 'b':
+    case 'n':
+    case 'q':
+    case 'i':
+    case 'u':
+    case 'x':
+    case 't':
+    case 'd':
+    case 'h': { // TODO that's a file descriptor, needs special treatment!!
+        const byte alignSize = typeInfo(*s->ptr).alignment;
+        switch (alignSize) {
+        case 2:
+            out->push_back(FerOp::Align2);
+            break;
+        case 4:
+            out->push_back(FerOp::Align4);
+            break;
+        case 8:
+            out->push_back(FerOp::Align8);
+            break;
+        }
+        out->push_back(static_cast<FerOp>(alignSize));
+
+        chopFirst(s);
+        return true; }
+    case 's':
+        out->push_back(FerOp::String);
+
+        chopFirst(s);
+        return true;
+    case 'o':
+        out->push_back(FerOp::ObjectPath);
+
+        chopFirst(s);
+        return true;
+    case 'g':
+        out->push_back(FerOp::Signature);
+
+        chopFirst(s);
+        return true;
+    case 'v':
+        if (!nest->beginVariant()) {
+            return false;
+        }
+
+        out->push_back(FerOp::BeginVariant);
+        out->push_back(static_cast<FerOp>(nest->array));
+        out->push_back(static_cast<FerOp>(nest->paren));
+        out->push_back(static_cast<FerOp>(nest->variant));
+
+        // TODO? some kind of transition to "dynamic" variant signature and payload parsing...
+        // but maybe this info is enough for the "dynamic" code to take over.
+        chopFirst(s);
+        nest->endVariant();
+        return true;
+    case '(': {
+        if (!nest->beginParen()) {
+            return false;
+        }
+
+        out->push_back(FerOp::Align8);
+
+        chopFirst(s);
+        bool isEmptyStruct = true;
+        while (ferEncodeSingleCompleteType(s, nest, out)) {
+            isEmptyStruct = false;
+        }
+        if (!s->length || *s->ptr != ')' || isEmptyStruct) {
+            return false;
+        }
+        chopFirst(s);
+        nest->endParen();
+        return true; }
+    case 'a': {
+        if (!nest->beginArray()) {
+            return false;
+        }
+
+        // The alignmnt is explicit so it can be subject to regular alignment elision optimization.
+        out->push_back(FerOp::Align4);
+
+        // The reading of the array length field, though, is implicit!
+        out->push_back(FerOp::BeginArray);
+        const size_t goBackAddress = out->size(); // one past the BeginArray!
+
+        chopFirst(s);
+        if (*s->ptr == '{') { // an "array of dict entries", i.e. a dict
+            if (!nest->beginParen() || s->length < 4) {
+                return false;
+            }
+            chopFirst(s);
+
+            out->push_back(FerOp::Align8); // "dict entries" are similar to structs, and like them, 8-aligned
+
+            // key must be a basic type
+            if (!ferEncodeBasicType(s, nest, out)) {
+                return false;
+            }
+            // value can be any single complete type
+            if (!ferEncodeSingleCompleteType(s, nest, out)) {
+                return false;
+            }
+            if (!s->length || *s->ptr != '}') {
+                return false;
+            }
+            chopFirst(s);
+            nest->endParen();
+        } else { // regular array
+            if (!ferEncodeSingleCompleteType(s, nest, out)) {
+                return false;
+            }
+        }
+        nest->endArray();
+
+        out->push_back(FerOp::EndArray);
+        // push two bytes forming an LSB first 16 bit integer telling where to go back for the BeginArray
+        out->push_back(static_cast<FerOp>(goBackAddress & 0xff));
+        out->push_back(static_cast<FerOp>((goBackAddress & 0xff00) >> 8));
+
+        return true; }
+    default:
+        return false;
+    }
+}
+
+static bool ferEncodeBasicType(cstring *s, Nesting *nest, std::vector<FerOp>* out)
+{
+    switch (*s->ptr) {
+    case 'y':
+    case 'b':
+    case 'n':
+    case 'q':
+    case 'i':
+    case 'u':
+    case 'x':
+    case 't':
+    case 'd':
+    case 's':
+    case 'o':
+    case 'g':
+    case 'h': // TODO is that really a basic type?
+        chopFirst(s);
+        return ferEncodeSingleCompleteType(s, nest, out);
+    }
+    return false;
+}
+
+static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std::vector<FerOp>* out)
+{
+    Nesting nest;
+    if (!sig->ptr || sig->length > 255 || sig->ptr[sig->length] != 0) {
+        return false;
+    }
+    if (type == Arguments::VariantSignature) {
+        if (!sig->length) {
+            return false;
+        }
+        if (!ferEncodeSingleCompleteType(sig, &nest, out)) {
+            return false;
+        }
+        if (sig->length) {
+            return false;
+        }
+    } else {
+        while (sig->length) {
+            if (!ferEncodeSingleCompleteType(sig, &nest, out)) {
+                return false;
+            }
+        }
+    }
+
+    assert(!nest.array);
+    assert(!nest.paren);
+    assert(!nest.variant);
+    return true;
+}
+
+std::string printableFerOp(FerOp op)
+{
+    if (op == FerOp::End) {
+        return "End";
+    } else if (op >= FerOp::Copy1 && op <= FerOp::Copy4096) {
+        uint num = 0;
+        if (op < FerOp::Copy256) {
+            num = static_cast<byte>(op);
+        } else {
+            num = 256 << (static_cast<byte>(op) - static_cast<byte>(FerOp::Copy256));
+        }
+        return "Copy" + std::to_string(num);
+    } else if (op == FerOp::Align2) {
+        return "Align2";
+    } else if (op == FerOp::Align4) {
+        return "Align4";
+    } else if (op == FerOp::Align8) {
+        return "Align8";
+    } else if (op == FerOp::String) {
+        return "String";
+    } else if (op == FerOp::ObjectPath) {
+        return "ObjectPath";
+    } else if (op == FerOp::Signature) {
+        return "Signature";
+    } else if (op == FerOp::BeginArray) {
+        return "BeginArray";
+    } else if (op == FerOp::EndArray) {
+        return "EndArray";
+    } else if (op == FerOp::BeginVariant) {
+        return "BeginVariant";
+    } else if (op == FerOp::Error) {
+        return "Error";
+    } else {
+        return "?" + std::to_string(static_cast<uint>(op));
+    }
+}
+
+std::string printableFerOps(const std::vector<FerOp>& ops)
+{
+    std::string ret;
+    for (size_t i = 0; i < ops.size(); i++) {
+        const FerOp op = ops[i];
+        ret.append(printableFerOp(op));
+        if (op == FerOp::EndArray) {
+            if (i + 2 < ops.size()) {
+                // These bytes are the "go back index" for the array, I suppose we could also print it?
+                const uint32 goBackIndex = static_cast<byte>(ops[i + 1]) +
+                                           (static_cast<byte>(ops[i + 2]) << 8);
+                ret.append("GoBack");
+                ret.append(std::to_string(goBackIndex));
+            } else {
+                ret.append("GoBackTrunc");
+            }
+
+            i += 2;
+        }
+        ret.append(", ");
+    }
+    ret.pop_back();
+    ret.pop_back();
+    return ret;
+}
+
+static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies);
+
+//static
+std::vector<FerOp> ferOpsForSignature(cstring signature, bool optimize, bool mergeContiguousCopies)
+{
+    std::vector<FerOp> ret;
+    if (ferEncodeSignature(&signature, Arguments::MethodSignature, &ret)) {
+        if (optimize) {
+            optimizeFerOps(&ret, mergeContiguousCopies);
+        }
+        ret.push_back(FerOp::End);
+    } else {
+        ret.clear();
+        ret.push_back(FerOp::Error);
+    }
+    return ret;
+}
+
+static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
+{
+    assert(addrSet <= 0b11111111); // allowed values are just 1-8
+    assert(addrSet != 0); // there must be some value (1 << 7 is the canonical representation of 8 ~= 0)
+
+    switch (alignOp) {
+    case FerOp::Align2:
+        addrSet |= addrSet << 1;
+        return addrSet & 0b10101010;
+    case FerOp::Align4:
+        addrSet |= addrSet << 1;
+        addrSet |= addrSet << 2;
+        return addrSet & 0b10001000;
+    case FerOp::Align8:
+        return 0b10000000;
+    default:
+        assert(false);
+        return 0;
+    }
+}
+
+static uint32 applyAddition(uint32 addrSet, FerOp addOp)
+{
+    assert(addrSet <= 0b11111111); // allowed addresses are just 1-8
+    assert(addrSet != 0); // there must be some value (8 is equivalent to 0)
+
+    if (addOp < FerOp::Copy1 || addOp > FerOp::Copy127) {
+        // others are either not additions or preserve 8-alignment
+        return addrSet;
+    }
+    uint32 addend = uint32(addOp); // enum values are chosen for this to work
+    // only keep the part that isn't 8-aligned
+    addend &= 0x7;
+
+    // rotate addrSet left ("add addend to all addresses")
+    // here, we benefit from representing 0 as 8 because adding n (< 8) to 8 gives n, not 0!
+    addrSet = addrSet << addend;
+    addrSet |= addrSet >> 8;
+    addrSet &= 0b11111111;
+
+    return addrSet;
+}
+
+static bool isAlignOp(FerOp op)
+{
+    return op >= FerOp::Align2 && op <= FerOp::Align8;
+}
+
+// ### we currently don't use "coarse grained" copy operations > Copy128 - these would require a little more
+// work and don't seem to be very useful
+static bool isBasicAdditionOp(FerOp op)
+{
+    return op >= FerOp::Copy1 && op <= FerOp::Copy128;
+}
+
+static bool isVarLengthOp(FerOp op)
+{
+    return op == FerOp::String || op == FerOp::ObjectPath || op == FerOp::Signature ||
+           op == FerOp::BeginVariant;
+}
+
+struct ArrayOptHints
+{
+    size_t beginArrayOpIndex;       // index of the BeginArray op
+    uint32 contentsBeginAddrSet;    // possible addresses for first element of array
+    uint32 contentsEndAddrSet;      // possible addresses for after last element of array
+};
+
+enum ArrayPass
+{
+    NotInArray,
+    DiscoverArray,
+    FinishUpArray,
+};
+
+static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
+{
+    // bitset of possible values, 1..8 because no alignment requirement greater 8 exists in DBus serialization,
+    // so 8 ~= 0, 9 ~= 1 etc
+    // we represent "full alignment" (8) as 8 instead of the equivalent 0 because that makes applyAddition
+    // less weird (we'd have to special case 0 + n otherwise)
+    uint32 addrSet = 0b10000000;
+    // after a variable length string, all alignments are possible - anyValues represent that (8 bits set)
+    static const uint32 anyAddrSet = 0b11111111;
+
+    ArrayPass arrayPass = NotInArray;
+    std::unordered_map<size_t, ArrayOptHints> arrayHints; // key: position of BeginArray in stream
+    std::stack<size_t> beginArrayIndexes;
+
+    size_t out = 0;
+    FerOp prevOp = FerOp::End;
+    for (size_t in = 0; in < ops->size(); in++) {
+
+        const uint32 prevAddrSet = addrSet;
+        FerOp ferOp = (*ops)[in];
+
+        assert(!(ferOp >= FerOp::Copy256 && ferOp <= FerOp::Copy4096)); // not currently supported
+
+        if (isBasicAdditionOp(ferOp)) {
+
+            addrSet = applyAddition(addrSet, ferOp);
+
+            if (arrayPass != DiscoverArray) {
+                if (mergeContiguousCopies && isBasicAdditionOp(prevOp)) {
+                    const FerOp mergedOp = static_cast<FerOp>(uint32(prevOp) + uint32(ferOp));
+                    if (isBasicAdditionOp(mergedOp)) { // still in basic addition range?
+                        ferOp = mergedOp;
+                        out--; // overwrite previous op!
+                    }
+                }
+                (*ops)[out++] = ferOp;
+            }
+
+        } else if (isAlignOp(ferOp)) {
+
+            addrSet = applyAlignment(addrSet, ferOp);
+
+            if (arrayPass != DiscoverArray) {
+                if (isAlignOp(prevOp)) {
+                    // Merge consecutive alignment operations (preferring the larger one even if it changes nothing)
+                    ferOp = std::max(ferOp, prevOp);
+                    // overwrite the previous operation with the new merged one
+                    out--;
+                    (*ops)[out++] = ferOp;
+                } else {
+                    // Eliminate alignment operations that do nothing
+                    if (addrSet != prevAddrSet) {
+                        (*ops)[out++] = ferOp;
+                    } else {
+                        // remove this operation from the output entirely (no out++)
+                        ferOp = prevOp;
+                    }
+                }
+            }
+
+        } else if (ferOp == FerOp::BeginArray) {
+            // Arrays are the most difficult part of this!
+            // - Array elements can repeat, and subsequent elements can start and end at differently
+            //   aligned addresses from the first element
+            // - There can be arrays inside arrays, oh my...
+            // To deal with this, we:
+            // - DiscoverArray: repeat each array (keep adding phantom elements) until we see no more new
+            //   alignment values. When that happens (and btw we remember all alignments that have occured)
+            //   in the outermost array, we transition to FinishUpArray.
+            // - FinishUpArray: use all the gathered alignment data for a pass of almost regular optimization
+            //   with two extras:
+            //   - fix up "back to beginning" indexes at the end of arrays to account for changes in the
+            //     FerOp vector due to any optimizations
+            //   - if an array only needs alignemnt for the first element, tweak the "back to beginning"
+            //     index to skip the alignment FerOp.
+
+            beginArrayIndexes.push(in);
+
+            if (arrayPass == NotInArray) {
+                assert(beginArrayIndexes.size() == 1);
+                assert(arrayHints.empty());
+                arrayPass = DiscoverArray;
+            }
+
+            if (arrayPass == DiscoverArray) {
+                // Note: looping back to beginning of array is handled in EndArray - it's easier that way.
+                // Here, we only handle coming up to the BeginArray from the left. It may not be the first
+                // time, though, due to possible outer arrays!
+
+                addrSet = applyAddition(addrSet, FerOp::Copy4); // for the array length field
+
+                auto it = arrayHints.find(in);
+                if (it == arrayHints.cend()) {
+                    it = arrayHints.emplace_hint(it /*hint*/, std::make_pair(in, ArrayOptHints{in, 0, 0}));
+                }
+
+                ArrayOptHints &optHints = it->second;
+                optHints.contentsBeginAddrSet |= addrSet;
+
+            } else if (arrayPass == FinishUpArray) {
+                auto it = arrayHints.find(in);
+                assert(it != arrayHints.cend());
+
+                // Note that the beginning address of the nth (n > 1) array element is the same as the end
+                // address of the (n - 1)th array element, hence the combination is needed to cover all
+                // possibl addresses for an array element.
+                ArrayOptHints &optHints = it->second;
+                addrSet = optHints.contentsBeginAddrSet | it->second.contentsEndAddrSet;
+
+                optHints.beginArrayOpIndex = out;
+                (*ops)[out++] = ferOp;
+                //... and let alignment elision based on addrSet handle the rest!
+            }
+
+        } else if (ferOp == FerOp::EndArray) {
+
+            assert(arrayPass != NotInArray);
+
+            const size_t beginIndex = beginArrayIndexes.top();
+            beginArrayIndexes.pop();
+
+            if (arrayPass == DiscoverArray) {
+                // check if set of possible addresses changed, do another pass if so (to potentially find more)
+                bool hasAddrChanges = true;
+
+                auto it = arrayHints.find(beginIndex);
+                assert(it != arrayHints.cend());
+                ArrayOptHints &optHints = it->second;
+
+                if (optHints.contentsEndAddrSet == 0) {
+                    // first pass
+                    if (addrSet == optHints.contentsBeginAddrSet) {
+                        // addresses already not changing anymore after first pass
+                        optHints.contentsEndAddrSet = addrSet;
+                        hasAddrChanges = false;
+                    }
+                } else {
+                    addrSet |= optHints.contentsEndAddrSet;
+                    if (addrSet == optHints.contentsEndAddrSet) {
+                        hasAddrChanges = false;
+                    } else {
+                        optHints.contentsEndAddrSet = addrSet;
+                    }
+                }
+
+                if (hasAddrChanges) {
+                    // Do another pass through the current array
+
+                    // We basically handle the BeginArray here - it's easier than remembering where we're
+                    // coming from in BeginArray handling proper. That handling consists of almost nothing!
+                    // - No need to handle the array length field, we're past it
+                    // - No need to mess with addrSet, just continue from here
+
+                    in = optHints.beginArrayOpIndex; // BeginArray will be skipped because of in++
+                    beginArrayIndexes.push(in);
+
+                } else {
+                    if (beginArrayIndexes.empty()) {
+                        // Nothing changed in this pass through the outermost array, do one more pass to
+                        // finish up this one and all arrays nested inside it
+                        arrayPass = FinishUpArray;
+                        in = optHints.beginArrayOpIndex - 1 /* because of in++ */;
+                    }
+                }
+
+            } else if (arrayPass == FinishUpArray) {
+
+                auto it = arrayHints.find(beginIndex);
+                assert(it != arrayHints.cend());
+                ArrayOptHints &optHints = it->second;
+
+                size_t goBackIndex = optHints.beginArrayOpIndex;
+                assert((*ops)[goBackIndex] == FerOp::BeginArray);
+                // If alignment is needed after the array length field, but not for any other elements
+                // (i.e. after the first), *skip* the alignment instruction when going back!
+                // No alignment req'd only for first element can happen, but is probably not worth handling.
+                const FerOp maybeAlignOp = (*ops)[goBackIndex + 1];
+                if (isAlignOp(maybeAlignOp)) {
+                    const uint32 afterFirstElementAddrs = applyAlignment(optHints.contentsEndAddrSet,
+                                                                         maybeAlignOp);
+                    if (afterFirstElementAddrs == optHints.contentsEndAddrSet) {
+                        // alignment did nothing -> is not necessary -> skip it!
+                        goBackIndex += 1;
+                    }
+                }
+
+                (*ops)[out++] = ferOp;
+                (*ops)[out++] = static_cast<FerOp>(goBackIndex & 0xff);
+                (*ops)[out++] = static_cast<FerOp>((goBackIndex & 0xff00) >> 8);
+                in += 2; // skip the existing "go back instructions"
+
+                if (beginArrayIndexes.empty()) {
+                    // Done with arrays!
+                    arrayPass = NotInArray;
+                    arrayHints.clear();
+                }
+            }
+
+        } else {
+            if (isVarLengthOp(ferOp)) {
+                addrSet = anyAddrSet;
+            }
+            if (arrayPass != DiscoverArray) {
+                (*ops)[out++] = ferOp;
+            }
+        }
+
+        // ### do not use "continue" in the loop because of this!
+        prevOp = ferOp;
+    }
+
+    ops->resize(out);
 }
