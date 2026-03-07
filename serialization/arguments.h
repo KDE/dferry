@@ -61,7 +61,7 @@ public:
         // The way the limit is defined in the spec seems tied a bit too closely to the design of libdbus-1...
     };
 
-    enum IoState
+    enum IoState : byte
     {
         // "exceptional" states
         NotStarted = 0,
