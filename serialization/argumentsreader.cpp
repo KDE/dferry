@@ -82,11 +82,11 @@ public:
 
 thread_local static MallocCache<sizeof(Arguments::Reader::Private), 4> allocCache;
 
-Arguments::Reader::Reader(const Arguments &al)
+Arguments::Reader::Reader(const Arguments &args)
    : d(new(allocCache.allocate()) Private),
      m_state(NotStarted)
 {
-    d->m_args = &al;
+    d->m_args = &args;
     beginRead();
 }
 

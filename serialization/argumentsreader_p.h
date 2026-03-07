@@ -30,7 +30,7 @@ public:
 class DFERRY_EXPORT Reader
 {
 public:
-    explicit Reader(const Arguments &al);
+    explicit Reader(const Arguments &args);
     explicit Reader(const Message &msg);
     Reader(Reader &&other);
     void operator=(Reader &&other);
@@ -102,7 +102,7 @@ public:
     // least return garbage.
     byte readByte() { byte ret = m_u.Byte; advanceState(); return ret; }
     bool readBoolean() { bool ret = m_u.Boolean; advanceState(); return ret; }
-    int16 readInt16() { int ret = m_u.Int16; advanceState(); return ret; }
+    int16 readInt16() { int16 ret = m_u.Int16; advanceState(); return ret; }
     uint16 readUint16() { uint16 ret = m_u.Uint16; advanceState(); return ret; }
     int32 readInt32() { int32 ret = m_u.Int32; advanceState(); return ret; }
     uint32 readUint32() { uint32 ret = m_u.Uint32; advanceState(); return ret; }
@@ -138,7 +138,6 @@ public:
 #endif
 
     class Private;
-    friend class Private;
 
 private:
     void beginRead();

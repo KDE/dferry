@@ -81,7 +81,6 @@ public:
 #endif
 
     class Private;
-    friend class Private;
 
 private:
     friend class MessagePrivate;
