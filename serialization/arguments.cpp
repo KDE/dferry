@@ -980,6 +980,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
     assert(!nest.array);
     assert(!nest.paren);
     assert(!nest.variant);
+    out->push_back(FerOp::End);
     return true;
 }
 
@@ -1056,7 +1057,6 @@ std::vector<FerOp> ferOpsForSignature(cstring signature, bool optimize, bool mer
         if (optimize) {
             optimizeFerOps(&ret, mergeContiguousCopies);
         }
-        ret.push_back(FerOp::End);
     } else {
         ret.clear();
         ret.push_back(FerOp::Error);
