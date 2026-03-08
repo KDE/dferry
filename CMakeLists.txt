@@ -97,6 +97,8 @@ set(DFER_PUBLIC_HEADERS
     events/timer.h
     serialization/message.h
     serialization/arguments.h
+    serialization/argumentsreader_p.h   # no to be included separately, but required by arguments.h
+    serialization/argumentswriter_p.h   # as above
     util/commutex.h
     util/error.h
     util/export.h
