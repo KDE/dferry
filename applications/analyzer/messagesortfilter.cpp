@@ -83,12 +83,30 @@ bool MessageSortFilter::lessThan(const QModelIndex &left, const QModelIndex &rig
 
 void MessageSortFilter::setFilterString(const QString &s)
 {
+#if QT_VERSION > QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
+
     m_filterString = s;
+
+#if QT_VERSION > QT_VERSION_CHECK(6, 9, 0)
+    endFilterChange(Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
 
 void MessageSortFilter::setOnlyUnanswered(bool onlyUnanswered)
 {
+#if QT_VERSION > QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+#endif
+
     m_onlyUnanswered = onlyUnanswered;
+
+#if QT_VERSION > QT_VERSION_CHECK(6, 9, 0)
+    endFilterChange(Direction::Rows);
+#else
     invalidateFilter();
+#endif
 }
