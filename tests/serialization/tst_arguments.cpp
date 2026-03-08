@@ -355,12 +355,12 @@ static void defaultReadToWrite(Arguments::Reader *reader, Arguments::Writer *wri
     case Arguments::BeginArray: {
         const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
-                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+                                   : Arguments::Writer::WriteTypesOfEmptyArray);
         break; }
     case Arguments::BeginDict: {
         const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
         writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
-                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+                                  : Arguments::Writer::WriteTypesOfEmptyArray);
         break; }
     case Arguments::String: {
         const cstring s = reader->readString();

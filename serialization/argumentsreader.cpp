@@ -161,7 +161,7 @@ void Arguments::Reader::beginRead()
     VALID_IF(d->m_args, Error::NotAttachedToArguments);
     d->m_signature = d->m_args->d->m_signature;
     d->m_data = d->m_args->d->m_data;
-    // as a slightly hacky optimizaton, we allow empty Argumentss to allocate no space for d->m_buffer.
+    // as a slightly hacky optimizaton, we allow empty Arguments to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
         VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
     }
