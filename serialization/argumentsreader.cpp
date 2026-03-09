@@ -57,7 +57,10 @@ public:
 
     struct VariantInfo
     {
-        podCstring prevSignature;     // a variant switches the currently parsed signature, so we
+        // Using these separate fields allows this to have a size of 16 bytes instead of 24
+        // (without using nonstandard "pack" pragmas with weird side effects)
+        char* prevSignaturePtr;
+        uint32 prevSignatureLength;
         uint32 prevSignaturePosition; // need to store the old signature and parse position.
     };
 
@@ -226,7 +229,7 @@ void Arguments::Reader::replaceData(chunk data)
             if (isMainSignature) {
                 isMainSignature = false;
             } else {
-                aggregate.var.prevSignature.ptr += offset;
+                aggregate.var.prevSignaturePtr += offset;
             }
         }
     }
@@ -833,8 +836,8 @@ void Arguments::Reader::beginVariant()
     Private::AggregateInfo aggregateInfo;
     aggregateInfo.aggregateType = BeginVariant;
     Private::VariantInfo &variantInfo = aggregateInfo.var;
-    variantInfo.prevSignature.ptr = d->m_signature.ptr;
-    variantInfo.prevSignature.length = d->m_signature.length;
+    variantInfo.prevSignaturePtr = d->m_signature.ptr;
+    variantInfo.prevSignatureLength = d->m_signature.length;
     variantInfo.prevSignaturePosition = d->m_signaturePosition;
     d->m_aggregateStack.push_back(aggregateInfo);
     d->m_signature.ptr = m_u.String.ptr;
@@ -861,8 +864,8 @@ void Arguments::Reader::endVariant()
 
     const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
     const Private::VariantInfo &variantInfo = aggregateInfo.var;
-    d->m_signature.ptr = variantInfo.prevSignature.ptr;
-    d->m_signature.length = variantInfo.prevSignature.length;
+    d->m_signature.ptr = variantInfo.prevSignaturePtr;
+    d->m_signature.length = variantInfo.prevSignatureLength;
     d->m_signaturePosition = variantInfo.prevSignaturePosition;
     d->m_aggregateStack.pop_back();
 
