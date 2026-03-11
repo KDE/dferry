@@ -369,8 +369,7 @@ void Arguments::Reader::advanceState()
                     d->m_signaturePosition = arrayInfo.containedTypeBegin;
                     break; // proceed immediately to reading the next element in the array
                 }
-                // TODO check that final data position is where it should be according to the
-                // serialized array length (same in BeginDict!)
+                // check that data end lines up exactly
                 VALID_IF(d->m_dataPosition == arrayInfo.dataEnd, Error::MalformedMessageData);
                 m_state = EndArray;
                 return;
@@ -396,6 +395,8 @@ void Arguments::Reader::advanceState()
                 m_u.Uint32 = 1; // meaning: array end reached (state after next is EndDict)
                 return;
 #endif
+                // check that data end lines up exactly
+                VALID_IF(d->m_dataPosition == arrayInfo.dataEnd, Error::MalformedMessageData);
                 m_state = EndDict;
                 return;
             }
