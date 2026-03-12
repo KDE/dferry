@@ -72,9 +72,6 @@ public:
         // "exceptional" states
         NotStarted = 0, ///< De/serialization not started
         Finished, ///< De/serialization finished
-        NeedMoreData, ///< Data is too short. Recoverable by adding data; should only happen when parsing
-                      ///  the not length-prefixed variable message header
-                      // TODO remove
         InvalidData, ///< Input is invalid
         // Writer states when the next type is still open (not iterating in an array or dict)
         // ### it is inconsistent to have DictKey, but nothing for other constraints. The name AnyData is

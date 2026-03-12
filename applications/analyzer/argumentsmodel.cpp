@@ -170,7 +170,6 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             addKeyValue(parent, "file descriptor", inEmptyArray, reader.readUnixFd());
             break;
         case Arguments::InvalidData:
-        case Arguments::NeedMoreData:
         default:
             return withFaultyData(model);
             break;

@@ -21,8 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "argumentsreader.h"
-#include "arguments_p.h"
+#include "argumentsreader_p.h"
 
 #include "basictypeio.h"
 #include "error.h"
@@ -31,56 +30,6 @@
 #include "platform_p.h"
 
 #include <cstddef>
-
-#ifdef HAVE_BOOST
-#include <boost/container/small_vector.hpp>
-#endif
-
-class ArgumentsReader::Private
-{
-public:
-    const Arguments::Private *m_argsPriv = nullptr;
-    cstring m_signature;
-    uint32 m_signaturePosition = uint32(-1);
-    chunk m_data;
-    uint32 m_dataPosition = 0;
-    uint32 m_nilArrayNesting = 0; // this keeps track of how many nil arrays we are in
-    Error m_error;
-    Nesting m_nesting;
-
-    struct ArrayInfo
-    {
-        uint32 dataEnd; // one past the last data byte of the array
-        uint32 containedTypeBegin; // to rewind when reading the next element
-    };
-
-    struct VariantInfo
-    {
-        // Using these separate fields allows this to have a size of 16 bytes instead of 24
-        // (without using nonstandard "pack" pragmas with weird side effects)
-        char* prevSignaturePtr;
-        uint32 prevSignatureLength;
-        uint32 prevSignaturePosition; // need to store the old signature and parse position.
-    };
-
-    // for structs, we don't need to know more than that we are in a struct
-
-    struct AggregateInfo
-    {
-        Arguments::IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
-        union {
-            ArrayInfo arr;
-            VariantInfo var;
-        };
-    };
-
-    // this keeps track of which aggregates we are currently in
-#ifdef HAVE_BOOST
-    boost::container::small_vector<AggregateInfo, 8> m_aggregateStack;
-#else
-    std::vector<AggregateInfo> m_aggregateStack;
-#endif
-};
 
 thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
@@ -244,34 +193,6 @@ cstring ArgumentsReader::currentSingleCompleteTypeSignature() const
     return sigCopy;
 }
 
-void ArgumentsReader::replaceData(chunk data)
-{
-    VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
-
-    ptrdiff_t offset = data.ptr - d->m_data.ptr;
-
-    // fix up variant signature addresses occurring on the aggregate stack pointing into m_data;
-    // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
-    bool isMainSignature = true;
-    for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
-        if (aggregate.aggregateType == Arguments::BeginVariant) {
-            if (isMainSignature) {
-                isMainSignature = false;
-            } else {
-                aggregate.var.prevSignaturePtr += offset;
-            }
-        }
-    }
-    if (!isMainSignature) {
-        d->m_signature.ptr += offset;
-    }
-
-    d->m_data = data;
-    if (m_state == Arguments::NeedMoreData) {
-        advanceState();
-    }
-}
-
 void ArgumentsReader::doReadPrimitiveType()
 {
     switch(m_state) {
@@ -330,10 +251,8 @@ void ArgumentsReader::doReadString(uint32 lengthPrefixSize)
         VALID_IF(stringLength + 1 <= Arguments::MaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
-    if (unlikely(d->m_dataPosition + stringLength > d->m_data.length)) {
-        m_state = Arguments::NeedMoreData;
-        return;
-    }
+    VALID_IF(d->m_dataPosition + stringLength <= d->m_data.length, Error::TruncatedMessageData);
+
     m_u.String.ptr = reinterpret_cast<char *>(d->m_data.ptr) + d->m_dataPosition;
     m_u.String.length = stringLength - 1; // terminating null is not counted
     d->m_dataPosition += stringLength;
@@ -350,9 +269,7 @@ void ArgumentsReader::doReadString(uint32 lengthPrefixSize)
 
 void ArgumentsReader::advanceState()
 {
-    // if we don't have enough data, the strategy is to keep everything unchanged
-    // except for the state which will be NeedMoreData
-    // we don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
+    // We don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
     // for aggregate nesting which cannot be checked using only one signature, due to variants.
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
@@ -364,9 +281,6 @@ void ArgumentsReader::advanceState()
     // the spec: an array (one) containing dict entries (two)
     // assert(d->m_nesting.total() == d->m_aggregateStack.size());
     assert((d->m_nesting.total() == 0) == d->m_aggregateStack.empty());
-
-    const uint32 savedSignaturePosition = d->m_signaturePosition;
-    const uint32 savedDataPosition = d->m_dataPosition;
 
     d->m_signaturePosition++;
     assert(d->m_signaturePosition <= d->m_signature.length);
@@ -448,24 +362,17 @@ void ArgumentsReader::advanceState()
     if (likely(!d->m_nilArrayNesting)) {
         uint32 padStart = d->m_dataPosition;
         d->m_dataPosition = align(d->m_dataPosition, ty.alignment);
-        if (unlikely(d->m_dataPosition > d->m_data.length)) {
-            goto out_needMoreData;
-        }
+        VALID_IF(d->m_dataPosition <= d->m_data.length, Error::TruncatedMessageData);
         VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
 
         if (ty.isPrimitive || ty.isString) {
-            if (unlikely(d->m_dataPosition + ty.alignment > d->m_data.length)) {
-                goto out_needMoreData;
-            }
+            VALID_IF(d->m_dataPosition + ty.alignment <= d->m_data.length, Error::TruncatedMessageData);
 
             if (ty.isPrimitive) {
                 doReadPrimitiveType();
                 d->m_dataPosition += ty.alignment;
             } else {
                 doReadString(ty.alignment);
-                if (unlikely(m_state == Arguments::NeedMoreData)) {
-                    goto out_needMoreData;
-                }
             }
             return;
         }
@@ -496,19 +403,16 @@ void ArgumentsReader::advanceState()
             static const char *emptyString = "";
             signature = cstring(emptyString, 0);
         } else {
-            if (unlikely(d->m_dataPosition >= d->m_data.length)) {
-                goto out_needMoreData;
-            }
+            VALID_IF(d->m_dataPosition < d->m_data.length, Error::TruncatedMessageData);
             signature.length = d->m_data.ptr[d->m_dataPosition++];
             signature.ptr = reinterpret_cast<char *>(d->m_data.ptr) + d->m_dataPosition;
             d->m_dataPosition += signature.length + 1;
-            if (unlikely(d->m_dataPosition > d->m_data.length)) {
-                goto out_needMoreData;
-            }
+
+            VALID_IF(d->m_dataPosition <= d->m_data.length, Error::TruncatedMessageData);
             VALID_IF(Arguments::isSignatureValid(signature, Arguments::VariantSignature),
                      Error::MalformedMessageData);
         }
-        // do not clobber nesting before potentially going to out_needMoreData!
+        // do not clobber nesting before potentially bailing out with TruncatedMessageData!
         VALID_IF(d->m_nesting.beginVariant(), Error::MalformedMessageData);
 
         // use m_u as temporary storage - its contents are undefined anyway in state BeginVariant
@@ -517,13 +421,11 @@ void ArgumentsReader::advanceState()
         break; }
 
     case Arguments::BeginArray: {
-        // NB: Do not make non-idempotent changes to member variables before potentially going to
-        //     out_needMoreData! We'll make the same change again after getting more data.
+        // NB: Do not make non-idempotent changes to member variables before potentially bailing out
+        //     with TruncatedMessageData! We'd (incorrectly) repeat the change after getting more data.
         uint32 arrayLength = 0;
         if (likely(!d->m_nilArrayNesting)) {
-            if (unlikely(d->m_dataPosition + sizeof(uint32) > d->m_data.length)) {
-                goto out_needMoreData;
-            }
+            VALID_IF(d->m_dataPosition + sizeof(uint32) <= d->m_data.length, Error::TruncatedMessageData);
             arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
             VALID_IF(arrayLength <= Arguments::MaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
@@ -548,9 +450,8 @@ void ArgumentsReader::advanceState()
             d->m_dataPosition = align(d->m_dataPosition, alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
             dataEnd = d->m_dataPosition + arrayLength;
-            if (unlikely(dataEnd > d->m_data.length)) {
-                goto out_needMoreData;
-            }
+
+            VALID_IF(dataEnd <= d->m_data.length, Error::TruncatedMessageData);
         }
 
         VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
@@ -570,14 +471,6 @@ void ArgumentsReader::advanceState()
     }
 
     return;
-
-out_needMoreData:
-    // we only start an array when the data for it has fully arrived (possible due to the length
-    // prefix), so if we still run out of data in an array the input is invalid.
-    VALID_IF(!d->m_nesting.array, Error::MalformedMessageData);
-    m_state = Arguments::NeedMoreData;
-    d->m_signaturePosition = savedSignaturePosition;
-    d->m_dataPosition = savedDataPosition;
 }
 
 void ArgumentsReader::skipArrayOrDictSignature(bool isDict)
@@ -1058,10 +951,6 @@ void ArgumentsReader::skipCurrentElement()
         case Arguments::UnixFd:
             readUnixFd();
             break;
-        case Arguments::NeedMoreData:
-            // TODO handle this properly: rewind the state to before the aggregate - or get fancy and support
-            // resuming, but that is going to get really ugly
-            [[fallthrough]];
         default:
             m_state = Arguments::InvalidData;
             d->m_error.setCode(Error::StateNotSkippable);
