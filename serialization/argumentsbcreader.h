@@ -66,7 +66,7 @@ public:
     //cstring currentSingleCompleteTypeSignature() const;
 
     bool isFinished() const { return m_state == Arguments::Finished; }
-    bool isError() const { return m_state == Arguments::InvalidData || m_state == Arguments::NeedMoreData; } // TODO remove
+    bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove?
 
     enum EmptyArrayOption
     {

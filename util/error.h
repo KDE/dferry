@@ -48,7 +48,7 @@ public:
         // Arguments errors
         NotAttachedToArguments,
         InvalidSignature,
-        ReplacementDataIsShorter,
+        TruncatedMessageData,
         MalformedMessageData,
         ReadWrongType,
         NotPrimitiveType,

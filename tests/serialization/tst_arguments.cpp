@@ -23,7 +23,9 @@
 
 #include "arguments.h"
 #include "argumentsreader.h"
+#include "argumentsreader_p.h"
 #include "argumentswriter.h"
+#include "error.h"
 
 #include "../testutil.h"
 
@@ -312,8 +314,6 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
                     checker.readAndCompare(&ArgumentsReader::readUnixFd);
                     break;
 
-                case Arguments::NeedMoreData:
-                    // ### would be nice to test this as well
                 default:
                     TEST(false);
                     break;
@@ -388,9 +388,6 @@ static void defaultReadToWrite(ArgumentsReader *reader, ArgumentsWriter *writer)
     // special cases follow
     case Arguments::Finished:
         break; // You *probably* want to handle that one in the caller, but you don't have to
-    case Arguments::NeedMoreData:
-        TEST(false); // No way to handle that one here
-        break;
     default:
         TEST(false);
         break;
@@ -430,6 +427,11 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
 
     Arguments arg(nullptr, original.signature(), shortData, original.fileDescriptors());
     ArgumentsReader reader(arg);
+    ArgumentsReader::Private *readerPriv = ArgumentsReader::Private::of(&reader);
+    // ### we'd need the state before the first call to ArgumentsReader::advanceState(), but that is not
+    // possible due to the call chain ctor -> beginRead() -> advanceState(). So we "just happen to know"
+    // what the values are before that call and hardcode them:
+    RestoreStateForTruncatedData truncRestoreState{uint32(-1), 0};
     ArgumentsWriter writer;
 
     bool isDone = false;
@@ -444,7 +446,8 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
         case Arguments::Finished:
             isDone = true;
             break;
-        case Arguments::NeedMoreData: {
+        case Arguments::InvalidData: {
+            TEST(reader.error().code() == Error::TruncatedMessageData);
             TEST(shortData.length < data.length);
             // reallocate shortData to test that Reader can handle the data moving around - and
             // allocate the new one before destroying the old one to make sure that the pointer differs
@@ -461,9 +464,12 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
             if (oldData.ptr) {
                 free(oldData.ptr);
             }
-            reader.replaceData(shortData);
+
+            readerPriv->restoreStateForRetry(truncRestoreState);
+            readerPriv->replaceData(shortData, &reader);
             break; }
         default:
+            truncRestoreState = readerPriv->savedStateForRetry(&reader);
             defaultReadToWrite(&reader, &writer);
             break;
         }
@@ -1071,12 +1077,6 @@ static void test_complicated()
     Arguments arg;
     {
         ArgumentsWriter writer;
-        // NeedMoreData-related bugs are less dangerous inside arrays, so we try to provoke one here;
-        // the reason for arrays preventing failures is that they have a length prefix which enables
-        // and encourages pre-fetching all the array's data before processing *anything* inside the
-        // array. therefore no NeedMoreData state happens while really deserializing the array's
-        // contents. but we exactly want NeedMoreData while in the middle of deserializing something
-        // meaty, specifically variants. see Reader::replaceData().
         addSomeVariantStuff(&writer);
 
         writer.writeInt64(234234);

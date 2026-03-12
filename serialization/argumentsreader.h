@@ -30,6 +30,8 @@
 
 // error handling is done by asking state() or isError(), not by method return values.
 // occasionally looking at isError() is less work than checking every call.
+
+
 class DFERRY_EXPORT ArgumentsReader
 {
 public:
@@ -52,12 +54,9 @@ public:
     cstring currentSignature() const; // current signature, either main signature or current variant
     uint32 currentSignaturePosition() const;
     cstring currentSingleCompleteTypeSignature() const;
-    // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
-    // WARNING: calling replaceData() invalidates copies (if any) of this ArgumentsReader
-    void replaceData(chunk data);
 
     bool isFinished() const { return m_state == Arguments::Finished; }
-    bool isError() const { return m_state == Arguments::InvalidData || m_state == Arguments::NeedMoreData; } // TODO remove
+    bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove
 
     enum EmptyArrayOption
     {

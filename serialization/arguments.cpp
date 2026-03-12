@@ -96,7 +96,6 @@ cstring printableState(Arguments::IoState state)
     static const char *strings[Arguments::LastState] = {
         "NotStarted",
         "Finished",
-        "NeedMoreData",
         "InvalidData",
         "AnyData",
         "DictKey",
@@ -240,10 +239,8 @@ void Arguments::copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer)
     // special cases follow
     case Arguments::Finished:
         break; // You *probably* want to handle that one in the caller, but you don't have to
-    case Arguments::NeedMoreData:
-        break; // No way to handle that one here
     default:
-        break; // dito
+        break; // No way to handle that one here
     }
 }
 
@@ -597,7 +594,6 @@ std::string Arguments::prettyPrint() const
             printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUnixFd(), "file descriptor");
             break;
         case Arguments::InvalidData:
-        case Arguments::NeedMoreData:
         default: {
             return std::string("<error: ") +
                    toStdString(reader.stateString()) + ">\n";
