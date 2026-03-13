@@ -453,9 +453,11 @@ void Arguments::Reader::advanceState()
         VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         break;
     case EndStruct:
+#ifndef NDEBUG // in case the compiler is unable to optimize out the container accesses
         if (!d->m_aggregateStack.size() || d->m_aggregateStack.back().aggregateType != BeginStruct) {
             assert(false); // should never happen due to the pre-validated signature
         }
+#endif
         break;
 
     case BeginVariant: {
