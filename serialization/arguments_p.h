@@ -64,9 +64,9 @@ struct TypeInfo
 struct Nesting
 {
     inline Nesting() = default;
-    static const int arrayMax = 32;
-    static const int parenMax = 32;
-    static const int totalMax = 64;
+    static constexpr int arrayMax = 32;
+    static constexpr int parenMax = 32;
+    static constexpr int totalMax = 64;
 
     inline bool beginArray() { array++; return likely(array <= arrayMax && total() <= totalMax); }
     inline void endArray() { assert(array >= 1); array--; }
