@@ -24,6 +24,8 @@
 #include "arguments.h"
 #include "arguments_p.h"
 
+#include "fercode_p.h"
+
 #ifdef HAVE_BOOST
 #include <boost/container/small_vector.hpp>
 #endif

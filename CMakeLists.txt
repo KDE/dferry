@@ -67,6 +67,7 @@ set(DFER_SOURCES
     #serialization/argumentsbcreader.cpp
     serialization/argumentsreader.cpp
     serialization/argumentswriter.cpp
+    serialization/fercode.cpp
     serialization/message.cpp
     transport/ipserver.cpp
     transport/ipsocket.cpp
@@ -116,6 +117,7 @@ set(DFER_PRIVATE_HEADERS
     events/iioeventsource.h
     events/platformtime.h
     serialization/basictypeio.h
+    serialization/fercode_p.h
     transport/ipserver.h
     transport/ipsocket.h
     transport/ipresolver.h
