@@ -155,6 +155,7 @@ public:
     static void copyOneElement(Reader *reader, Writer *writer);
 
 #include "argumentsreader_p.h"
+#include "argumentsbcreader_p.h"
 
 #include "argumentswriter_p.h"
 
