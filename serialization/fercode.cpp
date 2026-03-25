@@ -503,6 +503,15 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
 // after a variable length string, all alignments are possible - anyValues represent that (8 bits set)
 static constexpr uint32 anyAddrSet = 0b11111111;
 
+// TODO
+// - left-shift ioState as well, with following knock-on effects...
+// - EndArray stores the alignment for the element *after* the array
+// - EndArray stores the ioState for the element *after* the array
+// - the "GoBackIndex" element stores the alignment for *the first array element after looping back*
+//   - and the ioState for looping back is taken from one element before GoBackIndex, i.e. the BeginArray
+// - store variant nesting high water marks in two extra elements after BeginVariantSignature instead of
+//   squashing a part into the first op - the first op will need to carry the ioState for the first element,
+//   so there's no room to spare
 static void optimizeFerOps(std::vector<FerCode> *ops)
 {
     std::unordered_map<size_t, ArrayAlignments> arrayAlignments; // key: index of BeginArray
