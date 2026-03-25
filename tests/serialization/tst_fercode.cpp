@@ -21,29 +21,106 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "../../serialization/arguments_p.h"
+#include "../../serialization/fercode_p.h"
 
 #include "../testutil.h"
 
-#include <algorithm>
-#include <cstdint>
-#include <cstring>
 #include <iostream>
 
 static void test_basicEncode()
 {
-    //std::vector<FerOp> ops = ferOpsForSignature(cstring("foo"), false);
+    std::vector<FerCode> ops;
+
+    ops = ferCodeForSignature(cstring(""));
+    TEST((ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted},
+        FerOp{0, FerOpcode::End, Arguments::Finished}}));
+
+    ops = ferCodeForSignature(cstring("i"));
+    TEST((ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted},
+        FerOp{0, FerOpcode::Copy4, Arguments::Int32},
+        FerOp{0, FerOpcode::End, Arguments::Finished}}));
+
+    ops = ferCodeForSignature(cstring("x"));
+    TEST((ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted},
+        FerOp{0, FerOpcode::Copy8, Arguments::Int64},
+        FerOp{0, FerOpcode::End, Arguments::Finished}}));
+
+    ops = ferCodeForSignature(cstring("ixoo"));
+    TEST((ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted},
+        FerOp{3, FerOpcode::Copy4, Arguments::Int32},
+        FerOp{0, FerOpcode::Copy8, Arguments::Int64},
+        FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath},
+        FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath},
+        FerOp{0, FerOpcode::End, Arguments::Finished}}));
+
+    // TODO check that EnterVariant has the alignment for the element after the variant
+
+}
+
+static void test_variantSignature()
+{
+    std::vector<FerCode> ops;
+
+    ops = ferCodeForSignature(cstring(""), Arguments::VariantSignature);
+    TEST(ops.empty());
+
+    ops = ferCodeForSignature(cstring("i"), Arguments::VariantSignature);
+    TEST((ops == std::vector<FerCode>{
+        FerBeginVariantSpecial{2, FerOpcode::BeginVariantSignature, 0},
+        FerNesting{0, 0},
+        FerOp{0, FerOpcode::Copy4, Arguments::Int32},
+        FerOp{0, FerOpcode::EndVariant, Arguments::EndVariant}}));
+
+    ops = ferCodeForSignature(cstring("(ixix)"), Arguments::VariantSignature);
+    std::cout << printableFerOps(ops) << '\n';
+    TEST((ops == std::vector<FerCode>{
+        FerBeginVariantSpecial{3, FerOpcode::BeginVariantSignature, 1},
+        FerNesting{0, 1},
+        FerOp{0, FerOpcode::Copy0, Arguments::BeginDict},
+        FerOp{3, FerOpcode::Copy4, Arguments::Int32},
+        FerOp{0, FerOpcode::Copy8, Arguments::Int64},
+        FerOp{3, FerOpcode::Copy4, Arguments::Int32},
+        FerOp{0, FerOpcode::Copy8, Arguments::Int64},
+        FerOp{0, FerOpcode::Copy0, Arguments::EndDict},
+        FerOp{0, FerOpcode::EndVariant, Arguments::EndVariant}}));
 }
 
 static void test_arrayEncode()
 {
-    //std::vector<FerOp> ops = ferOpsForSignature(cstring("afoo"), false);
+    std::vector<FerCode> ops;
+
+    ops = ferCodeForSignature(cstring("axoo"));
+    std::cout << printableFerOps(ops) << '\n';
+
+    ops = ferCodeForSignature(cstring("asixobiobxobn"));
+    std::cout << printableFerOps(ops) << '\n';
+
+    //std::cout << printableFerOps(ops) << '\n';
+}
+
+static void test_reader_basic()
+{
+    Arguments::Writer writer;
+    writer.writeUint32(123);
+    Arguments arg = writer.finish();
+
+    Arguments::BcReader reader(arg);
+    TEST(reader.state() == Arguments::Uint32);
+    uint32 res = reader.readUint32();
+    TEST(res == 123);
+    TEST(reader.state() == Arguments::Finished);
 }
 
 int main(int, char *[])
 {
     test_basicEncode();
+    test_variantSignature();
     test_arrayEncode();
+    test_reader_basic();
 
     std::cout << "Passed!\n";
 }

@@ -64,7 +64,7 @@ set(DFER_SOURCES
     events/platformtime.cpp
     events/timer.cpp
     serialization/arguments.cpp
-    #serialization/argumentsbcreader.cpp
+    serialization/argumentsbcreader.cpp
     serialization/argumentsreader.cpp
     serialization/argumentswriter.cpp
     serialization/fercode.cpp
@@ -99,6 +99,7 @@ set(DFER_PUBLIC_HEADERS
     events/timer.h
     serialization/message.h
     serialization/arguments.h
+    serialization/argumentsbcreader_p.h
     serialization/argumentsreader_p.h   # no to be included separately, but required by arguments.h
     serialization/argumentswriter_p.h   # as above
     util/commutex.h
