@@ -3,159 +3,82 @@
 
 #include "arguments.h"
 
-enum class FerOp : byte
+enum FerOpcode : byte
 {
-    End = 0, // TODO not sure if needed! But, may be faster than always checking a length prefix...
-    Copy1 = 1,
-    Copy2 = 2,
-    Copy3 = 3,
-    Copy4 = 4,
-    Copy5 = 5,
-    Copy6 = 6,
-    Copy7 = 7,
-    Copy8 = 8,
-    Copy9 = 9,
-    Copy10 = 10,
-    Copy11 = 11,
-    Copy12 = 12,
-    Copy13 = 13,
-    Copy14 = 14,
-    Copy15 = 15,
-    Copy16 = 16,
-    Copy17 = 17,
-    Copy18 = 18,
-    Copy19 = 19,
-    Copy20 = 20,
-    Copy21 = 21,
-    Copy22 = 22,
-    Copy23 = 23,
-    Copy24 = 24,
-    Copy25 = 25,
-    Copy26 = 26,
-    Copy27 = 27,
-    Copy28 = 28,
-    Copy29 = 29,
-    Copy30 = 30,
-    Copy31 = 31,
-    Copy32 = 32,
-    Copy33 = 33,
-    Copy34 = 34,
-    Copy35 = 35,
-    Copy36 = 36,
-    Copy37 = 37,
-    Copy38 = 38,
-    Copy39 = 39,
-    Copy40 = 40,
-    Copy41 = 41,
-    Copy42 = 42,
-    Copy43 = 43,
-    Copy44 = 44,
-    Copy45 = 45,
-    Copy46 = 46,
-    Copy47 = 47,
-    Copy48 = 48,
-    Copy49 = 49,
-    Copy50 = 50,
-    Copy51 = 51,
-    Copy52 = 52,
-    Copy53 = 53,
-    Copy54 = 54,
-    Copy55 = 55,
-    Copy56 = 56,
-    Copy57 = 57,
-    Copy58 = 58,
-    Copy59 = 59,
-    Copy60 = 60,
-    Copy61 = 61,
-    Copy62 = 62,
-    Copy63 = 63,
-    Copy64 = 64,
-    Copy65 = 65,
-    Copy66 = 66,
-    Copy67 = 67,
-    Copy68 = 68,
-    Copy69 = 69,
-    Copy70 = 70,
-    Copy71 = 71,
-    Copy72 = 72,
-    Copy73 = 73,
-    Copy74 = 74,
-    Copy75 = 75,
-    Copy76 = 76,
-    Copy77 = 77,
-    Copy78 = 78,
-    Copy79 = 79,
-    Copy80 = 80,
-    Copy81 = 81,
-    Copy82 = 82,
-    Copy83 = 83,
-    Copy84 = 84,
-    Copy85 = 85,
-    Copy86 = 86,
-    Copy87 = 87,
-    Copy88 = 88,
-    Copy89 = 89,
-    Copy90 = 90,
-    Copy91 = 91,
-    Copy92 = 92,
-    Copy93 = 93,
-    Copy94 = 94,
-    Copy95 = 95,
-    Copy96 = 96,
-    Copy97 = 97,
-    Copy98 = 98,
-    Copy99 = 99,
-    Copy100 = 100,
-    Copy101 = 101,
-    Copy102 = 102,
-    Copy103 = 103,
-    Copy104 = 104,
-    Copy105 = 105,
-    Copy106 = 106,
-    Copy107 = 107,
-    Copy108 = 108,
-    Copy109 = 109,
-    Copy110 = 110,
-    Copy111 = 111,
-    Copy112 = 112,
-    Copy113 = 113,
-    Copy114 = 114,
-    Copy115 = 115,
-    Copy116 = 116,
-    Copy117 = 117,
-    Copy118 = 118,
-    Copy119 = 119,
-    Copy120 = 120,
-    Copy121 = 121,
-    Copy122 = 122,
-    Copy123 = 123,
-    Copy124 = 124,
-    Copy125 = 125,
-    Copy126 = 126,
-    Copy127 = 127,
-    Copy128 = 128,
-    Copy256 = 129,
-    Copy512 = 130,
-    Copy1024 = 131,
-    Copy2048 = 132,
-    Copy4096 = 133,
-    Align2 = 140,
-    Align4 = 141,
-    Align8 = 142,
-    String = 150, // TODO as with BeginArray (the length field is 4-aligned!)
+    Copy0 = 0,// No-op (for e.g. IoState BeginStruct and EndStruct, which only align and change state)
+    Copy1,
+    Copy2,
+    Copy4,
+    Copy8,
+    String,
     ObjectPath,
     Signature,
-    BeginArray, // TODO figure out if this implies alignment for the length field or not - for now, I think it's
-                // better to thave the alignment explicit so that it can more easily take part in alignment merging
-                // and elimination optimizations!
-    EndArray,   // followed by two bytes, LSB first, to tell how far to go back in the ops list to get to the beginning of
-                // the array; this is also used to skip unnecessary alignment that's only needed at the beginning of the
-                // array! (imagine an array of structs or 64 bit integers after a string)
-    // TODO...
-    BeginVariant, // followed by 3 more bytes: array, paren. variant nesting (for "dynamic" processing of contents)
-    Error = 255
+    BeginArray,     // TODO? BeginFixedArray where element count can be trivially calculated from length
+    EndArray,       // alignment in this case is for the "go back" case, alignment for the "end of array"
+                    // case is in EndArrayData.
+                    // Always followed by a FerEndArray.
+    EnterVariant,   // Always followed by a FerNesting giving the nesting depth where the variant
+                    // occurs, so current nesting + variant's nesting can be checked against limits
+
+    BeginVariantSignature,  // Single complete type / Always followed by FerNesting /
+                            // assumes data starting from an unaligned address
+    EndVariant,
+
+    BeginMethodSignature,   // Never followed by FerNesting / assumes starting from an 8-byte aligned address
+    End,
 };
 
-std::vector<FerOp> ferOpsForSignature(cstring signature, bool mergeContiguousCopies);
+struct FerOp
+{
+    byte postAlignExponent : 2; // this is for the *following* element!
+    FerOpcode op : 6;
+    Arguments::IoState ioState;
+};
+
+struct FerEndArray
+{
+    byte afterArrayAlignExponent : 2;         // for the "end of array" case
+    uint16 repeatArrayIndex : 14;
+};
+
+struct FerNesting
+{
+    byte arrayDepth;
+    byte parenDepth;
+};
+
+// We need another couple of bits for FerNesting after BeginVariantSignature to store the max combined
+// aggregate depth. For that, we type-pun the BeginVariantSignature FerOp with this to store
+// combinedDepth in the ioState field.
+struct FerBeginVariantSpecial
+{
+    byte postAlignExponent : 2;
+    FerOpcode op : 6;
+    byte combinedDepth;
+};
+
+union FerCode
+{
+    FerCode(FerOp o) : op{o} {}
+    FerCode(FerEndArray a) : endArray{a} {}
+    FerCode(FerNesting n) : nest{n} {}
+    FerCode(FerBeginVariantSpecial bv) : beginVariantSpecial{bv} {}
+
+    FerOp op;
+    FerEndArray endArray; // always follows a FerOp with BeginArray
+    FerNesting nest; // always follows a FerOp with BeginVariant
+    FerBeginVariantSpecial beginVariantSpecial; // always type-punned with op for a BeginVariantSignature
+
+    bool operator==(const FerCode &other) const
+    {
+        // Just compare all the bits, nest is maybe the cleanest / easiest way to do that
+        return nest.arrayDepth == other.nest.arrayDepth &&
+               nest.parenDepth == other.nest.parenDepth;
+    }
+};
+
+std::vector<FerCode> DFERRY_EXPORT ferCodeForSignature(cstring signature,
+                                            Arguments::SignatureType sigType = Arguments::MethodSignature);
+std::string DFERRY_EXPORT printableFerOps(const std::vector<FerCode>& ops);
 
 #endif // FERCODE_P_H

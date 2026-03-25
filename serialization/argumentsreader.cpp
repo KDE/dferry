@@ -453,9 +453,11 @@ void Arguments::Reader::advanceState()
         VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         break;
     case EndStruct:
+#ifndef NDEBUG // in case the compiler is unable to optimize out the container accesses
         if (!d->m_aggregateStack.size() || d->m_aggregateStack.back().aggregateType != BeginStruct) {
             assert(false); // should never happen due to the pre-validated signature
         }
+#endif
         break;
 
     case BeginVariant: {
@@ -477,7 +479,7 @@ void Arguments::Reader::advanceState()
                      Error::MalformedMessageData);
         }
         // do not clobber nesting before potentially going to out_needMoreData!
-        VALID_IF(d->m_nesting.beginVariant(), Error::MalformedMessageData);
+        VALID_IF(d->m_nesting.beginVariant(), Error::MalformedMessageData); // TODO replace with d->m_aggregateStack size check
 
         // use m_u as temporary storage - its contents are undefined anyway in state BeginVariant
         m_u.String.ptr = signature.ptr;

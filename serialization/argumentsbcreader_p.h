@@ -67,6 +67,7 @@ public:
 
     void beginVariant(); // TODO probably need to return a regular Reader here - or somehow obtain bytecode
                          // for the variant signature as well and swap state...
+    // Reader beginFlexVariant(); // TODO?
     //void skipVariant(); // like skipArray();
     void endVariant(); // like endArray()
 
@@ -76,29 +77,31 @@ public:
 
     // reading a type that is not indicated by state() will cause undefined behavior and at
     // least return garbage.
-    byte readByte()     { return *reinterpret_cast<byte *  >(advanceState()); }
-    bool readBoolean()  { return *reinterpret_cast<bool *  >(advanceState()); }
-    int16 readInt16()   { return *reinterpret_cast<int16 * >(advanceState()); }
-    uint16 readUint16() { return *reinterpret_cast<uint16 *>(advanceState()); }
-    int32 readInt32()   { return *reinterpret_cast<int32 * >(advanceState()); }
-    uint32 readUint32() { return *reinterpret_cast<uint32 *>(advanceState()); }
-    int64 readInt64()   { return *reinterpret_cast<int64 * >(advanceState()); }
-    uint64 readUint64() { return *reinterpret_cast<uint64 *>(advanceState()); }
-    double readDouble() { return *reinterpret_cast<double *>(advanceState()); }
+    byte readByte()     { return *reinterpret_cast<const byte *  >(advanceState()); }
+    // Yes, booleans are stored as a uint32 with possible values 0 and 1 in DBus!
+    bool readBoolean()  { return *reinterpret_cast<const uint32 *>(advanceState()); }
+    int16 readInt16()   { return *reinterpret_cast<const int16 * >(advanceState()); }
+    uint16 readUint16() { return *reinterpret_cast<const uint16 *>(advanceState()); }
+    int32 readInt32()   { return *reinterpret_cast<const int32 * >(advanceState()); }
+    uint32 readUint32() { return *reinterpret_cast<const uint32 *>(advanceState()); }
+    int64 readInt64()   { return *reinterpret_cast<const int64 * >(advanceState()); }
+    uint64 readUint64() { return *reinterpret_cast<const uint64 *>(advanceState()); }
+    double readDouble() { return *reinterpret_cast<const double *>(advanceState()); }
     cstring readString()
     {
-        void* retPtr = advanceState();
-        return cstring(reinterpret_cast<char *>(retPtr) + sizeof(uint32),
-                       *reinterpret_cast<uint32 *>(retPtr));
+        const void* retPtr = advanceState();
+        return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(uint32),
+                       *reinterpret_cast<const uint32 *>(retPtr));
     }
     cstring readObjectPath()
     {
-        void* retPtr = advanceState();
-        return cstring(reinterpret_cast<char *>(retPtr) + sizeof(byte),
-                       *reinterpret_cast<byte *>(retPtr));
+        const void* retPtr = advanceState();
+        return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(byte),
+                       *reinterpret_cast<const byte *>(retPtr));
     }
     cstring readSignature() { return readObjectPath(); }
-    int32 readUnixFd() { return readInt32(); }
+    int32 readUnixFd() { return readInt32(); }  // TODO I think it doesn't work like that, needs a lookup
+                                                // into the table of received file descriptors
 
     //void skipCurrentElement(); // works on single values and Begin... states. In the Begin... states,
                                 // skips the whole aggregate.
@@ -127,10 +130,12 @@ private:
     void beginRead();
     //void doReadPrimitiveType();
     void doReadString(uint32 lengthPrefixSize);
-    void *advanceState();
+    const void *advanceState();
     //void beginArrayOrDict(bool isDict, EmptyArrayOption option);
     //void skipArrayOrDictSignature(bool isDict);
     //void skipArrayOrDict(bool isDict);
+
+    IoState m_state;
 
     class Private;
     friend class Private;

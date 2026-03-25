@@ -24,118 +24,136 @@
 #include "arguments.h"
 #include "arguments_p.h"
 
+#include "message.h"
 #include "fercode_p.h"
+#include "types.h"
 
 #ifdef HAVE_BOOST
 #include <boost/container/small_vector.hpp>
 #endif
 
-static inline uint32 align(uint32 index, uint32 alignment)
+#include <iostream> // TODO remove
+
+#undef VALID_IF
+#define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
+    assert(false); m_state = InvalidData; /* TODO handle errCode */ return s_nullBuffer; }
+
+
+static inline const byte *align(const byte *index, uintptr_t alignment)
 {
-    const uint32 maxStepUp = alignment - 1;
-    return (index + maxStepUp) & ~maxStepUp;
+    // it also works with 1, but makes no sense
+    if (alignment < 2) {
+        unreachable();
+    }
+    const uintptr_t maxStepUp = alignment - 1;
+    return reinterpret_cast<const byte *>(uintptr_t(index + maxStepUp) & ~maxStepUp);
 }
 
-static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 padEnd)
+static inline bool isPaddingZero(const byte *data, const byte *end)
 {
-    padEnd = std::min(padEnd, buffer.length);
-    for (; padStart < padEnd; padStart++) {
-        if (unlikely(buffer.ptr[padStart] != '\0')) {
+    if (data + 7 > end) {
+        unreachable();
+    }
+    for (; data < end; data++) {
+        if (unlikely(*data != '\0')) {
             return false;
         }
     }
     return true;
 }
 
-struct BeginVariantData
+struct VariantInfo
 {
-    byte arrayDepth;
-    byte structDepth;
-};
+    // TODO noexcept move ctor, maybe assignment operator?
 
-struct EndArrayData
-{
-    byte afterArrayAlignExponent : 2;         // for the "end of array" case
-    uint16 repeatArrayIndex : 14;
+    std::vector<FerCode> prevOps;
+    uint32 prevOpsIndex;
 };
-
-enum PackOp : byte
-{
-    Copy0 = 0,// No-op
-    Copy1,
-    Copy2,
-    Copy4,
-    Copy8,
-    String,
-    ObjectPath,
-    Signature,
-    BeginArray,
-    EndArray,       // alignment in this case is for the "go back" case, alignment for the "end of array"
-                    // case is in EndArrayData
-    BeginVariant,
-    End,
-};
-
-struct NormalPackOp
-{
-    byte postAlignExponent : 2; // this is for the *following* element!
-    PackOp op : 6;
-    Arguments::IoState ioState;
-};
-
-union FerPack
-{
-    NormalPackOp op;
-    EndArrayData endArrayData; // always follows a NormalPackOp with BeginArray
-    BeginVariantData beginVariantData; // always follows a NormalPackOp with BeginVariant
-};
-
 
 class Arguments::BcReader::Private
 {
 public:
-    std::vector<FerPack> m_ops;
-    FerPack* m_opsPtr{};
-    chunk m_data;
-    uint32 m_dataPosition{};
+    const FerCode *m_opsPtr{};    // end pointer not needed, we stop at FerOpcode::End
+    const byte *m_dataPtr{};
+    const byte *m_dataEnd{};
+    std::vector<FerCode> m_ops;
+    chunk m_data; // TODO possibly replace, only operate on m_dataPtr and m_dataEnd, possibly use 32-bit pointer diffs
+                  // in array operations to save space (should be fine because all in same data array with limited length)
+                  // ... or just store a pointer to args and use its data in the rare cases that we need it
+    Nesting m_nesting;
     // this keeps track of the limits of the current array
 #ifdef HAVE_BOOST
     boost::container::small_vector<uint32, 8> m_arrayLengthStack;
 #else
     std::vector<uint32> m_arrayLengthStack;
 #endif
+    std::vector<VariantInfo> m_variantStack;
 };
 
-static const char s_nullBuffer[16]; // for "data" while reading types of empty array
+static const char s_nullBuffer[16] {}; // inert fake data for callers when reading bad or nonexistent data
 
 
 // TODO must memoize signature -> FerCode to amortize its generation and get a real performance benefit
 Arguments::BcReader::BcReader(const Arguments &args)
     : d(new Private)
 {
-    d->m_ops = ferOpsForSignature(args.signature(), false);
+    d->m_ops = ferCodeForSignature(args.signature());
+    d->m_data = args.d->m_data;
+    beginRead();
 }
 
 Arguments::BcReader::BcReader(const Message &msg)
     : d(new Private)
 {
-    d->m_ops = ferOpsForSignature(msg.arguments().signature(), false);
+    const Arguments &args = msg.arguments();
+    d->m_ops = ferCodeForSignature(args.signature());
+    d->m_data = args.d->m_data;
+    beginRead();
 }
 
 Arguments::BcReader::BcReader(BcReader &&other)
+    : m_state(other.m_state),
+      d(other.d)
 {
+    other.d = nullptr;
 }
 
 void Arguments::BcReader::operator=(BcReader &&other)
 {
+    if (&other == this) {
+        return;
+    }
+    if (d) {
+        delete d;
+    }
+    m_state = other.m_state;
+    d = other.d;
+
+    other.d = nullptr;
 }
 
 Arguments::BcReader::BcReader(const BcReader &other)
+    : m_state(other.m_state),
+      d(nullptr)
+
 {
+    if (other.d) {
+        d = new Private(*other.d);
+    }
 }
 
 void Arguments::BcReader::operator=(const BcReader &other)
 {
+    if (&other == this) {
+        return;
+    }
+    m_state = other.m_state;
+    if (d && other.d) {
+        *d = *other.d;
+    } else {
+        BcReader temp(other);
+        std::swap(d, temp.d);
+    }
 }
 
 Arguments::BcReader::~BcReader()
@@ -146,18 +164,24 @@ Arguments::BcReader::~BcReader()
 
 bool Arguments::BcReader::isValid() const
 {
+    return true; // TODO
 }
 
 Error Arguments::BcReader::error() const
 {
+    return Error::NoError; // TODO
 }
 
 bool Arguments::BcReader::beginArray(EmptyArrayOption option)
 {
+    (void)option;
+    return true; // TODO
 }
 
 bool Arguments::BcReader::beginDict(EmptyArrayOption option)
 {
+    (void)option;
+    return true; // TODO
 }
 
 void Arguments::BcReader::endDict()
@@ -192,187 +216,226 @@ void Arguments::BcReader::endDictEntry()
 
 void Arguments::BcReader::doReadString(uint32 lengthPrefixSize)
 {
+    (void)lengthPrefixSize;
 }
 
 void Arguments::BcReader::beginRead()
 {
-    d->m_dataEnd = d->m_dataPtr + d->m_dataLength;
-    d->m_opsPtr = &d->m_ops[0];
+    std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
+
+    d->m_opsPtr = &d->m_ops[1];
+    m_state = d->m_opsPtr->op.ioState;
+
+    d->m_dataPtr = d->m_data.ptr;
+    d->m_dataEnd = d->m_dataPtr + d->m_data.length;
 }
 
-void *Arguments::BcReader::advanceState()
+// TODO what is actually needed in a FerCode...
+// - ioState for next element
+// - "read"/"skip" (size) for this element
+// - align for next element
+// what we currently have:
+// - ioState for *this* element
+// - "read"/"skip" (size) for this element
+// - align for next element
+
+const void *Arguments::BcReader::advanceState()
 {
-    // Preconditions:
-    // - ops pointer points to previous data item's IoState, like Uint32, String etc
-    // - data pointer points to previous data item's data, in case of a string that's after the length field
-    //   (maybe change this and readString() also to match)
-    // - (Would it work better to just copy out the data to not repeat stuff like string parsing? Probably?)
-    // - (TODO some wrinkles for arrays?)
-    // - (TODO some wrinkles for variants?)
-    // Operations:
-    // - Payload length check for scalars
-    //   - May be able to partially optimize by "summarizing" scalar data in pre-parsing
-    //     - Anything beneficial possible with var length data?
-    //   - Can this be merged with array length checks? Probably?
-    // - Align if necessary
-    // - Advance ops pointer to "current" data item's IoState
-    // - Advance data pointer "current" data item's, well, data
-    // - Array end: length check etc
-    //   - Dict vs array checks? (may be nice to avoid "DictEntry" stuff)
-    //     - But maybe/probably also support explicit DictEntry if so desired
-    //   - Ends exactly after payload, note without alignment to next item? -> normal end
-    //   - Ends with bytes left but they don't fit another element? -> error
-    //   - Ends with bytes left and they do fit another element? -> another iteration
-    //     - Pre-parsing may be able to help optimize again...
-    //   - Variant?
-    //     - "Hydrate" regular Reader state, for now...
-    //     - Stay in BcReader?
-    //       - Get a cached ops vector for signature or create and add to cache...
-    //       - Patch up stuff to make it work
-    //     - If there are both options, what's the API for that? Maybe...
-    //       - beginBcVariant() + beginDynVarian()? Eh... not sure.
-    // - Allow to disable all(!) sanity checks for more speed?
-    // Postcondition: Same, because advanceState() is called again afterwards...
-    // (TODO items to make it work?)
-    // - Add maybe some header and/or trailer to FerOps to make it work...
-    // - Add something to distinguish a(kv) from a{kv} (array of structs vs "dictionary type")
-
-    // Code generation...
-    // - Probably "copy" ops vector generation to Python code, optimizations will also help code,
-    //   possibly more than for bytecode (see next point)
-    // - Maybe more opportunities to merge and summarize stuff (to eliminate work) than in interpreted ops...
-    //   e.g. just memcpy series of scalars maybe after cheking padding is zero; here, the "long copy"
-    //   operations become useful... (a little extra work for Copy>128 due to granularity limitations)
-    // - Generate structs
-    // - Generate code
-    // - For scalars, use pointers or copy?
-    // - Extension to XML format to get proper field names? Otherwise we'd need field0, field1 etc
-    // - For strings, pretty sure that pointers into input buffer are better than memcpying the whole thing
-
-    // if we don't have enough data, the strategy is to keep everything unchanged
-    // except for the state which will be NeedMoreData
-    // we don't have to deal with invalid signatures here because they are checked beforehand EXCEPT
-    // for aggregate nesting which cannot be checked using only one signature, due to variants.
-    // variant signatures are only parsed while reading the data. individual variant signatures
-    // ARE checked beforehand whenever we find one in this method.
-
-#if 0
     if (unlikely(m_state == InvalidData)) { // nonrecoverable...
-        return;
+        return s_nullBuffer;
     }
-#endif
 
-parseMore:
     // Normally (in release builds), no need for a length check on ops because ops are pre-validated and
     // FerOps::End marks the end.
     assert(d->m_opsPtr <= &d->m_ops[0] + d->m_ops.size());
+    assert(d->m_dataPtr <= d->m_dataEnd);
 
-    FerPack ferPack = *d->m_opsPtr;
+    FerOp ferOp = d->m_opsPtr->op;
+    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &d->m_ops[0])
+              << ", op: " << ferOp.op
+              << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
+              << '\n';
     d->m_opsPtr++;
 
-    byte* ret = d->m_data.ptr + d->m_dataPosition;
-    byte* newPtr = ret;
+    const byte* ret = d->m_dataPtr;
+    const byte* newPtr = ret;
 
-
-    switch (ferPack.op.op) {
-    case PackOp::Copy0:
-        // BeginStruct / EndStruct would be such a case. Alignment was in the previous FerPack and nothing
+    switch (ferOp.op) {
+    case FerOpcode::Copy0:
+        // BeginStruct / EndStruct would be such a case. Alignment was in the previous FerOp and nothing
         // else really happens here, but we still need a new IoState "BeginStruct" for the client.
         // ### Maybe "return ret;" directly?
         break;
-    case PackOp::Copy1:
+    case FerOpcode::Copy1:
         newPtr += 1;
         break;
-    case PackOp::Copy2:
+    case FerOpcode::Copy2:
         newPtr += 2;
         break;
-    case PackOp::Copy4:
+    case FerOpcode::Copy4:
         newPtr += 4;
         break;
-    case PackOp::Copy8:
+    case FerOpcode::Copy8:
         newPtr += 8;
         break;
-    case PackOp::String: {
+    case FerOpcode::String: {
         // TODO validate: utf8, len, trailing nul;
         // maybe do content validation after alignment to next element and data length check to avoid
         // length-checking twice. But we do need to check max string length, for String only though!
-        uint32 len = *reinterpret_cast<uint32 *>(ret);
+        uint32 len = *reinterpret_cast<const uint32 *>(ret);
         newPtr += sizeof(uint32);
         newPtr += len + 1 /* trailing nul */;
         break; }
-    case PackOp::ObjectPath: {
+    case FerOpcode::ObjectPath: {
         // TODO validate: utf8, len, trailing nul, valid object path
-        byte len = *reinterpret_cast<byte *>(ret);
+        byte len = *reinterpret_cast<const byte *>(ret);
         newPtr += sizeof(byte);
         newPtr += len + 1 /* trailing nul */;
         break; }
-    case PackOp::Signature: {
+    case FerOpcode::Signature: {
         // TODO validate: utf8, len, trailing nul, valid signature
-        byte len = *reinterpret_cast<byte *>(ret);
+        byte len = *reinterpret_cast<const byte *>(ret);
         newPtr += sizeof(byte);
         newPtr += len + 1 /* trailing nul */;
         break; }
-    case PackOp::BeginArray:
-        // TODO validate length? Maybe get length and return it?
-        break;
-    case PackOp::EndArray: {
+
+    case FerOpcode::BeginArray: {
+        const uint32 arrayLength = *reinterpret_cast<const uint32 *>(d->m_dataPtr);
+        const byte *endPtr = d->m_dataPtr + sizeof(uint32) + arrayLength;
+        if (endPtr > d->m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
+            // TODO error
+        }
+        d->m_arrayLengthStack.push_back(d->m_data.length);
+        // Array length becomes (until end of array) our new "data entire" length, reuses the same check
+        d->m_dataEnd = endPtr;
+        // TODO what to return from this function here? Maybe number of elements if fixed size / cheap to determine?
+        break; }
+
+    case FerOpcode::EndArray: {
         // TODO??? the cursed nil array thing... maybe remove some conditionals by supplying an 8 byte buffer
         // of nulls to read data from and always reset to its beginning after every read.
-        const FerPack arrayPack = *d->m_opsPtr;
-        if (moreElements) { // TODO check another go-around
-            // ### m_ops might not work inside a variant, depending on how exactly we handle them regarding ops.
-            // It might be slightly faster anyway to encode the go back index as a negative offset instead of an
-            // absolute position. Could be done while translating FerOps to FerPacks.
 
-            // NB: ferPack.op.postAlignExponent is meant for the next array element in this case!
-            d->m_opsPtr = &d->m_ops[0] + arrayPack.endArrayData.repeatArrayIndex;
-        } else {
-            ferPack.op.postAlignExponent = arrayPack.endArrayData.afterArrayAlignExponent;
+        // TODO restore d->m_dataEnd if finished
+
+        const FerEndArray endArrayData = d->m_opsPtr->endArray;
+        if (d->m_dataPtr < d->m_dataEnd) {
+            // end
+            // NB: ferPack.op.postAlignExponent is already meant for the next array element in this case
+            d->m_opsPtr = &d->m_ops[0] + endArrayData.repeatArrayIndex;
+        } else if (d->m_dataPtr == d->m_dataEnd) {
+            d->m_data.length = d->m_arrayLengthStack.back();
+            d->m_arrayLengthStack.pop_back();
+            ferOp.postAlignExponent = endArrayData.afterArrayAlignExponent;
             d->m_opsPtr++;
+        } else {
+            assert(false); // for now, TODO error handling
         }
         break; }
-    case PackOp::BeginVariant:
-        break;
-    case PackOp::End:
-        // TODO handle "EndVariant" here as well so that there is no need to distinguish variant signatures from
-        // function signatures for signature -> FerOps / PackOps caching purposes. We might still need to do that
-        // for validation skipping purposes (signature is cached -> it's validated), but one entry could otherwise
-        // still serve both.
-        assert(ferPack.op.postAlignExponent == 0); // alignment for next element at the end never makes sense
+
+    case FerOpcode::EnterVariant: {
+        const FerNesting outerNest = d->m_opsPtr->nest;
+        d->m_nesting.array += outerNest.arrayDepth;
+        d->m_nesting.paren += outerNest.parenDepth;
+        d->m_nesting.variant += 1;
+
+        const uint32 opsIndex = d->m_opsPtr + 1 - &d->m_ops[0]; // point it after the EnterVariant + FerNest
+        d->m_variantStack.push_back(VariantInfo{std::move(d->m_ops), opsIndex}); // TODO? emplace_back
+        d->m_ops.clear();
+
+        const byte len = *reinterpret_cast<const byte *>(ret);
+        const cstring newSig(const_cast<byte *>(ret + sizeof(byte)), len);
+        newPtr += sizeof(byte);
+        newPtr += len + 1 /* trailing nul */;
+
+        d->m_ops = ferCodeForSignature(newSig, Arguments::VariantSignature);
+        assert(d->m_ops.size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
+        d->m_opsPtr = &d->m_ops[0];
+
+        const FerBeginVariantSpecial variantSpecial = d->m_opsPtr->beginVariantSpecial;
+        assert(variantSpecial.op == FerOpcode::BeginVariantSignature);
+        const FerNesting innerNest = (d->m_opsPtr + 1)->nest;
+        d->m_opsPtr += 2;
+        if (d->m_nesting.array + innerNest.arrayDepth > Nesting::arrayMax ||
+            d->m_nesting.paren + innerNest.parenDepth > Nesting::parenMax ||
+            d->m_nesting.total() + variantSpecial.combinedDepth > Nesting::totalMax) {
+            assert(false); // for now, TODO error handling
+        }
+
+        ferOp.postAlignExponent = variantSpecial.postAlignExponent;
+        // avoid bit fiddling by copying all bits in the first byte of variantSpecial - it makes no other
+        // difference; only postAlignExponent and ioState will be used in the remainder of this function
+        ferOp.op = variantSpecial.op;
+
+        break; }
+
+    case FerOpcode::EndVariant: {
+        assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+
+        VariantInfo& varInfo = d->m_variantStack.back();
+        d->m_ops = std::move(varInfo.prevOps);
+        d->m_opsPtr = &d->m_ops[0] + varInfo.prevOpsIndex;
+        d->m_variantStack.pop_back();
+
+        const FerNesting outerNest = (d->m_opsPtr - 1)->nest;
+        d->m_nesting.array -= outerNest.arrayDepth;
+        d->m_nesting.paren -= outerNest.parenDepth;
+        d->m_nesting.variant -= 1;
+
+        const FerOp enterVariantOp = (d->m_opsPtr - 2)->op;
+        assert(enterVariantOp.op == FerOpcode::EnterVariant);
+        ferOp.postAlignExponent = enterVariantOp.postAlignExponent;
+        // avoid bit fiddling by copying all bits in the first byte of FerOp - it makes no other difference
+        ferOp.op = enterVariantOp.op;
+
+        break; }
+
+    case FerOpcode::End:
+        assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+        assert(d->m_arrayLengthStack.empty());
+        assert(d->m_variantStack.empty());
+        assert(!d->m_nesting.array);
+        assert(!d->m_nesting.paren);
+        assert(!d->m_nesting.variant);
+        m_state = Arguments::Finished;
+        return s_nullBuffer;
+    case BeginVariantSignature:
+    case BeginMethodSignature:
+        // These two should only occur at the beginning of a signature, which we don't handle here
+        unreachable();
         break;
     }
 
-    switch(ferPack.op.postAlignExponent) {
+
+    const byte *unalignedNewPtr;
+    switch(ferOp.postAlignExponent) {
     case 0:
-        break;
+        // ### fast path, not sure if this makes sense...
+        VALID_IF(d->m_dataPtr <= d->m_dataEnd, TODOError);
+        m_state = ferOp.ioState;
+        d->m_dataPtr = newPtr;
+        return ret;
+
     case 1:
-        // TODO align2 on newPtr
+        unalignedNewPtr = newPtr;
         newPtr = align(newPtr, 2);
         break;
     case 2:
+        unalignedNewPtr = newPtr;
         newPtr = align(newPtr, 4);
         break;
     case 3:
+        unalignedNewPtr = newPtr;
         newPtr = align(newPtr, 8);
         break;
+    default:
+        unreachable();
     }
 
-    // TODO length check goes here (don't do one before alignment, could be redundant. Yeah we might not read one
-    // good element before erroring out, but length errors are a "should never happen" situation anyway)
-    // ATTENTION: make sure that the last FerPack *never* contains a nonzero alignment, or we'd check garbage.
-    // Alignment after the last message byte makes no sense anyway.
+    VALID_IF(newPtr <= d->m_dataEnd, TODOError);
 
-    VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
+    VALID_IF(isPaddingZero(unalignedNewPtr, newPtr), TODOerror);
 
-
-    d->m_dataPosition = newPtr;
-
-
-    return ret;
-
-out_needMoreData:
-    // TODO
-
+    m_state = ferOp.ioState;
+    d->m_dataPtr = newPtr;
     return ret;
 }
-

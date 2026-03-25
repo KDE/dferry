@@ -63,7 +63,7 @@ struct TypeInfo
 // helper to verify the max nesting requirements of the d-bus spec
 struct Nesting
 {
-    inline Nesting() : array(0), paren(0), variant(0) {}
+    inline Nesting() = default;
     static const int arrayMax = 32;
     static const int parenMax = 32;
     static const int totalMax = 64;
@@ -74,11 +74,11 @@ struct Nesting
     inline void endParen() { assert(paren >= 1); paren--; }
     inline bool beginVariant() { variant++; return likely(total() <= totalMax); }
     inline void endVariant() { assert(variant >= 1); variant--; }
-    inline uint32 total() { return array + paren + variant; }
+    inline uint32 total() const { return array + paren + variant; }
 
-    uint32 array;
-    uint32 paren;
-    uint32 variant;
+    uint32 array = 0;
+    uint32 paren = 0;
+    uint32 variant = 0;
 };
 
 cstring printableState(Arguments::IoState state);

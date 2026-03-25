@@ -5,15 +5,83 @@
 #include <stack>
 #include <unordered_map> // TODO faster container from boost?
 
+#include <bitset>
+#include <iostream>
+
+
+// Tracks current nesting levels as well as highest nesting levels seen so far.
+// Why maxCombined? Imagine we're 60 variants deep and open a variant with 3 array depth and 3 paren depth.
+// Does it exceed the max combined nesting depth of 64? If the 3 arrays don't contain any parens and
+// vice versa, they don't. If it's 3 arrays inside 3 parens, they do. So we need to also know the max
+// combined depth of parens + arrays.
+struct NestingWithMax
+{
+    inline NestingWithMax() = default;
+
+    inline bool beginArray()
+    {
+        array++;
+        maxArray = std::max(maxArray, array);
+        maxCombined = std::max(maxCombined, total());
+        return likely(array <= Nesting::arrayMax && total() <= Nesting::totalMax);
+    }
+
+    inline void endArray()
+    {
+        assert(array >= 1);
+        array--;
+    }
+
+    inline bool beginParen()
+    {
+        paren++;
+        maxParen = std::max(maxParen, paren);
+        maxCombined = std::max(maxCombined, total());
+        return likely(paren <= Nesting::parenMax && total() <= Nesting::totalMax);
+    }
+
+    inline void endParen()
+    {
+        assert(paren >= 1);
+        paren--;
+    }
+
+    inline bool beginVariant()
+    {
+        variant++;
+        maxCombined = std::max(maxCombined, total());
+        return likely(total() <= Nesting::totalMax);
+    }
+
+    inline void endVariant()
+    {
+        assert(variant >= 1);
+        variant--;
+    }
+
+    inline uint32 total() const
+    {
+        return array + paren + variant;
+    }
+
+    uint32 array = 0;
+    uint32 paren = 0;
+    uint32 variant = 0;
+
+    uint32 maxArray = 0;
+    uint32 maxParen = 0;
+    uint32 maxCombined = 0;
+};
+
 static void chopFirst(cstring *s)
 {
     s->ptr++;
     s->length--;
 }
 
-static bool ferEncodeBasicType(cstring *s, Nesting *nest, std::vector<FerOp>* out);
+static bool ferEncodeBasicType(cstring *s, NestingWithMax *nest, std::vector<FerCode>* out);
 
-static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<FerOp>* out)
+static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::vector<FerCode>* out)
 {
     assert(s->ptr);
     // ### not checking if zero-terminated
@@ -29,34 +97,42 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
     case 't':
     case 'd':
     case 'h': { // TODO that's a file descriptor, needs special treatment!!
+        const TypeInfo& ty = typeInfo(*s->ptr);
+
+        FerOpcode opcode = FerOpcode::Copy1;
+        byte alignExponent = 0;
         const byte alignSize = typeInfo(*s->ptr).alignment;
         switch (alignSize) {
         case 2:
-            out->push_back(FerOp::Align2);
+            opcode = FerOpcode::Copy2;
+            alignExponent = 1;
             break;
         case 4:
-            out->push_back(FerOp::Align4);
+            opcode = FerOpcode::Copy4;
+            alignExponent = 2;
             break;
         case 8:
-            out->push_back(FerOp::Align8);
+            opcode = FerOpcode::Copy8;
+            alignExponent = 3;
             break;
         }
-        out->push_back(static_cast<FerOp>(alignSize));
+
+        out->push_back(FerOp{alignExponent, opcode, ty.state()});
 
         chopFirst(s);
         return true; }
     case 's':
-        out->push_back(FerOp::String);
+        out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::String, Arguments::String});
 
         chopFirst(s);
         return true;
     case 'o':
-        out->push_back(FerOp::ObjectPath);
+        out->push_back(FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath});
 
         chopFirst(s);
         return true;
     case 'g':
-        out->push_back(FerOp::Signature);
+        out->push_back(FerOp{0, FerOpcode::Signature, Arguments::Signature});
 
         chopFirst(s);
         return true;
@@ -65,13 +141,9 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
             return false;
         }
 
-        out->push_back(FerOp::BeginVariant);
-        out->push_back(static_cast<FerOp>(nest->array));
-        out->push_back(static_cast<FerOp>(nest->paren));
-        out->push_back(static_cast<FerOp>(nest->variant));
+        out->push_back(FerOp{0, FerOpcode::EnterVariant, Arguments::BeginVariant});
+        out->push_back(FerNesting{static_cast<byte>(nest->array), static_cast<byte>(nest->paren)});
 
-        // TODO? some kind of transition to "dynamic" variant signature and payload parsing...
-        // but maybe this info is enough for the "dynamic" code to take over.
         chopFirst(s);
         nest->endVariant();
         return true;
@@ -80,7 +152,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
             return false;
         }
 
-        out->push_back(FerOp::Align8);
+        out->push_back(FerOp{3 /* 8 byte alignment */, FerOpcode::Copy0, Arguments::BeginDict});
 
         chopFirst(s);
         bool isEmptyStruct = true;
@@ -90,6 +162,9 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
         if (!s->length || *s->ptr != ')' || isEmptyStruct) {
             return false;
         }
+
+        out->push_back(FerOp{0, FerOpcode::Copy0, Arguments::EndDict});
+
         chopFirst(s);
         nest->endParen();
         return true; }
@@ -98,12 +173,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
             return false;
         }
 
-        // The alignmnt is explicit so it can be subject to regular alignment elision optimization.
-        out->push_back(FerOp::Align4);
-
-        // The reading of the array length field, though, is implicit!
-        out->push_back(FerOp::BeginArray);
-        const size_t goBackAddress = out->size(); // one past the BeginArray!
+        const size_t goBackIndex = out->size() + 1; // one past the BeginArray!
 
         chopFirst(s);
         if (*s->ptr == '{') { // an "array of dict entries", i.e. a dict
@@ -112,12 +182,16 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
             }
             chopFirst(s);
 
-            out->push_back(FerOp::Align8); // "dict entries" are similar to structs, and like them, 8-aligned
+            out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::BeginArray, Arguments::BeginDict});
 
             // key must be a basic type
             if (!ferEncodeBasicType(s, nest, out)) {
                 return false;
             }
+
+            // Since key is the first element after the '('-like '{', it must be 8 byte aligned - patch it
+            out->back().op.postAlignExponent = 3;
+
             // value can be any single complete type
             if (!ferEncodeSingleCompleteType(s, nest, out)) {
                 return false;
@@ -125,19 +199,24 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
             if (!s->length || *s->ptr != '}') {
                 return false;
             }
+
+            out->push_back(FerOp{0, FerOpcode::EndArray, Arguments::EndDict});
+
             chopFirst(s);
             nest->endParen();
         } else { // regular array
+            out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::BeginArray, Arguments::BeginArray});
+
             if (!ferEncodeSingleCompleteType(s, nest, out)) {
                 return false;
             }
+
+            out->push_back(FerOp{0, FerOpcode::EndArray, Arguments::EndArray});
         }
         nest->endArray();
 
-        out->push_back(FerOp::EndArray);
-        // push two bytes forming an LSB first 16 bit integer telling where to go back for the BeginArray
-        out->push_back(static_cast<FerOp>(goBackAddress & 0xff));
-        out->push_back(static_cast<FerOp>((goBackAddress & 0xff00) >> 8));
+        // Instruction: rewind signature to this position for the next element of the array
+        out->push_back(FerEndArray{0 /*to be patched in later*/, static_cast<uint16>(goBackIndex)});
 
         return true; }
     default:
@@ -145,7 +224,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, Nesting *nest, std::vector<F
     }
 }
 
-static bool ferEncodeBasicType(cstring *s, Nesting *nest, std::vector<FerOp>* out)
+static bool ferEncodeBasicType(cstring *s, NestingWithMax *nest, std::vector<FerCode>* out)
 {
     switch (*s->ptr) {
     case 'y':
@@ -166,13 +245,18 @@ static bool ferEncodeBasicType(cstring *s, Nesting *nest, std::vector<FerOp>* ou
     return false;
 }
 
-static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std::vector<FerOp>* out)
+static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std::vector<FerCode>* out)
 {
-    Nesting nest;
+    NestingWithMax nest;
+
     if (!sig->ptr || sig->length > 255 || sig->ptr[sig->length] != 0) {
         return false;
     }
     if (type == Arguments::VariantSignature) {
+        out->push_back(FerBeginVariantSpecial{0, FerOpcode::BeginVariantSignature,
+                       0 /*will be overwritten, cf. BeginSpecial*/});
+        out->push_back(FerNesting{0, 0});
+
         if (!sig->length) {
             return false;
         }
@@ -182,97 +266,154 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
         if (sig->length) {
             return false;
         }
+
+        (*out)[0].beginVariantSpecial.combinedDepth = nest.maxCombined;
+        (*out)[1].nest.arrayDepth = nest.maxArray;
+        (*out)[1].nest.parenDepth = nest.maxParen;
+
+        out->push_back(FerOp{0, FerOpcode::EndVariant, Arguments::EndVariant});
     } else {
+        out->push_back(FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted /*ignored*/});
+
         while (sig->length) {
             if (!ferEncodeSingleCompleteType(sig, &nest, out)) {
                 return false;
             }
         }
+
+        out->push_back(FerOp{0, FerOpcode::End, Arguments::Finished});
     }
 
     assert(!nest.array);
     assert(!nest.paren);
     assert(!nest.variant);
-    out->push_back(FerOp::End);
+
     return true;
 }
 
-std::string printableFerOp(FerOp op)
+static std::string printableOpcode(FerOpcode op)
 {
-    if (op == FerOp::End) {
-        return "End";
-    } else if (op >= FerOp::Copy1 && op <= FerOp::Copy4096) {
-        uint num = 0;
-        if (op < FerOp::Copy256) {
-            num = static_cast<byte>(op);
-        } else {
-            num = 256 << (static_cast<byte>(op) - static_cast<byte>(FerOp::Copy256));
-        }
-        return "Copy" + std::to_string(num);
-    } else if (op == FerOp::Align2) {
-        return "Align2";
-    } else if (op == FerOp::Align4) {
-        return "Align4";
-    } else if (op == FerOp::Align8) {
-        return "Align8";
-    } else if (op == FerOp::String) {
+    switch (op) {
+    case FerOpcode::Copy0:
+        return "Copy0";
+    case FerOpcode::Copy1:
+        return "Copy1";
+    case FerOpcode::Copy2:
+        return "Copy2";
+    case FerOpcode::Copy4:
+        return "Copy4";
+    case FerOpcode::Copy8:
+        return "Copy8";
+    case FerOpcode::String:
         return "String";
-    } else if (op == FerOp::ObjectPath) {
+    case FerOpcode::ObjectPath:
         return "ObjectPath";
-    } else if (op == FerOp::Signature) {
+    case FerOpcode::Signature:
         return "Signature";
-    } else if (op == FerOp::BeginArray) {
+    case FerOpcode::BeginArray:
         return "BeginArray";
-    } else if (op == FerOp::EndArray) {
+    case FerOpcode::EndArray:
         return "EndArray";
-    } else if (op == FerOp::BeginVariant) {
-        return "BeginVariant";
-    } else if (op == FerOp::Error) {
-        return "Error";
-    } else {
-        return "?" + std::to_string(static_cast<uint>(op));
+    case FerOpcode::EnterVariant:
+        return "EnterVariant";
+    case FerOpcode::BeginVariantSignature:
+        return "BeginVariantSignature";
+    case FerOpcode::EndVariant:
+        return "EndVariant";
+    case FerOpcode::BeginMethodSignature:
+        return "BeginMethodSignature";
+    case FerOpcode::End:
+        return "End";
     }
+    assert(false);
+    return "?Opcode?";
 }
 
-std::string printableFerOps(const std::vector<FerOp>& ops)
+static std::string printableAlignExponent(byte exponent)
+{
+    switch (exponent) {
+    case 0:
+        return "A0 ";
+    case 1:
+        return "A2 ";
+    case 2:
+        return "A4 ";
+    case 3:
+        return "A8 ";
+    }
+
+    assert(false);
+    return " A? ";
+}
+
+static std::string printableFerOp(FerOp op)
+{
+    std::string align;
+
+    return printableAlignExponent(op.postAlignExponent) + printableOpcode(op.op) + " " +
+           printableState(op.ioState).ptr;
+}
+
+std::string printableFerOps(const std::vector<FerCode>& ops)
 {
     std::string ret;
     for (size_t i = 0; i < ops.size(); i++) {
-        const FerOp op = ops[i];
-        ret.append(printableFerOp(op));
-        if (op == FerOp::EndArray) {
-            if (i + 2 < ops.size()) {
-                // These bytes are the "go back index" for the array, I suppose we could also print it?
-                const uint32 goBackIndex = static_cast<byte>(ops[i + 1]) +
-                                           (static_cast<byte>(ops[i + 2]) << 8);
-                ret.append("GoBack");
-                ret.append(std::to_string(goBackIndex));
-            } else {
-                ret.append("GoBackTrunc");
-            }
+        const FerCode fc = ops[i];
+        ret.append(printableFerOp(fc.op));
 
-            i += 2;
+        if (fc.op.op == FerOpcode::BeginVariantSignature) {
+            i++;
+            if (i < ops.size()) {
+                ret.append(" A");
+                ret.append(std::to_string(ops[i].nest.arrayDepth));
+                ret.append(" P");
+                ret.append(std::to_string(ops[i].nest.parenDepth));
+                ret.append(" C");
+                ret.append(std::to_string(ops[i - 1].beginVariantSpecial.combinedDepth));
+            } else {
+                ret.append(" BeginVariantSignatureTrunc");
+            }
+        } else if (fc.op.op == FerOpcode::EndArray) {
+            i++;
+            if (i < ops.size()) {
+                // These bytes are the "go back index" for the array, I suppose we could also print it?
+                ret.append(" GoBack ");
+                ret.append(std::to_string(ops[i].endArray.repeatArrayIndex));
+                ret.append(" post ");
+                ret.append(printableAlignExponent(ops[i].endArray.afterArrayAlignExponent));
+                ret.pop_back(); // remove trailing space
+            } else {
+                ret.append(" GoBackTrunc");
+            }
+        } else if (fc.op.op == FerOpcode::EnterVariant) {
+            i++;
+            if (i < ops.size()) {
+                ret.append(" A");
+                ret.append(std::to_string(ops[i].nest.arrayDepth));
+                ret.append(" P");
+                ret.append(std::to_string(ops[i].nest.parenDepth));
+            } else {
+                ret.append("EnterVariantTrunc");
+            }
         }
         ret.append(", ");
     }
-    ret.pop_back();
-    ret.pop_back();
+    if (ret.length() > 2) {
+        ret.erase(ret.length() - 2); // remove trailing ", "
+    }
     return ret;
 }
 
-static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies);
+static void optimizeFerOps(std::vector<FerCode> *ops);
 
-//static
-std::vector<FerOp> ferOpsForSignature(cstring signature, bool optimize, bool mergeContiguousCopies)
+std::vector<FerCode> ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
 {
-    std::vector<FerOp> ret;
-    if (ferEncodeSignature(&signature, Arguments::MethodSignature, &ret)) {
-        if (optimize) {
-            optimizeFerOps(&ret, mergeContiguousCopies);
-        }
+    std::vector<FerCode> ret;
+    if (ferEncodeSignature(&signature, sigType, &ret)) {
+        optimizeFerOps(&ret);
     } else {
+        // TODO? some way to provide information about the error
         ret.clear();
-        ret.push_back(FerOp::Error);
     }
     return ret;
 }
@@ -282,15 +423,17 @@ static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
     assert(addrSet <= 0b11111111); // allowed values are just 1-8
     assert(addrSet != 0); // there must be some value (1 << 7 is the canonical representation of 8 ~= 0)
 
-    switch (alignOp) {
-    case FerOp::Align2:
+    switch (alignOp.postAlignExponent) {
+    case 0:
+        return addrSet;
+    case 1:
         addrSet |= addrSet << 1;
         return addrSet & 0b10101010;
-    case FerOp::Align4:
+    case 2:
         addrSet |= addrSet << 1;
         addrSet |= addrSet << 2;
         return addrSet & 0b10001000;
-    case FerOp::Align8:
+    case 3:
         return 0b10000000;
     default:
         assert(false);
@@ -298,18 +441,30 @@ static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
     }
 }
 
-static uint32 applyAddition(uint32 addrSet, FerOp addOp)
+static uint32 applyAddition(uint32 addrSet, FerOpcode addOp)
 {
     assert(addrSet <= 0b11111111); // allowed addresses are just 1-8
     assert(addrSet != 0); // there must be some value (8 is equivalent to 0)
 
-    if (addOp < FerOp::Copy1 || addOp > FerOp::Copy127) {
-        // others are either not additions or preserve 8-alignment
+    uint32 addend;
+    switch (addOp) {
+    case FerOpcode::Copy1:
+        addend = 1;
+        break;
+    case FerOpcode::Copy2:
+        addend = 2;
+        break;
+    case FerOpcode::Copy4:
+        addend = 4;
+        break;
+    case FerOpcode::Copy0:
+    case FerOpcode::Copy8:
+        // These don't change 8-alignment
+        return addrSet;
+    default:
+        assert(false);
         return addrSet;
     }
-    uint32 addend = uint32(addOp); // enum values are chosen for this to work
-    // only keep the part that isn't 8-aligned
-    addend &= 0x7;
 
     // rotate addrSet left ("add addend to all addresses")
     // here, we benefit from representing 0 as 8 because adding n (< 8) to 8 gives n, not 0!
@@ -320,22 +475,17 @@ static uint32 applyAddition(uint32 addrSet, FerOp addOp)
     return addrSet;
 }
 
-static bool isAlignOp(FerOp op)
-{
-    return op >= FerOp::Align2 && op <= FerOp::Align8;
-}
-
 // ### we currently don't use "coarse grained" copy operations > Copy128 - these would require a little more
 // work and don't seem to be very useful
-static bool isBasicAdditionOp(FerOp op)
+static bool isBasicAdditionOp(FerOpcode op)
 {
-    return op >= FerOp::Copy1 && op <= FerOp::Copy128;
+    return op >= FerOpcode::Copy1 && op <= FerOpcode::Copy8;
 }
 
-static bool isVarLengthOp(FerOp op)
+static bool isVarLengthOp(FerOpcode op)
 {
-    return op == FerOp::String || op == FerOp::ObjectPath || op == FerOp::Signature ||
-           op == FerOp::BeginVariant;
+    return op == FerOpcode::String || op == FerOpcode::ObjectPath ||
+           op == FerOpcode::Signature || op == FerOpcode::EnterVariant;
 }
 
 struct ArrayAlignments
@@ -347,71 +497,72 @@ struct ArrayAlignments
 };
 
 // returns how far it has processed arrays (index into ops "pointing" to an EndArray)
-static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beginArrayIndex,
+static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t beginArrayIndex,
                              std::unordered_map<size_t, ArrayAlignments> *arrayAlignments);
 
 // after a variable length string, all alignments are possible - anyValues represent that (8 bits set)
 static constexpr uint32 anyAddrSet = 0b11111111;
 
-// TODO also allow an arbitrary starting alignment to make it work for variant signatures. Or change
-// the format to always begin with an alignment, for reusability of all (single complete type) signatures as
-// variant signatures.
-static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
+static void optimizeFerOps(std::vector<FerCode> *ops)
 {
+    std::unordered_map<size_t, ArrayAlignments> arrayAlignments; // key: index of BeginArray
+    std::stack<size_t> beginArrayIndexes;
+
+    size_t prevIndex = 0;
+    bool prevIndexIsEndArrayOp = false;
+    const bool isVariant = (*ops)[0].op.op == BeginVariantSignature;
+
     // bitset of possible values, 1..8 because no alignment requirement greater 8 exists in DBus serialization,
     // so 8 ~= 0, 9 ~= 1 etc
     // we represent "full alignment" (8) as 8 instead of the equivalent 0 because that makes applyAddition
     // less weird (we'd have to special case 0 + n otherwise)
-    uint32 addrSet = 0b10000000;
+    uint32 addrSet = isVariant ? anyAddrSet : 0b10000000;
 
-    std::unordered_map<size_t, ArrayAlignments> arrayAlignments; // key: index of BeginArray
-    std::stack<size_t> beginArrayIndexes;
+    for (size_t i = isVariant ? 2 : 1 ; i < ops->size(); i++) {
 
-    size_t out = 0;
-    FerOp prevOp = FerOp::End;
-    for (size_t in = 0; in < ops->size(); in++) {
-
-        assert(out <= in); // we sometimes skip / eliminate / merge / rewrite ops, we never add new ones
+        assert(prevIndex <= i);
 
         const uint32 prevAddrSet = addrSet;
-        FerOp ferOp = (*ops)[in];
+        FerOp ferOp = (*ops)[i].op;
 
-        assert(!(ferOp >= FerOp::Copy256 && ferOp <= FerOp::Copy4096)); // not currently supported
 
-        if (isBasicAdditionOp(ferOp)) {
+        // == Alignment
 
-            addrSet = applyAddition(addrSet, ferOp);
+        // By the time we get to see the FerCode, the alignments haven't been left-shifted yet.
+        // So alignment must be applied before the opcode with which it's stored.
+        addrSet = applyAlignment(addrSet, ferOp);
 
-            if (mergeContiguousCopies && isBasicAdditionOp(prevOp)) {
-                const FerOp mergedOp = static_cast<FerOp>(uint32(prevOp) + uint32(ferOp));
-                if (isBasicAdditionOp(mergedOp)) { // still in basic addition range?
-                    ferOp = mergedOp;
-                    out--; // overwrite previous op!
-                }
-            }
-            (*ops)[out++] = ferOp;
-
-        } else if (isAlignOp(ferOp)) {
-
-            addrSet = applyAlignment(addrSet, ferOp);
-
-            if (isAlignOp(prevOp)) {
-                // Merge consecutive alignment operations (preferring the larger one even if it changes nothing)
-                ferOp = std::max(ferOp, prevOp);
-                // overwrite the previous operation with the new merged one
-                out--;
-                (*ops)[out++] = ferOp;
+        // "Shift left" (so that alignment can basically be processed after but as part of handling the
+        // *previous* op) and eliminate alignment operations that do nothing
+        if (addrSet != prevAddrSet) {
+            if (!prevIndexIsEndArrayOp) {
+                (*ops)[prevIndex].op.postAlignExponent = ferOp.postAlignExponent;
+                assert((*ops)[prevIndex].op.postAlignExponent == ferOp.postAlignExponent);
+                assert((*ops)[prevIndex].beginVariantSpecial.postAlignExponent == ferOp.postAlignExponent);
             } else {
-                // Eliminate alignment operations that do nothing
-                if (addrSet != prevAddrSet) {
-                    (*ops)[out++] = ferOp;
-                } else {
-                    // remove this operation from the output entirely (no out++)
-                    ferOp = prevOp;
-                }
+                (*ops)[prevIndex].endArray.afterArrayAlignExponent = ferOp.postAlignExponent;
             }
+        }
 
-        } else if (ferOp == FerOp::BeginArray) {
+        (*ops)[i].op.postAlignExponent = 0;
+
+
+        // == Payload data
+
+        if (isBasicAdditionOp(ferOp.op)) {
+            addrSet = applyAddition(addrSet, ferOp.op);
+        }
+
+        if (ferOp.op != FerOpcode::Copy0) {
+            // We can collapse consecutive alignments into one, but that cannot cross operations that
+            // actually read or write data. So if the current operation does something with data,
+            // after it (note that we're left shifting) becomes the new target for alignment merging.
+            prevIndex = i;
+            prevIndexIsEndArrayOp = false;
+        }
+
+
+        if (ferOp.op == FerOpcode::BeginArray) {
             // Arrays are the most difficult part of this!
             // - Array elements can repeat, and subsequent elements can start and end at differently
             //   aligned addresses from the first element
@@ -419,15 +570,15 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
             // To deal with this, we use optimizeArray to gather data (including for nested arrays inside
             // the outermost one that we find) and then do a final pass where we apply the usual optimization.
 
-            addrSet = applyAddition(addrSet, FerOp::Copy4); // array length field!
+            addrSet = applyAddition(addrSet, FerOpcode::Copy4); // array length field!
 
-            auto arrAlignIt = arrayAlignments.find(in);
+            auto arrAlignIt = arrayAlignments.find(i);
             if (arrAlignIt == arrayAlignments.cend()) {
                 // Seeing this BeginArray for the first time - pre-process it. Note that we use
                 // optimizeArrays only for data gathering, we don't skip ahead our own parsing at all.
-                optimizeArrays(ops, addrSet, in, &arrayAlignments);
+                optimizeArrays(ops, addrSet, i, &arrayAlignments);
 
-                arrAlignIt = arrayAlignments.find(in);
+                arrAlignIt = arrayAlignments.find(i);
                 assert(arrAlignIt != arrayAlignments.cend());
             }
 
@@ -437,18 +588,13 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
             // element, the address is the end of the (n - 1)th element, so afterElementAddrSet is included.
             addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
 
-            // re-insert the ArrayAlignment entry under its new index in ops!
-            arrayAlignments.erase(arrAlignIt);
-            arrayAlignments.emplace(std::make_pair(out, arrayAlign));
+            beginArrayIndexes.push(i);
 
-            beginArrayIndexes.push(out);
-            (*ops)[out++] = ferOp;
-
-        } else if (ferOp == FerOp::EndArray) {
+        } else if (ferOp.op == FerOpcode::EndArray) {
 
             const size_t beginArrayIndex = beginArrayIndexes.top();
             beginArrayIndexes.pop();
-            assert((*ops)[beginArrayIndex] == FerOp::BeginArray);
+            assert((*ops)[beginArrayIndex].op.op == FerOpcode::BeginArray);
 
             auto arrAlignIt = arrayAlignments.find(beginArrayIndex);
             assert(arrAlignIt != arrayAlignments.cend());
@@ -457,25 +603,25 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
             size_t goBackIndex = beginArrayIndex + 1;
 
             // If alignment is needed after the array length field, but not for any other elements
-            // (i.e. after the first), *skip* the alignment instruction when going back!
+            // (i.e. after the first), *skip* the alignment when going back!
             // No alignment req'd only for first element can happen, but is probably not worth handling.
-            const FerOp maybeAlignOp = (*ops)[goBackIndex];
-            if (isAlignOp(maybeAlignOp)) {
+            const FerCode firstOpInArray = (*ops)[goBackIndex];
+            if (firstOpInArray.op.postAlignExponent) {
                 const uint32 afterElementAlignedAddrs = applyAlignment(arrayAlign.afterElementAddrSet,
-                                                                       maybeAlignOp);
+                                                                       firstOpInArray.op);
                 if (afterElementAlignedAddrs == arrayAlign.afterElementAddrSet) {
-                    // alignment did nothing -> is not necessary -> skip it!
-                    goBackIndex += 1;
+                    // alignment did nothing -> is not necessary -> remove it
+                    (*ops)[goBackIndex].op.postAlignExponent = 0;
                 }
             }
 
             // contentsBeginAddrSet is included because the array may contain zero elements
             addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
 
-            (*ops)[out++] = ferOp;
-            (*ops)[out++] = static_cast<FerOp>(goBackIndex & 0xff);
-            (*ops)[out++] = static_cast<FerOp>((goBackIndex & 0xff00) >> 8);
-            in += 2; // skip "go back index"
+            (*ops)[++i] = FerEndArray{0 /*set when processing next op*/, static_cast<uint16>(goBackIndex)};
+
+            prevIndex = i;
+            prevIndexIsEndArrayOp = true;
 
             if (beginArrayIndexes.empty()) {
                 // leaving the outermost level of nested array, we won't need that anymore
@@ -483,26 +629,21 @@ static void optimizeFerOps(std::vector<FerOp> *ops, bool mergeContiguousCopies)
             }
 
         } else {
-            if (isVarLengthOp(ferOp)) {
+            // After strings, variants and such, data alignment could be anything
+            if (isVarLengthOp(ferOp.op)) {
                 addrSet = anyAddrSet;
             }
-            (*ops)[out++] = ferOp;
         }
-
-        // ### do not use "continue" in the loop because of this!
-        prevOp = ferOp;
     }
 
     assert(arrayAlignments.empty());
     assert(beginArrayIndexes.empty());
-
-    ops->resize(out);
 }
 
-static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beginArrayIndex,
+static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t beginArrayIndex,
                              std::unordered_map<size_t, ArrayAlignments> *arrayAlignments)
 {
-    assert((*ops)[beginArrayIndex] == FerOp::BeginArray);
+    assert((*ops)[beginArrayIndex].op.op == FerOpcode::BeginArray);
 
     {
         auto arrAlignIt = arrayAlignments->find(beginArrayIndex);
@@ -513,31 +654,33 @@ static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beg
         arrAlignIt->second.contentsBeginAddrSet |= addrSet;
     }
 
-    for (size_t in = beginArrayIndex + 1; ; in++) {
-        const FerOp ferOp = (*ops)[in];
+    for (size_t i = beginArrayIndex + 1; ; i++) {
+        const FerOp ferOp = (*ops)[i].op;
 
-        if (isBasicAdditionOp(ferOp)) {
-            addrSet = applyAddition(addrSet, ferOp);
-        } else if (isAlignOp(ferOp)) {
-            addrSet = applyAlignment(addrSet, ferOp);
-        } else if (ferOp == FerOp::BeginArray) {
+        addrSet = applyAlignment(addrSet, ferOp);
+
+        if (isBasicAdditionOp(ferOp.op)) {
+            addrSet = applyAddition(addrSet, ferOp.op);
+        } else if (isVarLengthOp(ferOp.op)) {
+            addrSet = anyAddrSet;
+        } else if (ferOp.op == FerOpcode::BeginArray) {
             // Since we skip "our" BeginArray, what we have here is another array inside the current one
 
-            addrSet = applyAddition(addrSet, FerOp::Copy4); // array length field!
-            const size_t beginArrayIndex = in;
+            addrSet = applyAddition(addrSet, FerOpcode::Copy4); // array length field!
+            const size_t beginArrayIndex = i;
 
-            in = optimizeArrays(ops, addrSet, in, arrayAlignments);
-            assert((*ops)[in] == FerOp::EndArray);
-            in += 2; // skip "go back index"
+            i = optimizeArrays(ops, addrSet, i, arrayAlignments);
+            assert((*ops)[i].op.op == FerOpcode::EndArray);
+            i++; // skip FerEndArray
 
-            // Our position is now after the last element of the inner array.
+            // Our data position is now after the last element of the inner array.
             // The array may be empty, so our position could be right after the array length field as well.
             auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
             assert(innerAlignIt != arrayAlignments->cend());
             ArrayAlignments &arrayAlign = innerAlignIt->second;
             addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
 
-        } else if (ferOp == FerOp::EndArray) {
+        } else if (ferOp.op == FerOpcode::EndArray) {
             bool noMoreAddrSetChanges = false;
 
             auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
@@ -558,14 +701,10 @@ static size_t optimizeArrays(std::vector<FerOp> *ops, uint32 addrSet, size_t beg
             arrayAlign.afterElementAddrSet = addrSet;
 
             if (noMoreAddrSetChanges) {
-                return in;
+                return i;
             } else {
                 // do more passes through the array until we have seen all addresses
-                in = beginArrayIndex /* note, the for loop does in++ */;
-            }
-        } else {
-            if (isVarLengthOp(ferOp)) {
-                addrSet = anyAddrSet;
+                i = beginArrayIndex /* note, the for loop does in++ */;
             }
         }
     }

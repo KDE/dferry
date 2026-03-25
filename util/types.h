@@ -36,6 +36,12 @@
 #define unlikely(x)  !!(x)
 #endif
 
+#if defined(_MSC_VER) && !defined(__clang__) // MSVC
+#define unreachable() __assume(false)
+#else // GCC, Clang
+#define unreachable() __builtin_unreachable()
+#endif
+
 typedef unsigned char byte;
 typedef short int int16;
 typedef unsigned short int uint16;
