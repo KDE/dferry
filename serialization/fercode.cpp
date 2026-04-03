@@ -17,7 +17,7 @@ struct BsHash
 };
 
 thread_local static std::unordered_map<std::pair<bool, std::string>,
-                                       std::vector<FerCode>,
+                                       std::shared_ptr<std::vector<FerCode>>,
                                        BsHash> encodedSignatureCache;
 
 // Tracks current nesting levels as well as highest nesting levels seen so far.
@@ -418,7 +418,7 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
 
 static void optimizeFerOps(std::vector<FerCode> *ops);
 
-std::vector<FerCode> ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
+std::shared_ptr<std::vector<FerCode>> ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
 {
     // TODO
     // - Also cache "invalid signature" results?
@@ -431,25 +431,24 @@ std::vector<FerCode> ferCodeForSignature(cstring signature, Arguments::Signature
     const bool isVariant = sigType == Arguments::VariantSignature;
 
     auto it = encodedSignatureCache.find(std::make_pair(isVariant, strSig));
-    if (it != encodedSignatureCache.cend()) {
-        //std::cout << "hit!\n";
-        return it->second;
+    if (it == encodedSignatureCache.cend()) {
+        // cache pruning, TODO better algorithm
+        if (encodedSignatureCache.size() > 128) {
+            encodedSignatureCache.erase(encodedSignatureCache.begin());
+        }
+
+        std::vector<FerCode> ret;
+        if (ferEncodeSignature(&signature, sigType, &ret)) {
+            optimizeFerOps(&ret);
+            it = encodedSignatureCache.emplace(std::make_pair(isVariant, strSig),
+                                        std::make_shared<std::vector<FerCode>>(ret)).first;
+        } else {
+            // TODO? some way to provide information about the error
+            return std::make_shared<std::vector<FerCode>>();
+        }
     }
 
-    // cache pruning, TODO better algorithm
-    if (encodedSignatureCache.size() > 128) {
-        encodedSignatureCache.erase(encodedSignatureCache.begin());
-    }
-
-    std::vector<FerCode> ret;
-    if (ferEncodeSignature(&signature, sigType, &ret)) {
-        optimizeFerOps(&ret);
-        encodedSignatureCache.emplace(std::make_pair(isVariant, strSig), ret);
-    } else {
-        // TODO? some way to provide information about the error
-        ret.clear();
-    }
-    return ret;
+    return it->second;
 }
 
 static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)

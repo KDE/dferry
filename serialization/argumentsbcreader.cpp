@@ -32,6 +32,8 @@
 #include <boost/container/small_vector.hpp>
 #endif
 
+#include <memory>
+
 #include <iostream> // TODO remove
 
 #undef VALID_IF
@@ -66,7 +68,7 @@ struct VariantInfo
 {
     // TODO noexcept move ctor, maybe assignment operator?
 
-    std::vector<FerCode> prevOps;
+    std::shared_ptr<std::vector<FerCode>> prevOps;
     uint32 prevOpsIndex;
 };
 
@@ -76,7 +78,7 @@ public:
     const FerCode *m_opsPtr{};    // end pointer not needed, we stop at FerOpcode::End
     const byte *m_dataPtr{};
     const byte *m_dataEnd{};
-    std::vector<FerCode> m_ops;
+    std::shared_ptr<std::vector<FerCode>> m_ops;
     chunk m_data; // TODO possibly replace, only operate on m_dataPtr and m_dataEnd, possibly use 32-bit pointer diffs
                   // in array operations to save space (should be fine because all in same data array with limited length)
                   // ... or just store a pointer to args and use its data in the rare cases that we need it
@@ -273,7 +275,7 @@ void Arguments::BcReader::beginRead()
 {
     //std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
 
-    d->m_opsPtr = &d->m_ops[0];
+    d->m_opsPtr = &(*d->m_ops)[0];
     m_state = d->m_opsPtr->op.ioState;
     d->m_opsPtr++;
 
@@ -289,7 +291,7 @@ const void *Arguments::BcReader::advanceState()
 
     // Normally (in release builds), no need for a length check on ops because ops are pre-validated and
     // FerOps::End marks the end.
-    assert(d->m_opsPtr <= &d->m_ops[0] + d->m_ops.size());
+    assert(d->m_opsPtr <= &(*d->m_ops)[0] + d->m_ops->size());
     assert(d->m_dataPtr <= d->m_dataEnd);
 
     FerOp ferOp = d->m_opsPtr->op;
@@ -349,9 +351,8 @@ const void *Arguments::BcReader::advanceState()
         d->m_nesting.paren += outerNest.parenDepth;
         d->m_nesting.variant += 1;
 
-        const uint32 opsIndex = d->m_opsPtr + 1 - &d->m_ops[0]; // point it after the EnterVariant + FerNest
-        d->m_variantStack.push_back(VariantInfo{std::move(d->m_ops), opsIndex}); // TODO? emplace_back
-        d->m_ops.clear();
+        const uint32 opsIndex = d->m_opsPtr + 1 - &(*d->m_ops)[0]; // point it after the EnterVariant + FerNest
+        d->m_variantStack.emplace_back(VariantInfo{std::move(d->m_ops), opsIndex});
 
         const byte len = *reinterpret_cast<const byte *>(ret);
         const cstring newSig(const_cast<byte *>(ret + sizeof(byte)), len);
@@ -359,8 +360,8 @@ const void *Arguments::BcReader::advanceState()
         newPtr += len + 1 /* trailing nul */;
 
         d->m_ops = ferCodeForSignature(newSig, Arguments::VariantSignature);
-        assert(d->m_ops.size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
-        d->m_opsPtr = &d->m_ops[0];
+        assert(d->m_ops->size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
+        d->m_opsPtr = &(*d->m_ops)[0];
 
         ferOp = d->m_opsPtr->op;
 
@@ -380,7 +381,7 @@ const void *Arguments::BcReader::advanceState()
 
         VariantInfo& varInfo = d->m_variantStack.back();
         d->m_ops = std::move(varInfo.prevOps);
-        d->m_opsPtr = &d->m_ops[0] + varInfo.prevOpsIndex;
+        d->m_opsPtr = &(*d->m_ops)[0] + varInfo.prevOpsIndex;
         d->m_variantStack.pop_back();
 
         const FerNesting outerNest = (d->m_opsPtr - 1)->nest;
@@ -439,7 +440,7 @@ const void *Arguments::BcReader::advanceState()
             const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
 
             // "another round"
-            d->m_opsPtr = &d->m_ops[0] + repeatArrayData.goBackOpIndex;
+            d->m_opsPtr = &(*d->m_ops)[0] + repeatArrayData.goBackOpIndex;
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
             if (!repeatArrayData.goBackAlignExponent) {
                 // fast path
