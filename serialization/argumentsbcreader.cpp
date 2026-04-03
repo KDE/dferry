@@ -83,9 +83,9 @@ public:
     Nesting m_nesting;
     // this keeps track of the limits of the current array
 #ifdef HAVE_BOOST
-    boost::container::small_vector<uint32, 8> m_arrayLengthStack;
+    boost::container::small_vector<const byte *, 8> m_arrayLengthStack;
 #else
-    std::vector<uint32> m_arrayLengthStack;
+    std::vector<const byte *> m_arrayLengthStack;
 #endif
     std::vector<VariantInfo> m_variantStack;
 };
@@ -174,34 +174,84 @@ Error Arguments::BcReader::error() const
 
 bool Arguments::BcReader::beginArray(EmptyArrayOption option)
 {
-    (void)option;
-    return true; // TODO
+    (void)option; // TODO
+    // TODO state check
+
+    FerOp ferOp = d->m_opsPtr->op;
+    d->m_opsPtr++;
+
+    const byte* newPtr = d->m_dataPtr;
+    const uint32 arrayLength = *reinterpret_cast<const uint32 *>(newPtr);
+    newPtr += sizeof(uint32);
+
+    // align newPtr to array contents before using it to calculate endPtr
+    if (ferOp.postAlignExponent) {
+        assert(ferOp.postAlignExponent == 3); // we're already 4-aligned at / after the length field
+
+        const byte *unalignedNewPtr = newPtr;
+        newPtr = align(newPtr, 8);
+        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
+            // TODO error
+            assert(false);
+        }
+    }
+
+    const byte *endPtr = newPtr + arrayLength;
+    if (endPtr > d->m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
+        // TODO error
+        assert(false);
+    }
+
+    m_state = ferOp.ioState;
+    d->m_dataPtr = newPtr;
+
+    d->m_arrayLengthStack.push_back(d->m_dataEnd);
+    // Array length becomes (until end of array) our new "data entire" length, reuses the same check
+    d->m_dataEnd = endPtr;
+
+    return true;
+}
+
+void Arguments::BcReader::endArray()
+{
+    // TODO state check
+    advanceState();
 }
 
 bool Arguments::BcReader::beginDict(EmptyArrayOption option)
 {
-    (void)option;
-    return true; // TODO
+    // TODO state check
+    return beginArray(option);
 }
 
 void Arguments::BcReader::endDict()
 {
+    // TODO state check
+    advanceState();
 }
 
 void Arguments::BcReader::beginStruct()
 {
+    // TODO state check
+    advanceState();
 }
 
 void Arguments::BcReader::endStruct()
 {
+    // TODO state check
+    advanceState();
 }
 
 void Arguments::BcReader::beginVariant()
 {
+    // TODO state check
+    advanceState();
 }
 
 void Arguments::BcReader::endVariant()
 {
+    // TODO state check
+    advanceState();
 }
 
 #ifdef WITH_DICT_ENTRY
@@ -221,27 +271,19 @@ void Arguments::BcReader::doReadString(uint32 lengthPrefixSize)
 
 void Arguments::BcReader::beginRead()
 {
-    std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
+    //std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
 
-    d->m_opsPtr = &d->m_ops[1];
+    d->m_opsPtr = &d->m_ops[0];
     m_state = d->m_opsPtr->op.ioState;
+    d->m_opsPtr++;
 
     d->m_dataPtr = d->m_data.ptr;
     d->m_dataEnd = d->m_dataPtr + d->m_data.length;
 }
 
-// TODO what is actually needed in a FerCode...
-// - ioState for next element
-// - "read"/"skip" (size) for this element
-// - align for next element
-// what we currently have:
-// - ioState for *this* element
-// - "read"/"skip" (size) for this element
-// - align for next element
-
 const void *Arguments::BcReader::advanceState()
 {
-    if (unlikely(m_state == InvalidData)) { // nonrecoverable...
+    if (unlikely(m_state == InvalidData || m_state == Finished)) { // nonrecoverable...
         return s_nullBuffer;
     }
 
@@ -251,10 +293,12 @@ const void *Arguments::BcReader::advanceState()
     assert(d->m_dataPtr <= d->m_dataEnd);
 
     FerOp ferOp = d->m_opsPtr->op;
+#if 0
     std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &d->m_ops[0])
               << ", op: " << ferOp.op
               << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
               << '\n';
+#endif
     d->m_opsPtr++;
 
     const byte* ret = d->m_dataPtr;
@@ -299,39 +343,6 @@ const void *Arguments::BcReader::advanceState()
         newPtr += len + 1 /* trailing nul */;
         break; }
 
-    case FerOpcode::BeginArray: {
-        const uint32 arrayLength = *reinterpret_cast<const uint32 *>(d->m_dataPtr);
-        const byte *endPtr = d->m_dataPtr + sizeof(uint32) + arrayLength;
-        if (endPtr > d->m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
-            // TODO error
-        }
-        d->m_arrayLengthStack.push_back(d->m_data.length);
-        // Array length becomes (until end of array) our new "data entire" length, reuses the same check
-        d->m_dataEnd = endPtr;
-        // TODO what to return from this function here? Maybe number of elements if fixed size / cheap to determine?
-        break; }
-
-    case FerOpcode::EndArray: {
-        // TODO??? the cursed nil array thing... maybe remove some conditionals by supplying an 8 byte buffer
-        // of nulls to read data from and always reset to its beginning after every read.
-
-        // TODO restore d->m_dataEnd if finished
-
-        const FerEndArray endArrayData = d->m_opsPtr->endArray;
-        if (d->m_dataPtr < d->m_dataEnd) {
-            // end
-            // NB: ferPack.op.postAlignExponent is already meant for the next array element in this case
-            d->m_opsPtr = &d->m_ops[0] + endArrayData.repeatArrayIndex;
-        } else if (d->m_dataPtr == d->m_dataEnd) {
-            d->m_data.length = d->m_arrayLengthStack.back();
-            d->m_arrayLengthStack.pop_back();
-            ferOp.postAlignExponent = endArrayData.afterArrayAlignExponent;
-            d->m_opsPtr++;
-        } else {
-            assert(false); // for now, TODO error handling
-        }
-        break; }
-
     case FerOpcode::EnterVariant: {
         const FerNesting outerNest = d->m_opsPtr->nest;
         d->m_nesting.array += outerNest.arrayDepth;
@@ -351,20 +362,16 @@ const void *Arguments::BcReader::advanceState()
         assert(d->m_ops.size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
         d->m_opsPtr = &d->m_ops[0];
 
-        const FerBeginVariantSpecial variantSpecial = d->m_opsPtr->beginVariantSpecial;
-        assert(variantSpecial.op == FerOpcode::BeginVariantSignature);
+        ferOp = d->m_opsPtr->op;
+
         const FerNesting innerNest = (d->m_opsPtr + 1)->nest;
-        d->m_opsPtr += 2;
+        const FerNesting extraNest = (d->m_opsPtr + 2)->nest;
+        d->m_opsPtr += 3;
         if (d->m_nesting.array + innerNest.arrayDepth > Nesting::arrayMax ||
             d->m_nesting.paren + innerNest.parenDepth > Nesting::parenMax ||
-            d->m_nesting.total() + variantSpecial.combinedDepth > Nesting::totalMax) {
+            d->m_nesting.total() + extraNest.arrayDepth /* really combinedDeptth */ > Nesting::totalMax) {
             assert(false); // for now, TODO error handling
         }
-
-        ferOp.postAlignExponent = variantSpecial.postAlignExponent;
-        // avoid bit fiddling by copying all bits in the first byte of variantSpecial - it makes no other
-        // difference; only postAlignExponent and ioState will be used in the remainder of this function
-        ferOp.op = variantSpecial.op;
 
         break; }
 
@@ -398,20 +405,62 @@ const void *Arguments::BcReader::advanceState()
         assert(!d->m_nesting.variant);
         m_state = Arguments::Finished;
         return s_nullBuffer;
-    case BeginVariantSignature:
-    case BeginMethodSignature:
-        // These two should only occur at the beginning of a signature, which we don't handle here
+
+    case FerOpcode::EndArray: {
+        // Only handles actual end of array, "more elements to come, loop back" is handled under:
+        // if (ferOp.ioState == Arguments::EndArray)
+        assert(newPtr == d->m_dataEnd);
+
+        d->m_opsPtr++; // skip endArrayData
+        d->m_dataEnd = d->m_arrayLengthStack.back();
+        d->m_arrayLengthStack.pop_back();
+        break; }
+
+        // The following two should only occur at the beginning of a signature, which we don't handle here
+    case FerOpcode::BeginVariantSignature:
+    case FerOpcode::BeginMethodSignature:
+        // The following are handled by their own begin*() methods
+    case FerOpcode::BeginArray:
         unreachable();
         break;
     }
 
+    // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
+    // need to call anything like nextArrayElement() to immediately read the next element.
+    // Probably not great for performance!
+    if (ferOp.ioState == Arguments::EndArray || ferOp.ioState == Arguments::EndDict) {
+        // TODO??? the cursed nil array thing... maybe remove some conditionals by supplying an 8 byte buffer
+        // of nulls to read data from and always reset to its beginning after every read.
+
+        assert(newPtr <= d->m_dataEnd);
+        // (TODO catch newPtr > d->m_dataEnd for *all* reads)
+
+        if (newPtr < d->m_dataEnd) {
+            const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
+
+            // "another round"
+            d->m_opsPtr = &d->m_ops[0] + repeatArrayData.goBackOpIndex;
+            assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
+            if (!repeatArrayData.goBackAlignExponent) {
+                // fast path
+                m_state = (d->m_opsPtr - 1)->op.ioState;
+                d->m_dataPtr = newPtr;
+                return ret;
+            } else {
+                ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
+                ferOp.op = FerOpcode::Copy0; // ignored, set just to avoid bit masking work (set a whole byte)
+                ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
+            }
+        }
+    }
+
+    m_state = ferOp.ioState;
 
     const byte *unalignedNewPtr;
     switch(ferOp.postAlignExponent) {
     case 0:
-        // ### fast path, not sure if this makes sense...
+        // fast path for this hopefully common case
         VALID_IF(d->m_dataPtr <= d->m_dataEnd, TODOError);
-        m_state = ferOp.ioState;
         d->m_dataPtr = newPtr;
         return ret;
 
@@ -435,7 +484,6 @@ const void *Arguments::BcReader::advanceState()
 
     VALID_IF(isPaddingZero(unalignedNewPtr, newPtr), TODOerror);
 
-    m_state = ferOp.ioState;
     d->m_dataPtr = newPtr;
     return ret;
 }

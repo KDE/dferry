@@ -1157,6 +1157,82 @@ static void test_alignment()
     }
 }
 
+static void test_repeatArrayReaderState()
+{
+    // These tests are probably redundant - their purpose is to be explicit about this particular behavior:
+    // the state at the point where the array repeats
+    for (int i = 0; i < 2; i++) {
+        Arguments::Writer writer;
+        writer.beginArray(i == 0 ? Arguments::Writer::WriteTypesOfEmptyArray : Arguments::Writer::NonEmptyArray);
+        writer.writeByte(123);
+        writer.endArray();
+        const Arguments arg = writer.finish();
+
+        Arguments::Reader reader(arg);
+        TEST(reader.state() == Arguments::BeginArray);
+        reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+        TEST(reader.state() == Arguments::Byte);
+        if (i == 1) {
+            TEST(reader.readByte() == 123);
+        } else {
+            reader.readByte(); // gives an unspecified value
+        }
+        TEST(reader.state() == Arguments::EndArray);
+        reader.endArray();
+        TEST(reader.state() == Arguments::Finished);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginArray();
+        writer.writeByte(12);
+        writer.writeByte(123);
+        writer.endArray();
+        const Arguments arg = writer.finish();
+
+        Arguments::Reader reader(arg);
+        TEST(reader.state() == Arguments::BeginArray);
+        reader.beginArray();
+        TEST(reader.state() == Arguments::Byte);
+        TEST(reader.readByte() == 12);
+        TEST(reader.state() == Arguments::Byte);
+        TEST(reader.readByte() == 123);
+        TEST(reader.state() == Arguments::EndArray);
+        reader.endArray();
+        TEST(reader.state() == Arguments::Finished);
+    }
+    {
+        Arguments::Writer writer;
+        writer.beginArray();
+        writer.beginStruct();
+        writer.writeByte(12);
+        writer.endStruct();
+        writer.beginStruct();
+        writer.writeByte(123);
+        writer.endStruct();
+        writer.endArray();
+        const Arguments arg = writer.finish();
+
+        Arguments::Reader reader(arg);
+        TEST(reader.state() == Arguments::BeginArray);
+        reader.beginArray();
+        TEST(reader.state() == Arguments::BeginStruct);
+        reader.beginStruct();
+        TEST(reader.state() == Arguments::Byte);
+        TEST(reader.readByte() == 12);
+        TEST(reader.state() == Arguments::EndStruct);
+        reader.endStruct();
+        TEST(reader.state() == Arguments::BeginStruct);
+        reader.beginStruct();
+        TEST(reader.state() == Arguments::Byte);
+        TEST(reader.readByte() == 123);
+        TEST(reader.state() == Arguments::EndStruct);
+        reader.endStruct();
+        TEST(reader.state() == Arguments::EndArray);
+        reader.endArray();
+        TEST(reader.state() == Arguments::Finished);
+    }
+}
+
 static void test_arrayOfVariant()
 {
     // non-empty array
@@ -1948,6 +2024,7 @@ int main(int, char *[])
     //      (corruption of serialized data)
     test_complicated();
     test_alignment();
+    test_repeatArrayReaderState();
     test_arrayOfVariant();
     test_realMessage();
     test_isWritingSignatureBug();
