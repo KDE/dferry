@@ -3,6 +3,8 @@
 
 #include "arguments.h"
 
+#include <memory>
+
 enum FerOpcode : byte
 {
     Copy0 = 0,// No-op (for e.g. IoState BeginStruct and EndStruct, which only align and change state)
@@ -68,7 +70,7 @@ union FerCode
     }
 };
 
-std::vector<FerCode> DFERRY_EXPORT ferCodeForSignature(cstring signature,
+std::shared_ptr<std::vector<FerCode>> DFERRY_EXPORT ferCodeForSignature(cstring signature,
                                             Arguments::SignatureType sigType = Arguments::MethodSignature);
 std::string DFERRY_EXPORT printableFerOps(const std::vector<FerCode>& ops);
 
