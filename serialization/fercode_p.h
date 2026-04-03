@@ -35,10 +35,10 @@ struct FerOp
     Arguments::IoState ioState;
 };
 
-struct FerEndArray
+struct FerRepeatArray
 {
-    byte afterArrayAlignExponent : 2;         // for the "end of array" case
-    uint16 repeatArrayIndex : 14;
+    byte goBackAlignExponent : 2;
+    uint16 goBackOpIndex : 14;
 };
 
 struct FerNesting
@@ -47,31 +47,22 @@ struct FerNesting
     byte parenDepth;
 };
 
-// We need another couple of bits for FerNesting after BeginVariantSignature to store the max combined
-// aggregate depth. For that, we type-pun the BeginVariantSignature FerOp with this to store
-// combinedDepth in the ioState field.
-struct FerBeginVariantSpecial
-{
-    byte postAlignExponent : 2;
-    FerOpcode op : 6;
-    byte combinedDepth;
-};
-
 union FerCode
 {
     FerCode(FerOp o) : op{o} {}
-    FerCode(FerEndArray a) : endArray{a} {}
+    FerCode(FerRepeatArray a) : repeatArray{a} {}
     FerCode(FerNesting n) : nest{n} {}
-    FerCode(FerBeginVariantSpecial bv) : beginVariantSpecial{bv} {}
 
     FerOp op;
-    FerEndArray endArray; // always follows a FerOp with BeginArray
+    FerRepeatArray repeatArray; // always follows a FerOp with BeginArray
     FerNesting nest; // always follows a FerOp with BeginVariant
-    FerBeginVariantSpecial beginVariantSpecial; // always type-punned with op for a BeginVariantSignature
 
-    bool operator==(const FerCode &other) const
+    bool operator==(const FerCode &other) const noexcept
     {
-        // Just compare all the bits, nest is maybe the cleanest / easiest way to do that
+        // Just compare all the bits, nest is maybe the cleanest / easiest way to do that.
+        // Note that reading "non-active" (not most recently written to) union members is undefined behavior,
+        // but supported by "some" compilers, notably GCC and Clang. It would be defined behavior in C, so
+        // it's not far-fetched for a C/C++ compiler to support it.
         return nest.arrayDepth == other.nest.arrayDepth &&
                nest.parenDepth == other.nest.parenDepth;
     }
