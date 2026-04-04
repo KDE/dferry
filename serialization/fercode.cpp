@@ -6,6 +6,10 @@
 #include <string_view>
 #include <unordered_map> // TODO faster container from boost?
 
+#ifdef HAVE_BOOST
+#include <boost/smart_ptr/make_local_shared.hpp>
+#endif
+
 #include <iostream> // TODO remove
 
 struct BsHash
@@ -17,7 +21,11 @@ struct BsHash
 };
 
 thread_local static std::unordered_map<std::pair<bool, std::string>,
+#ifdef HAVE_BOOST
+                                       boost::local_shared_ptr<std::vector<FerCode>>,
+#else
                                        std::shared_ptr<std::vector<FerCode>>,
+#endif
                                        BsHash> encodedSignatureCache;
 
 // Tracks current nesting levels as well as highest nesting levels seen so far.
@@ -418,7 +426,12 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
 
 static void optimizeFerOps(std::vector<FerCode> *ops);
 
-std::shared_ptr<std::vector<FerCode>> ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
+#ifdef HAVE_BOOST
+boost::local_shared_ptr<std::vector<FerCode>>
+#else
+std::shared_ptr<std::vector<FerCode>>
+#endif
+ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
 {
     // TODO
     // - Also cache "invalid signature" results?
@@ -441,10 +454,18 @@ std::shared_ptr<std::vector<FerCode>> ferCodeForSignature(cstring signature, Arg
         if (ferEncodeSignature(&signature, sigType, &ret)) {
             optimizeFerOps(&ret);
             it = encodedSignatureCache.emplace(std::make_pair(isVariant, strSig),
-                                        std::make_shared<std::vector<FerCode>>(ret)).first;
+#ifdef HAVE_BOOST
+                                               boost::make_local_shared<std::vector<FerCode>>(ret)).first;
+#else
+                                               std::make_shared<std::vector<FerCode>>(ret)).first;
+#endif
         } else {
             // TODO? some way to provide information about the error
+#ifdef HAVE_BOOST
+            return boost::make_local_shared<std::vector<FerCode>>();
+#else
             return std::make_shared<std::vector<FerCode>>();
+#endif
         }
     }
 

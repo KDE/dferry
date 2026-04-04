@@ -30,9 +30,10 @@
 
 #ifdef HAVE_BOOST
 #include <boost/container/small_vector.hpp>
-#endif
-
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#else
 #include <memory>
+#endif
 
 #include <iostream> // TODO remove
 
@@ -67,8 +68,11 @@ static inline bool isPaddingZero(const byte *data, const byte *end)
 struct VariantInfo
 {
     // TODO noexcept move ctor, maybe assignment operator?
-
+#ifdef HAVE_BOOST
+    boost::local_shared_ptr<std::vector<FerCode>> prevOps;
+#else
     std::shared_ptr<std::vector<FerCode>> prevOps;
+#endif
     uint32 prevOpsIndex;
 };
 
@@ -78,7 +82,11 @@ public:
     const FerCode *m_opsPtr{};    // end pointer not needed, we stop at FerOpcode::End
     const byte *m_dataPtr{};
     const byte *m_dataEnd{};
+#ifdef HAVE_BOOST
+    boost::local_shared_ptr<std::vector<FerCode>> m_ops;
+#else
     std::shared_ptr<std::vector<FerCode>> m_ops;
+#endif
     chunk m_data; // TODO possibly replace, only operate on m_dataPtr and m_dataEnd, possibly use 32-bit pointer diffs
                   // in array operations to save space (should be fine because all in same data array with limited length)
                   // ... or just store a pointer to args and use its data in the rare cases that we need it
