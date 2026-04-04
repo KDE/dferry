@@ -27,9 +27,15 @@
 
 #include <iostream>
 
+#ifdef HAVE_BOOST
+template<class T> using my_shared_ptr = boost::local_shared_ptr<T>;
+#else
+using my_shared_ptr = std::shared_ptr;
+#endif
+
 static void test_basicEncode()
 {
-    std::shared_ptr<std::vector<FerCode>> ops;
+    my_shared_ptr<std::vector<FerCode>> ops;
 
     ops = ferCodeForSignature(cstring(""));
     TEST((*ops == std::vector<FerCode>{
@@ -63,7 +69,7 @@ static void test_basicEncode()
 
 static void test_variantSignature()
 {
-    std::shared_ptr<std::vector<FerCode>> ops;
+    my_shared_ptr<std::vector<FerCode>> ops;
 
     ops = ferCodeForSignature(cstring(""), Arguments::VariantSignature);
     TEST(ops->empty());
@@ -92,7 +98,7 @@ static void test_variantSignature()
 
 static void test_arrayEncode()
 {
-    std::shared_ptr<std::vector<FerCode>> ops;
+    my_shared_ptr<std::vector<FerCode>> ops;
 
     ops = ferCodeForSignature(cstring("axoo"));
     //std::cout << printableFerOps(ops) << '\n';

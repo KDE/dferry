@@ -3,7 +3,11 @@
 
 #include "arguments.h"
 
+#ifdef HAVE_BOOST
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#else
 #include <memory>
+#endif
 
 enum FerOpcode : byte
 {
@@ -70,8 +74,16 @@ union FerCode
     }
 };
 
-std::shared_ptr<std::vector<FerCode>> DFERRY_EXPORT ferCodeForSignature(cstring signature,
-                                            Arguments::SignatureType sigType = Arguments::MethodSignature);
+
+// boost::local_shared_ptr is not thread-safe, so no overhead due to atomics
+#ifdef HAVE_BOOST
+boost::local_shared_ptr<std::vector<FerCode>>
+#else
+std::shared_ptr<std::vector<FerCode>>
+#endif
+    DFERRY_EXPORT ferCodeForSignature(cstring signature,
+                                      Arguments::SignatureType sigType = Arguments::MethodSignature);
+
 std::string DFERRY_EXPORT printableFerOps(const std::vector<FerCode>& ops);
 
 #endif // FERCODE_P_H
