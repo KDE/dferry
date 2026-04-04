@@ -38,7 +38,7 @@
 
 #undef VALID_IF
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    assert(false); m_state = InvalidData; /* TODO handle errCode */ return s_nullBuffer; }
+    assert(false); m_state = InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
 
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
@@ -83,6 +83,7 @@ public:
                   // in array operations to save space (should be fine because all in same data array with limited length)
                   // ... or just store a pointer to args and use its data in the rare cases that we need it
     Nesting m_nesting;
+    Error m_error;
     // this keeps track of the limits of the current array
 #ifdef HAVE_BOOST
     boost::container::small_vector<const byte *, 8> m_arrayLengthStack;
@@ -171,7 +172,7 @@ bool Arguments::BcReader::isValid() const
 
 Error Arguments::BcReader::error() const
 {
-    return Error::NoError; // TODO
+    return d->m_error;
 }
 
 bool Arguments::BcReader::beginArray(EmptyArrayOption option)
@@ -461,7 +462,7 @@ const void *Arguments::BcReader::advanceState()
     switch(ferOp.postAlignExponent) {
     case 0:
         // fast path for this hopefully common case
-        VALID_IF(d->m_dataPtr <= d->m_dataEnd, TODOError);
+        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
         d->m_dataPtr = newPtr;
         return ret;
 
@@ -481,9 +482,8 @@ const void *Arguments::BcReader::advanceState()
         unreachable();
     }
 
-    VALID_IF(newPtr <= d->m_dataEnd, TODOError);
-
-    VALID_IF(isPaddingZero(unalignedNewPtr, newPtr), TODOerror);
+    VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
+             Error::MalformedMessageData);
 
     d->m_dataPtr = newPtr;
     return ret;
