@@ -164,8 +164,9 @@ if (VALGRIND_INCLUDE_DIR)
    include_directories(${VALGRIND_INCLUDE_DIR})
 endif()
 
- # for small_vector, optional; small_vector appeared in 1.58
-find_package(Boost 1.58)
+ # for small_vector and local_shared_ptr, optional; small_vector appeared in 1.58 and
+ # local_shared_ptr in 1.65.
+find_package(Boost 1.65)
 if (BOOST_FOUND)
     add_definitions(-DHAVE_BOOST)
 endif()
