@@ -41,6 +41,9 @@
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     assert(false); m_state = InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
 
+#define VALID_IF_STATE(expectedState) if (likely(m_state == expectedState)) {} else { \
+    m_state = InvalidData; d->m_error.setCode(Error::ReadWrongType); return; }
+
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
 {
@@ -183,10 +186,9 @@ Error Arguments::BcReader::error() const
     return d->m_error;
 }
 
-bool Arguments::BcReader::beginArray(EmptyArrayOption option)
+bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
 {
     (void)option; // TODO
-    // TODO state check
 
     FerOp ferOp = d->m_opsPtr->op;
     d->m_opsPtr++;
@@ -223,45 +225,59 @@ bool Arguments::BcReader::beginArray(EmptyArrayOption option)
     return true;
 }
 
+bool Arguments::BcReader::beginArray(EmptyArrayOption option)
+{
+    if (unlikely(m_state != BeginArray)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+        return false;
+    }
+    return beginArrayInternal(option);
+}
+
 void Arguments::BcReader::endArray()
 {
-    // TODO state check
+    VALID_IF_STATE(EndArray);
     advanceState();
 }
 
 bool Arguments::BcReader::beginDict(EmptyArrayOption option)
 {
-    // TODO state check
-    return beginArray(option);
+    if (unlikely(m_state != BeginDict)) {
+        m_state = InvalidData;
+        d->m_error.setCode(Error::ReadWrongType);
+        return false;
+    }
+    return beginArrayInternal(option);
 }
 
 void Arguments::BcReader::endDict()
 {
-    // TODO state check
+    VALID_IF_STATE(EndDict);
     advanceState();
 }
 
 void Arguments::BcReader::beginStruct()
 {
-    // TODO state check
+    VALID_IF_STATE(BeginStruct);
     advanceState();
 }
 
 void Arguments::BcReader::endStruct()
 {
-    // TODO state check
+    VALID_IF_STATE(EndStruct);
     advanceState();
 }
 
 void Arguments::BcReader::beginVariant()
 {
-    // TODO state check
+    VALID_IF_STATE(BeginVariant);
     advanceState();
 }
 
 void Arguments::BcReader::endVariant()
 {
-    // TODO state check
+    VALID_IF_STATE(EndVariant);
     advanceState();
 }
 

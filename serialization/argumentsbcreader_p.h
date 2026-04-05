@@ -130,6 +130,7 @@ private:
     void beginRead();
     //void doReadPrimitiveType();
     void doReadString(uint32 lengthPrefixSize);
+    bool beginArrayInternal(EmptyArrayOption option);
     const void *advanceState();
     //void beginArrayOrDict(bool isDict, EmptyArrayOption option);
     //void skipArrayOrDictSignature(bool isDict);
