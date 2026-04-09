@@ -443,17 +443,20 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
     strSig.assign(signature.ptr, signature.length);
     const bool isVariant = sigType == Arguments::VariantSignature;
 
-    auto it = encodedSignatureCache.find(std::make_pair(isVariant, strSig));
-    if (it == encodedSignatureCache.cend()) {
+    // workaround for a GCC (< 16.0] bug that generates repeated expensive lookups for thread-local data
+    auto &sigCache = encodedSignatureCache;
+
+    auto it = sigCache.find(std::make_pair(isVariant, strSig));
+    if (it == sigCache.cend()) {
         // cache pruning, TODO better algorithm
-        if (encodedSignatureCache.size() > 128) {
-            encodedSignatureCache.erase(encodedSignatureCache.begin());
+        if (sigCache.size() > 128) {
+            sigCache.erase(sigCache.begin());
         }
 
         std::vector<FerCode> ret;
         if (ferEncodeSignature(&signature, sigType, &ret)) {
             optimizeFerOps(&ret);
-            it = encodedSignatureCache.emplace(std::make_pair(isVariant, strSig),
+            it = sigCache.emplace(std::make_pair(isVariant, strSig),
 #ifdef HAVE_BOOST
                                                boost::make_local_shared<std::vector<FerCode>>(ret)).first;
 #else
