@@ -30,9 +30,6 @@
 
 #ifdef HAVE_BOOST
 #include <boost/container/small_vector.hpp>
-#include <boost/smart_ptr/local_shared_ptr.hpp>
-#else
-#include <memory>
 #endif
 
 #include <iostream> // TODO remove
@@ -125,11 +122,45 @@ Arguments::BcReader::BcReader(const Message &msg)
     beginRead();
 }
 
+#ifdef HAVE_BOOST
+Arguments::BcReader::BcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
+#else
+Arguments::BcReader::BcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode)
+#endif
+    : d(new Private)
+{
+    d->m_ops = ferCode;
+    d->m_data = args.d->m_data;
+    beginRead();
+}
+
+#ifdef HAVE_BOOST
+Arguments::BcReader::BcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
+#else
+Arguments::BcReader::BcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode)
+#endif
+{
+    const Arguments &args = msg.arguments();
+    d->m_ops = ferCode;
+    d->m_data = args.d->m_data;
+    beginRead();
+}
+
 Arguments::BcReader::BcReader(BcReader &&other)
     : m_state(other.m_state),
       d(other.d)
 {
     other.d = nullptr;
+}
+
+Arguments::BcReader::BcReader(const BcReader &other)
+    : m_state(other.m_state),
+      d(nullptr)
+
+{
+    if (other.d) {
+        d = new Private(*other.d);
+    }
 }
 
 void Arguments::BcReader::operator=(BcReader &&other)
@@ -144,16 +175,6 @@ void Arguments::BcReader::operator=(BcReader &&other)
     d = other.d;
 
     other.d = nullptr;
-}
-
-Arguments::BcReader::BcReader(const BcReader &other)
-    : m_state(other.m_state),
-      d(nullptr)
-
-{
-    if (other.d) {
-        d = new Private(*other.d);
-    }
 }
 
 void Arguments::BcReader::operator=(const BcReader &other)
