@@ -164,9 +164,13 @@ if (VALGRIND_INCLUDE_DIR)
    include_directories(${VALGRIND_INCLUDE_DIR})
 endif()
 
- # for small_vector and local_shared_ptr, optional; small_vector appeared in 1.58 and
- # local_shared_ptr in 1.65.
-find_package(Boost 1.65)
+# For optional components that offer better performance than their std::counterparts.
+# These are all header-only and FindBoost does not seem to support finding these, so you just need
+# to ensure that all the required header packages are installed if your OS offers separate packages.
+# - small_vector appeared in 1.58
+# - local_shared_ptr appeared in 1.65
+# - unordered_flat_map appeared in 1.81
+find_package(Boost 1.81)
 if (BOOST_FOUND)
     add_definitions(-DHAVE_BOOST)
 endif()

@@ -30,7 +30,7 @@
 #ifdef HAVE_BOOST
 template<class T> using my_shared_ptr = boost::local_shared_ptr<T>;
 #else
-using my_shared_ptr = std::shared_ptr;
+template<class T> using my_shared_ptr = std::shared_ptr<T>;
 #endif
 
 static void test_basicEncode()

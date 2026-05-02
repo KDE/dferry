@@ -3,12 +3,6 @@
 
 #include "arguments.h"
 
-#ifdef HAVE_BOOST
-#include <boost/smart_ptr/local_shared_ptr.hpp>
-#else
-#include <memory>
-#endif
-
 enum FerOpcode : byte
 {
     Copy0 = 0,// No-op (for e.g. IoState BeginStruct and EndStruct, which only align and change state)
