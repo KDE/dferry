@@ -31,6 +31,13 @@
 #include <string>
 #include <vector>
 
+#ifdef HAVE_BOOST
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#else
+#include <memory>
+#endif
+
+union FerCode;
 class Error;
 class Message;
 class MessagePrivate;
