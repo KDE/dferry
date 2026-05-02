@@ -1,13 +1,15 @@
-#include "fercode_p.h"
-
 #include "arguments_p.h"
+
+#include "fercode_p.h"
 
 #include <stack>
 #include <string_view>
-#include <unordered_map> // TODO faster container from boost?
 
 #ifdef HAVE_BOOST
 #include <boost/smart_ptr/make_local_shared.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
+#else
+#include <unordered_map>
 #endif
 
 #include <iostream> // TODO remove
@@ -20,13 +22,24 @@ struct BsHash
     }
 };
 
-thread_local static std::unordered_map<std::pair<bool, std::string>,
 #ifdef HAVE_BOOST
+thread_local static boost::unordered_flat_map<std::pair<bool, std::string>,
                                        boost::local_shared_ptr<std::vector<FerCode>>,
 #else
+thread_local static std::unordered_map<std::pair<bool, std::string>,
                                        std::shared_ptr<std::vector<FerCode>>,
 #endif
-                                       BsHash> encodedSignatureCache;
+                                       BsHash> *encodedSignatureCache;
+
+struct SignatureCacheDtor
+{
+    ~SignatureCacheDtor()
+    {
+        delete encodedSignatureCache;
+    }
+};
+thread_local static SignatureCacheDtor signatureCacheDtor;
+
 
 // Tracks current nesting levels as well as highest nesting levels seen so far.
 // Why maxCombined? Imagine we're 60 variants deep and open a variant with 3 array depth and 3 paren depth.
@@ -443,20 +456,36 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
     strSig.assign(signature.ptr, signature.length);
     const bool isVariant = sigType == Arguments::VariantSignature;
 
-    // workaround for a GCC (< 16.0] bug that generates repeated expensive lookups for thread-local data
-    auto &sigCache = encodedSignatureCache;
+    // workaround for
+    // - a GCC (< 16.0] bug that generates repeated expensive lookups for thread-local data
+    // - slower than necessary thread-local data with constructors (we manage "semi-manually" instead)
+    auto sigCache = encodedSignatureCache;
+    if (!sigCache) {
+#ifdef HAVE_BOOST
+        sigCache = new boost::unordered_flat_map<std::pair<bool, std::string>,
+                                                           boost::local_shared_ptr<std::vector<FerCode>>,
+                                                           BsHash>();
+#else
+        sigCache = new std::unordered_map<std::pair<bool, std::string>,
+                                                    std::shared_ptr<std::vector<FerCode>>,
+                                                    BsHash>();
 
-    auto it = sigCache.find(std::make_pair(isVariant, strSig));
-    if (it == sigCache.cend()) {
+#endif
+        (void)signatureCacheDtor; // arm it so that it will delete encodedSignatureCache at thread exit
+        encodedSignatureCache = sigCache;
+    }
+
+    auto it = sigCache->find(std::make_pair(isVariant, strSig));
+    if (it == sigCache->cend()) {
         // cache pruning, TODO better algorithm
-        if (sigCache.size() > 128) {
-            sigCache.erase(sigCache.begin());
+        if (sigCache->size() > 128) {
+            sigCache->erase(sigCache->begin());
         }
 
         std::vector<FerCode> ret;
         if (ferEncodeSignature(&signature, sigType, &ret)) {
             optimizeFerOps(&ret);
-            it = sigCache.emplace(std::make_pair(isVariant, strSig),
+            it = sigCache->emplace(std::make_pair(isVariant, strSig),
 #ifdef HAVE_BOOST
                                                boost::make_local_shared<std::vector<FerCode>>(ret)).first;
 #else
