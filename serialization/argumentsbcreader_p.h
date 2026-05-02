@@ -10,13 +10,23 @@ class DFERRY_EXPORT BcReader
 public:
     explicit BcReader(const Arguments &al);
     explicit BcReader(const Message &msg);
+#ifdef HAVE_BOOST
+    BcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
+    BcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
+#else
+    BcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode);
+    BcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode);
+#endif
     BcReader(BcReader &&other);
-    void operator=(BcReader &&other);
-    // TODO unit-test copy and assignment
     BcReader(const BcReader &other);
-    void operator=(const BcReader &other);
 
     ~BcReader();
+
+    void operator=(BcReader &&other);
+    // TODO unit-test copy and assignment
+
+    void operator=(const BcReader &other);
+
 
     bool isValid() const;
     Error error() const; // see also: aggregateStack()
