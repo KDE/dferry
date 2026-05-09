@@ -80,7 +80,7 @@ static void test_variantSignature()
         FerNesting{0, 0},
         FerNesting{0, 0},
         FerOp{0, FerOpcode::Copy4, Arguments::EndVariant},
-        FerOp{0, FerOpcode::EndVariant, Arguments::InvalidData}}));
+        FerOp{0, FerOpcode::EndVariantSignature, Arguments::InvalidData}}));
 
     ops = ferCodeForSignature(cstring("(ixix)"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
@@ -93,7 +93,7 @@ static void test_variantSignature()
         FerOp{3, FerOpcode::Copy4, Arguments::Int64},
         FerOp{0, FerOpcode::Copy8, Arguments::EndStruct},
         FerOp{0, FerOpcode::Copy0, Arguments::EndVariant},
-        FerOp{0, FerOpcode::EndVariant, Arguments::InvalidData}}));
+        FerOp{0, FerOpcode::EndVariantSignature, Arguments::InvalidData}}));
 }
 
 static void test_arrayEncode()
