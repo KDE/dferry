@@ -304,7 +304,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
         (*out)[1].nest.parenDepth = nest.maxParen;
         (*out)[2].nest.arrayDepth /* really combinedDeptth */ = nest.maxCombined;
 
-        out->push_back(FerOp{0, FerOpcode::EndVariant, Arguments::EndVariant});
+        out->push_back(FerOp{0, FerOpcode::EndVariantSignature, Arguments::EndVariant});
     } else {
         out->push_back(FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted /*ignored*/});
 
@@ -351,7 +351,7 @@ static std::string printableOpcode(FerOpcode op)
         return "EnterVariant";
     case FerOpcode::BeginVariantSignature:
         return "BeginVariantSignature";
-    case FerOpcode::EndVariant:
+    case FerOpcode::EndVariantSignature:
         return "EndVariant";
     case FerOpcode::BeginMethodSignature:
         return "BeginMethodSignature";

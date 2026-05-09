@@ -422,7 +422,7 @@ const void *Arguments::BcReader::advanceState()
 
         break; }
 
-    case FerOpcode::EndVariant: {
+    case FerOpcode::EndVariantSignature: {
         assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
 
         VariantInfo& varInfo = d->m_variantStack.back();
