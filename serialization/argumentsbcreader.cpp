@@ -218,7 +218,9 @@ bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
     const uint32 arrayLength = *reinterpret_cast<const uint32 *>(newPtr);
     newPtr += sizeof(uint32);
 
-    // align newPtr to array contents before using it to calculate endPtr
+    // Align newPtr to array contents before using it to calculate endPtr. We also need the aligned beginning
+    // of the array contents for empty arrays because that is where the next data field starts. It's a quirk
+    // of DBus serialization that even zero elements are aligned.
     if (ferOp.postAlignExponent) {
         assert(ferOp.postAlignExponent == 3); // we're already 4-aligned at / after the length field
 
@@ -236,14 +238,58 @@ bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
         assert(false);
     }
 
-    m_state = ferOp.ioState;
     d->m_dataPtr = newPtr;
 
     d->m_arrayLengthStack.push_back(d->m_dataEnd);
     // Array length becomes (until end of array) our new "data entire" length, reuses the same check
     d->m_dataEnd = endPtr;
 
-    return true;
+    if (arrayLength) {
+        m_state = ferOp.ioState;
+        return true;
+
+    } else {
+        m_state = EndArray;
+
+        // Skip d->m_opsPtr to the end of the array (TODO? add skip-to-end-index data to FerCode?)
+        // We need to special-case opcodes that are followed by data that doesn't *have* opcodes so that
+        // we don't misinterpret it, reading bogus opcodes. Skip that data entirely.
+
+        int skipArrayDepth = 1; // We're already inside the current array
+        while (true) {
+            const FerOpcode op = d->m_opsPtr->op.op;
+            switch (op) {
+            case FerOpcode::BeginArray:
+                skipArrayDepth += 1;
+                break;
+            case FerOpcode::EndArray:
+                skipArrayDepth -= 1;
+
+                if (skipArrayDepth == 0) { // leaving the array at which we started
+                    return false;
+                }
+
+                d->m_opsPtr++; // skip the FerRepeatArray that follows
+                break;
+            case FerOpcode::EnterVariant:
+                d->m_opsPtr++; // skip the FerNesting that follows
+                break;
+            case FerOpcode::BeginVariantSignature:
+            case FerOpcode::EndVariantSignature:
+                // We should never run into these: BeginVariantSignature can only occur before BeginArray, and
+                // EndVariantSignature can only occur after leaving the last array of the signature.
+                assert(false);
+                [[fallthrough]];
+            default:
+                break;
+            }
+
+            d->m_opsPtr++;
+        }
+
+        unreachable();
+        return false; // just in case
+    }
 }
 
 bool Arguments::BcReader::beginArray(EmptyArrayOption option)
