@@ -246,6 +246,39 @@ static void test_reader_array()
         reader.endDict();
         TEST(reader.state() == Arguments::Finished);
     }
+
+    {
+        Arguments::Writer writer;
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(12);
+        writer.endArray();
+        const Arguments arg = writer.finish();
+
+        Arguments::BcReader reader(arg);
+        TEST(reader.state() == Arguments::BeginArray);
+        reader.beginArray();
+        TEST(reader.state() == Arguments::EndArray);
+        reader.endArray();
+        TEST(reader.state() == Arguments::Finished);
+    }
+
+    {
+        Arguments::Writer writer;
+        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        writer.writeByte(12);
+        writer.endArray();
+        writer.writeUint64(1234567890);
+        const Arguments arg = writer.finish();
+
+        Arguments::BcReader reader(arg);
+        TEST(reader.state() == Arguments::BeginArray);
+        reader.beginArray();
+        TEST(reader.state() == Arguments::EndArray);
+        reader.endArray();
+        TEST(reader.state() == Arguments::Uint64);
+        TEST(reader.readUint64() == 1234567890);
+        TEST(reader.state() == Arguments::Finished);
+    }
 }
 
 static void test_reader_variant()
