@@ -14,17 +14,18 @@ enum FerOpcode : byte
     ObjectPath,
     Signature,
     BeginArray,     // TODO? BeginFixedArray where element count can be trivially calculated from length
-    EndArray,       // alignment in this case is for the "go back" case, alignment for the "end of array"
-                    // case is in EndArrayData.
-                    // Always followed by a FerEndArray.
+    EndArray,       // Alignment and ioState are for the "end array" case (i.e. field after the array)
+                    // Always followed by a FerRepeatArray.
     EnterVariant,   // Always followed by a FerNesting giving the nesting depth where the variant
                     // occurs, so current nesting + variant's nesting can be checked against limits
 
-    BeginVariantSignature,  // Single complete type / Always followed by FerNesting /
+    BeginVariantSignature,  // Only occurs as first (index 0) field of FerCode vector.
+                            // Single complete type / Always followed by two FerNesting /
                             // assumes data starting from an unaligned address
-    EndVariant,
+    EndVariantSignature,
 
-    BeginMethodSignature,   // Never followed by FerNesting / assumes starting from an 8-byte aligned address
+    BeginMethodSignature,   // Only occurs as first (index 0) field of FerCode vector.
+                            // Never followed by FerNesting / assumes starting from an 8-byte aligned address
     End,
 };
 
