@@ -105,19 +105,19 @@ static const char s_nullBuffer[16] {}; // inert fake data for callers when readi
 
 
 // TODO must memoize signature -> FerCode to amortize its generation and get a real performance benefit
-Arguments::BcReader::BcReader(const Arguments &args)
+Arguments::BcReader::BcReader(const Arguments &args, FerEncodeOptions encodeOptions)
     : d(new Private)
 {
-    d->m_ops = ferCodeForSignature(args.signature());
+    d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
     d->m_data = args.d->m_data;
     beginRead();
 }
 
-Arguments::BcReader::BcReader(const Message &msg)
+Arguments::BcReader::BcReader(const Message &msg, FerEncodeOptions encodeOptions)
     : d(new Private)
 {
     const Arguments &args = msg.arguments();
-    d->m_ops = ferCodeForSignature(args.signature());
+    d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
     d->m_data = args.d->m_data;
     beginRead();
 }
