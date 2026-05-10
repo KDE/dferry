@@ -14,22 +14,22 @@
 
 #include <iostream> // TODO remove
 
-struct BsHash
+struct FlagsStringHash
 {
-    std::size_t operator() (const std::pair<bool, std::string> &p) const noexcept
+    std::size_t operator() (const std::pair<uint32_t, std::string> &p) const noexcept
     {
-        return std::hash<bool>{}(p.first) ^ std::hash<std::string>{}(p.second);
+        return std::hash<uint32_t>{}(p.first) ^ std::hash<std::string>{}(p.second);
     }
 };
 
 #ifdef HAVE_BOOST
-thread_local static boost::unordered_flat_map<std::pair<bool, std::string>,
+thread_local static boost::unordered_flat_map<std::pair<uint32_t, std::string>,
                                        boost::local_shared_ptr<std::vector<FerCode>>,
 #else
-thread_local static std::unordered_map<std::pair<bool, std::string>,
+thread_local static std::unordered_map<std::pair<uint32_t, std::string>,
                                        std::shared_ptr<std::vector<FerCode>>,
 #endif
-                                       BsHash> *encodedSignatureCache;
+                                       FlagsStringHash> *encodedSignatureCache;
 
 struct SignatureCacheDtor
 {
@@ -438,13 +438,14 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
 }
 
 static void optimizeFerOps(std::vector<FerCode> *ops);
+static void elideStructs(std::vector<FerCode> *ops);
 
 #ifdef HAVE_BOOST
 boost::local_shared_ptr<std::vector<FerCode>>
 #else
 std::shared_ptr<std::vector<FerCode>>
 #endif
-ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
+ferCodeForSignature(cstring signature, Arguments::SignatureType sigType, Arguments::FerEncodeOptions encodeOptions)
 {
     // TODO
     // - Also cache "invalid signature" results?
@@ -454,7 +455,11 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
 
     thread_local static std::string strSig;
     strSig.assign(signature.ptr, signature.length);
-    const bool isVariant = sigType == Arguments::VariantSignature;
+    // ### We could unset ElideStructs in case there are no structs in the signature, to avoid duplicate
+    // cache entries, but that would add a (small) additional overhead in case it changes nothing.
+    // It's probably not worth it - it would need to be done even on cache hits.
+    const uint32_t flags = 0 | (sigType == Arguments::VariantSignature ? 1 : 0)
+                             | (encodeOptions == Arguments::FerEncodeOptions::ElideStructs ? 2 : 0);
 
     // workaround for
     // - a GCC (< 16.0] bug that generates repeated expensive lookups for thread-local data
@@ -462,11 +467,11 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
     auto sigCache = encodedSignatureCache;
     if (!sigCache) {
 #ifdef HAVE_BOOST
-        sigCache = new boost::unordered_flat_map<std::pair<bool, std::string>,
+        sigCache = new boost::unordered_flat_map<std::pair<uint32_t, std::string>,
                                                            boost::local_shared_ptr<std::vector<FerCode>>,
-                                                           BsHash>();
+                                                           FlagsStringHash>();
 #else
-        sigCache = new std::unordered_map<std::pair<bool, std::string>,
+        sigCache = new std::unordered_map<std::pair<uint32_t, std::string>,
                                                     std::shared_ptr<std::vector<FerCode>>,
                                                     BsHash>();
 
@@ -475,7 +480,7 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
         encodedSignatureCache = sigCache;
     }
 
-    auto it = sigCache->find(std::make_pair(isVariant, strSig));
+    auto it = sigCache->find(std::make_pair(flags, strSig));
     if (it == sigCache->cend()) {
         // cache pruning, TODO better algorithm
         if (sigCache->size() > 128) {
@@ -484,8 +489,11 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType)
 
         std::vector<FerCode> ret;
         if (ferEncodeSignature(&signature, sigType, &ret)) {
+            if (encodeOptions == Arguments::FerEncodeOptions::ElideStructs) {
+                elideStructs(&ret);
+            }
             optimizeFerOps(&ret);
-            it = sigCache->emplace(std::make_pair(isVariant, strSig),
+            it = sigCache->emplace(std::make_pair(flags, strSig),
 #ifdef HAVE_BOOST
                                                boost::make_local_shared<std::vector<FerCode>>(ret)).first;
 #else
@@ -793,10 +801,51 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
                 return i;
             } else {
                 // do more passes through the array until we have seen all addresses
-                i = beginArrayIndex /* note, the for loop does in++ */;
+                i = beginArrayIndex; // note, the for loop does i++
             }
         }
     }
     return 0;
     assert(false);
+}
+
+// Remove "user-facing" BeginStruct and EndStruct, keep only the alignment changes.
+// *** This clobbers goBackOpIndex of arrays!!! *** - it should be called before the main part of
+// optimizeFerOps, which re-creates correct goBackOpIndex values.
+// Another reason it must be called before optimizeFerOps() is that it expects FerOps to carry the alignment
+// values for themselves instead of the next field, which is the state out of ferEncodeSignature() and
+// before optimizeFerOps().
+static void elideStructs(std::vector<FerCode> *ops)
+{
+    const bool isVariant = (*ops)[0].op.op == BeginVariantSignature;
+
+    bool alignmentFromPrecedingStruct = false;
+    size_t outIndex = isVariant ? 3 : 1;
+    size_t i = outIndex;
+    for (; i < ops->size(); i++) {
+        assert(outIndex <= i);
+
+        const FerOp ferOp = (*ops)[i].op;
+
+        if (ferOp.ioState == Arguments::BeginStruct) {
+            // apply the alignment to the next element
+            alignmentFromPrecedingStruct = true;
+            // otherwise drop from output
+        } else if (ferOp.ioState == Arguments::EndStruct) {
+            // This one has no effect at all except requiring an endStruct() call - drop it entirely
+        } else {
+            (*ops)[outIndex] = (*ops)[i];
+            if (alignmentFromPrecedingStruct) {
+                alignmentFromPrecedingStruct = false;
+                (*ops)[outIndex].op.postAlignExponent = 3; // it's not "post" yet, it's for this element
+            }
+            outIndex++;
+            if (ferOp.op == FerOpcode::EndArray || ferOp.op == FerOpcode::EnterVariant) {
+                //  don't misinterpret the following element as a FerOp
+                (*ops)[outIndex++] = (*ops)[++i];
+            }
+        }
+    }
+
+    ops->erase(ops->begin() + outIndex, ops->end());
 }

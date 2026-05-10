@@ -3,13 +3,20 @@
 
 
 public:
+
+enum class FerEncodeOptions
+{
+    None = 0,
+    ElideStructs
+};
+
 // error handling is done by asking state() or isError(), not by method return values.
 // occasionally looking at isError() is less work than checking every call.
 class DFERRY_EXPORT BcReader
 {
 public:
-    explicit BcReader(const Arguments &al);
-    explicit BcReader(const Message &msg);
+    explicit BcReader(const Arguments &args, FerEncodeOptions encodeOptions = FerEncodeOptions::None);
+    explicit BcReader(const Message &msg, FerEncodeOptions encodeOptions = FerEncodeOptions::None);
 #ifdef HAVE_BOOST
     BcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
     BcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
