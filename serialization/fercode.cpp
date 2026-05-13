@@ -14,7 +14,7 @@
 
 #include <iostream> // TODO remove
 
-struct FlagsStringHash
+template<> struct std::hash<std::pair<uint32_t, std::string>>
 {
     std::size_t operator() (const std::pair<uint32_t, std::string> &p) const noexcept
     {
@@ -24,12 +24,12 @@ struct FlagsStringHash
 
 #ifdef HAVE_BOOST
 thread_local static boost::unordered_flat_map<std::pair<uint32_t, std::string>,
-                                       boost::local_shared_ptr<std::vector<FerCode>>,
+                                       boost::local_shared_ptr<std::vector<FerCode>>>
 #else
 thread_local static std::unordered_map<std::pair<uint32_t, std::string>,
-                                       std::shared_ptr<std::vector<FerCode>>,
+                                       std::shared_ptr<std::vector<FerCode>>>
 #endif
-                                       FlagsStringHash> *encodedSignatureCache;
+                                       *encodedSignatureCache;
 
 struct SignatureCacheDtor
 {
@@ -468,12 +468,10 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType, Argumen
     if (!sigCache) {
 #ifdef HAVE_BOOST
         sigCache = new boost::unordered_flat_map<std::pair<uint32_t, std::string>,
-                                                           boost::local_shared_ptr<std::vector<FerCode>>,
-                                                           FlagsStringHash>();
+                                                           boost::local_shared_ptr<std::vector<FerCode>>>;
 #else
         sigCache = new std::unordered_map<std::pair<uint32_t, std::string>,
-                                                    std::shared_ptr<std::vector<FerCode>>,
-                                                    BsHash>();
+                                                    std::shared_ptr<std::vector<FerCode>>>;
 
 #endif
         (void)signatureCacheDtor; // arm it so that it will delete encodedSignatureCache at thread exit
