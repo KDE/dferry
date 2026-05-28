@@ -60,12 +60,17 @@ union FerCode
 
     bool operator==(const FerCode &other) const noexcept
     {
-        // Just compare all the bits, nest is maybe the cleanest / easiest way to do that.
-        // Note that reading "non-active" (not most recently written to) union members is undefined behavior,
-        // but supported by "some" compilers, notably GCC and Clang. It would be defined behavior in C, so
-        // it's not far-fetched for a C/C++ compiler to support it.
-        return nest.arrayDepth == other.nest.arrayDepth &&
-               nest.parenDepth == other.nest.parenDepth;
+        // ### The following doesn't check for possibly unused *bits*, but we aren't supposed to have any.
+        // In any case, these checks are more like statements of intent :>
+        static_assert(sizeof(FerOp) == sizeof(*this));
+        static_assert(sizeof(FerRepeatArray) == sizeof(*this));
+        static_assert(sizeof(FerNesting) == sizeof(*this));
+
+        // Technically, this may give false positives if *this and other do not have the same active member,
+        // but in typical use, operator==() is used on "real" FerCode vectors where types are determined by
+        // preceding elements, which are either equal or fail the equality check before we even get to compare
+        // subsequent differently typed elements.
+        return std::memcmp(this, &other, sizeof(*this)) == 0;
     }
 };
 
