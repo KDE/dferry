@@ -409,9 +409,9 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
             i++;
             if (i < ops.size()) {
                 // These bytes are the "go back index" for the array, I suppose we could also print it?
-                ret.append(" GoBack ");
+                ret.append(" GoBackOpIndex ");
                 ret.append(std::to_string(ops[i].repeatArray.goBackOpIndex));
-                ret.append(" post ");
+                ret.append(" GoBackAlign ");
                 ret.append(printableAlignExponent(ops[i].repeatArray.goBackAlignExponent));
                 ret.pop_back(); // remove trailing space
             } else {
@@ -581,10 +581,11 @@ static bool isVarLengthOp(FerOpcode op)
 
 struct ArrayAlignments
 {
-    uint32 contentsBeginAddrSet;    // addresses before first element of array (just after the length field);
-                                    // if there are zero elements, also the end address of the array
-    uint32 afterElementAddrSet;     // addresses after any element of array
-    // Both of these addrSets are addresses *before* alignment to next array element!
+    uint32 beforeContentsAddrSet;   // Addresses before first element of array (just after the length field),
+                                    // not yet aligned to first element
+    uint32 afterContentsAddrSet;    // Addresses after the array; note that alignment to first element is
+                                    // applied even if there is no first element (empty array)! - this is a
+                                    // quirk of the DBus serialization rules.
 };
 
 // returns how far it has processed arrays (index into ops "pointing" to an EndArray)
@@ -680,9 +681,12 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
 
             const ArrayAlignments arrayAlign = arrAlignIt->second;
             // We now do just *one* pass through the array in which we must consider all possible alignments
-            // (as determined by optimizeArray) at the same time. If we are before the beginning of the nth
-            // element, the address is the end of the (n - 1)th element, so afterElementAddrSet is included.
-            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
+            // (as determined by optimizeArray) at the same time. Note that "beforeContentsAddrSet" may
+            // contain more possible alignments than our current addrSet because our BeginArray may be inside
+            // another array, and addresses inside that one may have shifted due to a variable number of
+            // preceding elements.
+
+            addrSet = arrayAlign.beforeContentsAddrSet;
 
             beginArrayIndexes.push(i);
 
@@ -704,16 +708,15 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
             const FerCode beginArrayOp = (*ops)[beginArrayIndex];
             byte loopBackAlignExponent = beginArrayOp.op.postAlignExponent;
             if (loopBackAlignExponent) {
-                const uint32 afterElementAlignedAddrs = applyAlignment(arrayAlign.afterElementAddrSet,
-                                                                       beginArrayOp.op);
-                if (afterElementAlignedAddrs == arrayAlign.afterElementAddrSet) {
+                const uint32 afterContentsAlignedAddrs = applyAlignment(arrayAlign.afterContentsAddrSet,
+                                                                        beginArrayOp.op);
+                if (afterContentsAlignedAddrs == arrayAlign.afterContentsAddrSet) {
                     // alignment did nothing -> is not necessary -> remove it
                     loopBackAlignExponent = 0;
                 }
             }
 
-            // contentsBeginAddrSet is included because the array may contain zero elements
-            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
+            addrSet = arrayAlign.afterContentsAddrSet;
 
             (*ops)[++i] = FerRepeatArray{loopBackAlignExponent, static_cast<uint16>(goBackIndex)};
 
@@ -745,7 +748,7 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
             arrAlignIt = arrayAlignments->emplace_hint(arrAlignIt /*hint*/,
                                                 std::make_pair(beginArrayIndex, ArrayAlignments{0, 0}));
         }
-        arrAlignIt->second.contentsBeginAddrSet |= addrSet;
+        arrAlignIt->second.beforeContentsAddrSet |= addrSet;
     }
 
     for (size_t i = beginArrayIndex + 1; ; i++) {
@@ -768,11 +771,10 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
             i++; // skip FerEndArray
 
             // Our data position is now after the last element of the inner array.
-            // The array may be empty, so our position could be right after the array length field as well.
             auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
             assert(innerAlignIt != arrayAlignments->cend());
             ArrayAlignments &arrayAlign = innerAlignIt->second;
-            addrSet = arrayAlign.contentsBeginAddrSet | arrayAlign.afterElementAddrSet;
+            addrSet = arrayAlign.afterContentsAddrSet;
 
         } else if (ferOp.op == FerOpcode::EndArray) {
             bool noMoreAddrSetChanges = false;
@@ -780,19 +782,19 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
             auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
             assert(innerAlignIt != arrayAlignments->cend());
             ArrayAlignments &arrayAlign = innerAlignIt->second;
-            if (arrayAlign.afterElementAddrSet) {
+            if (arrayAlign.afterContentsAddrSet) {
                 // this is not our first pass through that array
-                addrSet |= arrayAlign.afterElementAddrSet;
-                // if addrSet had no bits that are not in afterElementAddrSet, we have not seen any new
+                addrSet |= arrayAlign.afterContentsAddrSet;
+                // if addrSet had no bits that are not in afterContentsAddrSet, we have not seen any new
                 // addresses, and doing more iterations will only repeat previous results -> we're done
-                noMoreAddrSetChanges = arrayAlign.afterElementAddrSet == addrSet;
+                noMoreAddrSetChanges = arrayAlign.afterContentsAddrSet == addrSet;
             } else {
                 // This *is* our first pass through that array. If the alignment before and after the first
                 // element is the same, we're already done.
-                noMoreAddrSetChanges = arrayAlign.contentsBeginAddrSet == addrSet;
+                noMoreAddrSetChanges = arrayAlign.beforeContentsAddrSet == addrSet;
             }
 
-            arrayAlign.afterElementAddrSet = addrSet;
+            arrayAlign.afterContentsAddrSet = addrSet;
 
             if (noMoreAddrSetChanges) {
                 return i;
@@ -802,8 +804,10 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
             }
         }
     }
-    return 0;
+
     assert(false);
+    unreachable();
+    return 0;
 }
 
 // Remove "user-facing" BeginStruct and EndStruct, keep only the alignment changes.
