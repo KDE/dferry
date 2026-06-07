@@ -764,16 +764,16 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
             // Since we skip "our" BeginArray, what we have here is another array inside the current one
 
             addrSet = applyAddition(addrSet, FerOpcode::Copy4); // array length field!
-            const size_t beginArrayIndex = i;
+            const size_t innerBeginArrayIndex = i;
 
             i = optimizeArrays(ops, addrSet, i, arrayAlignments);
             assert((*ops)[i].op.op == FerOpcode::EndArray);
             i++; // skip FerEndArray
 
             // Our data position is now after the last element of the inner array.
-            auto innerAlignIt = arrayAlignments->find(beginArrayIndex);
+            auto innerAlignIt = arrayAlignments->find(innerBeginArrayIndex);
             assert(innerAlignIt != arrayAlignments->cend());
-            ArrayAlignments &arrayAlign = innerAlignIt->second;
+            const ArrayAlignments &arrayAlign = innerAlignIt->second;
             addrSet = arrayAlign.afterContentsAddrSet;
 
         } else if (ferOp.op == FerOpcode::EndArray) {
