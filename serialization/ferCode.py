@@ -424,7 +424,7 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> None:
     """
     Main optimizer: align merging, array loopback tuning, variant/struct/variant nesting tracking.
     """
-    # key: BeginArray index → {"begin": addr_set, "after": addr_set}
+    # key: BeginArray index → {"before": addr_set, "after": addr_set}
     array_alignments: Dict[int, Dict[str, int]] = {}
     begin_array_indexes: List[int] = []
 
@@ -475,27 +475,26 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> None:
                 optimize_arrays(ops, addr_set, i, array_alignments)
 
             arr_align = array_alignments[i]
-            addr_set = arr_align["begin"] | arr_align["after"]
+            addr_set = arr_align["before"]
 
             begin_array_indexes.append(i)
 
         elif fer_op.opcode == FerOpcode.END_ARRAY:
             begin_arr_idx = begin_array_indexes.pop()
+            assert ops[begin_arr_idx].opcode == FerOpcode.BEGIN_ARRAY
+
             arr_align = array_alignments[begin_arr_idx]
 
-            # Find go-back index
             go_back_idx = begin_arr_idx + 1
-            begin_arr_item = ops[begin_arr_idx]
-            assert isinstance(begin_arr_item, FerOp)
-            loop_back_align = begin_arr_item.post_align_exponent
 
             # Can we skip alignment on loopback?
+            loop_back_align = ops[begin_arr_idx].post_align_exponent
             if loop_back_align:
-                after_elem_aligned = apply_alignment(arr_align["after"], loop_back_align)
-                if after_elem_aligned == arr_align["after"]:
+                after_contents_aligned = apply_alignment(arr_align["after"], loop_back_align)
+                if after_contents_aligned == arr_align["after"]:
                     loop_back_align = 0
 
-            addr_set = arr_align["begin"] | arr_align["after"]
+            addr_set = arr_align["after"]
 
             i += 1
             ops[i] = FerRepeatArray(go_back_align_exponent=loop_back_align, go_back_op_index=go_back_idx)
@@ -515,11 +514,12 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
                     begin_array_index: int,
                     array_alignments: Dict[int, Dict[str, int]]) -> int:
     """Pre-pass to collect possible alignment states for array elements."""
-    # Initialize entry
+    assert ops[begin_array_index].opcode == FerOpcode.BEGIN_ARRAY
+
     if begin_array_index not in array_alignments:
-        array_alignments[begin_array_index] = {"begin": addr_set, "after": 0}
+        array_alignments[begin_array_index] = {"before": addr_set, "after": 0}
     else:
-        array_alignments[begin_array_index]["begin"] |= addr_set
+        array_alignments[begin_array_index]["before"] |= addr_set
 
     i = begin_array_index + 1
     while i < len(ops):
@@ -530,36 +530,41 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
 
         if is_basic_addition_op(op.opcode):
             addr_set = apply_addition(addr_set, op.opcode)
+
         elif is_var_length_op(op.opcode):
             addr_set = 0b11111111
+
         elif op.opcode == FerOpcode.BEGIN_ARRAY:
             # Nested array
             addr_set = apply_addition(addr_set, FerOpcode.COPY4)
-            inner_end = optimize_arrays(ops, addr_set, i, array_alignments)
-            i = inner_end
+            inner_begin_array_index = i
+
+            i = optimize_arrays(ops, addr_set, i, array_alignments)
+            assert ops[i].opcode == FerOpcode.END_ARRAY
+            i += 1 # skip FerEndArray
+
             # After inner array
-            inner_align = array_alignments[i]
-            addr_set = inner_align["begin"] | inner_align["after"]
+            inner_align = array_alignments[inner_begin_array_index]
+            addr_set = inner_align["after"]
+
         elif op.opcode == FerOpcode.END_ARRAY:
-            # Finalize current array pass
+            no_more_addr_set_changes = False
+
             arr_data = array_alignments[begin_array_index]
-            if arr_data["after"]:
+            if arr_data["after"] != 0:
                 # We've seen this array before
                 addr_set |= arr_data["after"]
-                if addr_set == arr_data["after"]:
-                    # Converged → done
-                    arr_data["after"] = addr_set
-                    return i
+                no_more_addr_set_changes = arr_data["after"] == addr_set
             else:
                 # First pass: initial alignment = after alignment?
-                if arr_data["begin"] == addr_set:
-                    arr_data["after"] = addr_set
-                    return i
-            # Update after
-            arr_data["after"] |= addr_set
-            # Loop back
-            i = begin_array_index
-            continue  # re-evaluate with new addr_set
+                no_more_addr_set_changes = arr_data["before"] == addr_set
+
+            arr_data["after"] = addr_set
+
+            if (no_more_addr_set_changes):
+                return i
+            else:
+                i = begin_array_index # note, the loop will do i += 1 - that is intended
         i += 1
 
     return i
