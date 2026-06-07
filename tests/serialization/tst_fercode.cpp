@@ -101,13 +101,25 @@ static void test_arrayEncode()
     my_shared_ptr<std::vector<FerCode>> ops;
 
     ops = ferCodeForSignature(cstring("axoo"));
-    //std::cout << printableFerOps(ops) << '\n';
-
-    ops = ferCodeForSignature(cstring("asixobiobxobn"));
-    //std::cout << printableFerOps(ops) << '\n';
+    TEST((*ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::BeginArray},
+        FerOp{3, FerOpcode::BeginArray, Arguments::Int64},
+        FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
+        FerOp{0, FerOpcode::EndArray, Arguments::ObjectPath},
+        FerRepeatArray{0, 2},
+        FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath},
+        FerOp{0, FerOpcode::ObjectPath, Arguments::Finished},
+        FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 
     ops = ferCodeForSignature(cstring("a{is}"));
-    //std::cout << printableFerOps(ops) << '\n';
+    TEST((*ops == std::vector<FerCode>{
+        FerOp{0, FerOpcode::BeginMethodSignature, Arguments::BeginDict},
+        FerOp{3, FerOpcode::BeginArray, Arguments::Int32},
+        FerOp{0, FerOpcode::Copy4, Arguments::String},
+        FerOp{0, FerOpcode::String, Arguments::EndDict},
+        FerOp{0, FerOpcode::EndArray, Arguments::Finished},
+        FerRepeatArray{3, 2},
+        FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 
     ops = ferCodeForSignature(cstring("a(ad)"));
     TEST((*ops == std::vector<FerCode>{
