@@ -214,28 +214,31 @@ bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
     FerOp ferOp = d->m_opsPtr->op;
     d->m_opsPtr++;
 
-    const byte* newPtr = d->m_dataPtr;
-    const uint32 arrayLength = *reinterpret_cast<const uint32 *>(newPtr);
-    newPtr += sizeof(uint32);
+    const byte* const lengthPtr = d->m_dataPtr;
+
+    const byte* newPtr = d->m_dataPtr + sizeof(uint32);
+    if (newPtr > d->m_dataEnd) {
+        return false;
+    }
+
+    const uint32 arrayLength = *reinterpret_cast<const uint32 *>(lengthPtr);
 
     // Align newPtr to array contents before using it to calculate endPtr. We also need the aligned beginning
     // of the array contents for empty arrays because that is where the next data field starts. It's a quirk
     // of DBus serialization that even zero elements are aligned.
+    const byte *unalignedNewPtr = newPtr;
     if (ferOp.postAlignExponent) {
         assert(ferOp.postAlignExponent == 3); // we're already 4-aligned at / after the length field
-
-        const byte *unalignedNewPtr = newPtr;
         newPtr = align(newPtr, 8);
-        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
-            // TODO error
-            assert(false);
-        }
     }
 
     const byte *endPtr = newPtr + arrayLength;
     if (endPtr > d->m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
-        // TODO error
-        assert(false);
+        return false;
+    }
+    // Check padding after length to make sure that padding bytes are in bounds
+    if (!isPaddingZero(unalignedNewPtr, newPtr)) {
+        return false;
     }
 
     d->m_dataPtr = newPtr;
