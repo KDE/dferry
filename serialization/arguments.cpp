@@ -602,7 +602,7 @@ static void chopFirst(cstring *s)
 // static
 bool Arguments::isStringValid(cstring string)
 {
-    if (!string.ptr || string.length + 1 >= MaxArrayLength || string.ptr[string.length] != 0) {
+    if (!string.ptr || string.length + 1 > MaxArrayLength || string.ptr[string.length] != 0) {
         return false;
     }
     // check that there are no embedded nulls, exploiting the highly optimized strlen...
@@ -617,7 +617,7 @@ static inline bool isObjectNameLetter(char c)
 // static
 bool Arguments::isObjectPathValid(cstring path)
 {
-    if (!path.ptr || path.length + 1 >= MaxArrayLength || path.ptr[path.length] != 0) {
+    if (!path.ptr || path.length > 255 || path.ptr[path.length] != 0) {
         return false;
     }
     char prevLetter = path.ptr[0];
