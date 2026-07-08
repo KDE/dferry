@@ -404,7 +404,9 @@ def apply_addition(addr_set: int, add_opcode: FerOpcode) -> int:
         return addr_set  # no change for 8-alignment
     else:
         raise ValueError("Invalid addition opcode")
+    return apply_addition_direct(addr_set, addend)
 
+def apply_addition_direct(addr_set: int, addend: int) -> int:
     # rotate left (with 8-bit wrap)
     addr_set = addr_set << addend;
     addr_set |= addr_set >> 8;
@@ -420,7 +422,7 @@ def is_basic_addition_op(opcode: FerOpcode) -> bool:
 def is_var_length_op(opcode: FerOpcode) -> bool:
     return opcode in (FerOpcode.STRING, FerOpcode.OBJECT_PATH, FerOpcode.SIGNATURE, FerOpcode.ENTER_VARIANT)
 
-def optimize_fer_ops(ops: List[FerCodeItem]) -> None:
+def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, Dict[str, int]]:
     """
     Main optimizer: align merging, array loopback tuning, variant/struct/variant nesting tracking.
     """
@@ -499,15 +501,13 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> None:
             i += 1
             ops[i] = FerRepeatArray(go_back_align_exponent=loop_back_align, go_back_op_index=go_back_idx)
 
-            if not begin_array_indexes:
-                # leaving the outermost level of nested array, we won't need that anymore
-                array_alignments.clear()
-
         else:
             if is_var_length_op(fer_op.opcode):
                 addr_set = any_addr_set
 
         i += 1
+
+    return array_alignments
 
 
 def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
