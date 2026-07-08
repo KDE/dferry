@@ -149,15 +149,30 @@ bool _Tvar_CgReader<Consumer>::readAll()
     {
         #define _Tvar_ReadType uint32 // _Tignore_
         #define _Tvar_PostAlign 8 // _Tignore_
+        #define _Tvar_FixedAlign 8 // _Tignore_
+        #define _Tvar_SpanLength 0 // _Tignore_
+        // _TsnipBegin_CheckSpanLength
+        if (m_dataPtr + _Tvar_SpanLength > m_dataEnd) {
+            goto errorReturn;
+        }
+        // _TsnipEnd_CheckSpanLength
+        // _Tinsert_CheckSpanLength
         const byte* newPtr = m_dataPtr + sizeof(_Tvar_ReadType);
         // _TsnipBegin_Align
         const byte *const unalignedNewPtr = newPtr;
         newPtr = align(newPtr, _Tvar_PostAlign);
         // _TsnipEnd_Align
+        // _TsnipBegin_AlignFixed
+        const byte *const unalignedNewPtr = newPtr;
+        newPtr += _Tvar_FixedAlign;
+        // _TsnipEnd_AlignFixed
         // _Tinsert_Align
+        // _TsnipBegin_CheckLength
         if (newPtr > m_dataEnd) {
             goto errorReturn;
         }
+        // _TsnipEnd_CheckLength
+        // _Tinsert_CheckLength
         // _TsnipBegin_CheckPadding
         if (!isPaddingZero(unalignedNewPtr, newPtr)) {
             goto errorReturn;
@@ -173,11 +188,9 @@ bool _Tvar_CgReader<Consumer>::readAll()
     // _TsnipBegin_ReadString
     {
         #define _Tvar_LengthType uint32 // _Tignore_
-        #define _Tvar_PostAlign 8 // _Tignore_
         const byte* newPtr = m_dataPtr + sizeof(_Tvar_LengthType);
-        if (newPtr > m_dataEnd) {
-            goto errorReturn;
-        }
+        // _Tinsert_CheckStringLengthFieldLength
+
         const uint32 len = *reinterpret_cast<const _Tvar_LengthType *>(m_dataPtr);
         const char* retPtr = reinterpret_cast<const char*>(newPtr);
         newPtr += len + 1 /* trailing nul */;
@@ -197,6 +210,35 @@ bool _Tvar_CgReader<Consumer>::readAll()
     // _TsnipBegin_ReadArray
     {
         const byte *const savedDataEnd = m_dataEnd;
+
+        const byte* newPtr = m_dataPtr + sizeof(uint32);
+        // _Tinsert_CheckArrayLengthFieldLength
+        const uint32 arrayLength = *reinterpret_cast<const uint32 *>(m_dataPtr);
+
+        // _TsnipBegin_BeforeArrayAlign
+        // Note: next line is either "newPtr = align(newPtr, 8);" or "newPtr += 4" // _Tignore_
+        // _Tinsert_AlignInBeforeArrayAlign
+        const byte *const endPtr = newPtr + arrayLength;
+        if (endPtr > m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
+            goto errorReturn;
+        }
+        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
+            goto errorReturn;
+        }
+
+        m_dataEnd = endPtr;
+        // _TsnipEnd_BeforeArrayAlign
+        // _TsnipBegin_BeforeArrayNoAlign
+        const byte *const endPtr = newPtr + arrayLength;
+        if (endPtr > m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
+            goto errorReturn;
+        }
+
+        m_dataEnd = endPtr;
+        // _TsnipEnd_BeforeArrayNoAlign
+        // _Tinsert_BeforeArray
+        m_dataPtr = newPtr;
+
         if (!_Tvar_ReadArray()) {
             goto errorReturn;
         }
@@ -222,40 +264,6 @@ errorReturn:
 template <class Consumer>
 bool _Tvar_CgReader<Consumer>::_Tvar_ReadArray()
 {
-    const byte* newPtr = m_dataPtr;
-    if (newPtr + sizeof(uint32) > m_dataEnd) {
-        return false;
-    }
-    const uint32 arrayLength = *reinterpret_cast<const uint32 *>(newPtr);
-    newPtr += sizeof(uint32);
-
-    // _TsnipBegin_BeforeArrayAlign
-    {
-        const byte *const unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 8);
-        const byte *const endPtr = newPtr + arrayLength;
-        if (endPtr > m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
-            return false;
-        }
-        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
-            return false;
-        }
-        m_dataEnd = endPtr;
-    }
-    // _TsnipEnd_BeforeArrayAlign
-    // _TsnipBegin_BeforeArrayNoAlign
-    {
-        const byte *const endPtr = newPtr + arrayLength;
-        if (endPtr > m_dataEnd || arrayLength > Arguments::MaxArrayLength) {
-            return false;
-        }
-        m_dataEnd = endPtr;
-    }
-    // _TsnipEnd_BeforeArrayNoAlign
-    // _Tinsert_BeforeArray
-
-    m_dataPtr = newPtr;
-
     if (m_dataPtr < m_dataEnd) {
         while (true) {
             // _Tinsert_ArgReaders
