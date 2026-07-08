@@ -150,9 +150,11 @@ def main():
                 else:
                     reader_callback_decls.append(f'    void {receiver_name}(bool arg);\n')
 
-                insertions = {} if fer_op.post_align_exponent == 0 else \
-                             {'Align': templates['Align'].render({'PostAlign':
+                insertions = {}
+                if fer_op.post_align_exponent != 0:
+                    insertions['Align'] = templates['Align'].render({'PostAlign':
                                                                   (1 << fer_op.post_align_exponent)}, {})}
+                    insertions['CheckPadding'] = templates['CheckPadding'].render({}, {})
 
                 arg_reader_blocks.append(templates['ReadPrimitive'].render(
                     {'ReadType': data_type, 'ProcessArgFunc': receiver_name},
@@ -165,9 +167,11 @@ def main():
                 arg_num += 1
                 reader_callback_decls.append(f'    void {receiver_name}(const char *ptr, uint32 len);\n')
 
-                insertions = {} if fer_op.post_align_exponent == 0 else \
-                             {'StringAlign': templates['Align'].render({'PostAlign':
+                insertions = {}
+                if fer_op.post_align_exponent != 0:
+                    insertions['StringAlign'] = templates['Align'].render({'PostAlign':
                                                                         1 << fer_op.post_align_exponent}, {})}
+                    insertions['CheckPaddingAfterString'] = templates['CheckPadding'].render({}, {})
 
                 arg_reader_blocks.append(templates['ReadString'].render(
                     {'LengthType': length_type, 'ProcessArgFunc': receiver_name},

@@ -151,13 +151,19 @@ bool _Tvar_CgReader<Consumer>::readAll()
         #define _Tvar_PostAlign 8 // _Tignore_
         const byte* newPtr = m_dataPtr + sizeof(_Tvar_ReadType);
         // _TsnipBegin_Align
+        const byte *const unalignedNewPtr = newPtr;
         newPtr = align(newPtr, _Tvar_PostAlign);
-        // TODO? check padding is zero
         // _TsnipEnd_Align
         // _Tinsert_Align
         if (newPtr > m_dataEnd) {
             goto errorReturn;
         }
+        // _TsnipBegin_CheckPadding
+        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
+            goto errorReturn;
+        }
+        // _TsnipEnd_CheckPadding
+        // _Tinsert_CheckPadding
 
         const _Tvar_ReadType *ret = reinterpret_cast<const _Tvar_ReadType *>(m_dataPtr);
         m_dataPtr = newPtr;
@@ -179,6 +185,7 @@ bool _Tvar_CgReader<Consumer>::readAll()
         if (newPtr > m_dataEnd || len + 1 > Arguments::MaxArrayLength) {
             goto errorReturn;
         }
+        // _Tinsert_CheckPaddingAfterString
 
         // TODO? UTF-8 and object path / signature validation?
 
