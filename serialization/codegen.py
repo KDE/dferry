@@ -299,6 +299,11 @@ def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, Arr
     return ret
 
 
+def addr_set_shift_distance(before: int, shifted: int) -> int:
+    for i in range(8):
+        if before << i == shifted:
+            return i
+    return -1
 
 def main():
     if len(sys.argv) != 4:
@@ -463,29 +468,47 @@ def main():
                 arg_reader_blocks_stack.append([])
                 arg_reader_blocks = arg_reader_blocks_stack[-1]
 
-                array_stack.append(parse_array_name)
+                array_stack.append((parse_array_name, array_alignments[i].after))
 
             case FerOpcode.END_ARRAY:
-                parse_array_name = array_stack.pop()
+                parse_array_name, end_array_addr_set = array_stack.pop()
 
                 insertions = {'ArgReaders': indent(''.join(arg_reader_blocks), '        ')}
 
                 if fer_op.post_align_exponent != 0:
-                    insertions['AfterArrayAlign'] = templates['AfterArrayAlign'].render({},
-                                                    {'AfterArrayAlign': 1 << fer_op.post_align_exponent})
-                # TODO see if we can make this fixed length, too, if possible:
-                # const byte *newPtr = align(unalignedNewPtr, _Tvar_ArrayRepeatAlign);
-                # It's not so easy:
-                # - We don't directly have access to the span data for the last array element here
-                # - Does span data even work for our purposes?
-                # - Review the DBus spec for alignemnt handling at end of array!
+                    # Apply fixed or variable length alignment (and find out which one we have)
+                    aligned_after_addrs = apply_alignment(end_array_addr_set, fer_op.post_align_exponent)
+                    after_shift = addr_set_shift_distance(end_array_addr_set, aligned_after_addrs)
+                    assert after_shift != 0 # post_align_exponent would be 0 in that case
+
+                    if after_shift >= 0:
+                        align_insertions = {'AlignmentForAfterArrayAlign': templates['AlignFixed'].render(
+                                                    {'FixedAlign': after_shift}, {})}
+                    else:
+                        align_insertions = {'AlignmentForAfterArrayAlign': templates['Align'].render(
+                                                    {'PostAlign': (1 << fer_op.post_align_exponent)}, {})}
+
+                    insertions['AfterArrayAlign'] = templates['AfterArrayAlign'].render(
+                                                    {}, align_insertions)
 
                 i +=1
                 fer_repeat_array = fer_code[i]
                 if fer_repeat_array.go_back_align_exponent != 0:
-                    repeat_alignment = 1 << fer_repeat_array.go_back_align_exponent
+                    # Apply fixed or variable length alignment (and find out which one we have)
+                    aligned_repeat_addrs = apply_alignment(end_array_addr_set,
+                                                           fer_repeat_array.go_back_align_exponent)
+                    repeat_shift = addr_set_shift_distance(end_array_addr_set, aligned_repeat_addrs)
+                    assert repeat_shift != 0 # go_back_align_exponent would be 0 in that case
+
+                    if repeat_shift >= 0:
+                        align_ins = templates['AlignFixed'].render({'FixedAlign': repeat_shift}, {})
+                    else:
+                        repeat_alignment = 1 << fer_repeat_array.go_back_align_exponent
+                        align_ins = templates['Align'].render({'PostAlign': repeat_alignment}, {})
+
+                    align_insertions = {'AlignmentForArrayRepeatAlign': indent(align_ins, '        ')}
                     insertions['ArrayRepeatAlign'] = templates['ArrayRepeatAlign'].render(
-                                                     {'ArrayRepeatAlign': repeat_alignment}, {})
+                                                     {}, align_insertions)
 
                 def_helper_methods.append(templates['ParseArray'].render(
                     {'CgReader': class_name,
