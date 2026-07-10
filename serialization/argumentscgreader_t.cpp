@@ -273,9 +273,8 @@ bool _Tvar_CgReader<Consumer>::_Tvar_ReadArray()
             }
             // _TsnipBegin_ArrayRepeatAlign
             {
-                #define _Tvar_ArrayRepeatAlign 8 // _Tignore_
-                const byte *const unalignedNewPtr = m_dataPtr;
-                const byte *newPtr = align(unalignedNewPtr, _Tvar_ArrayRepeatAlign);
+                const byte* newPtr = m_dataPtr;
+                // _Tinsert_AlignmentForArrayRepeatAlign
                 if (newPtr > m_dataEnd) {
                     return false;
                 }
@@ -296,9 +295,8 @@ bool _Tvar_CgReader<Consumer>::_Tvar_ReadArray()
     // _TsnipBegin_AfterArrayAlign
     // Must do this because of the convention that previous element applies alignment for next element
     {
-        #define _Tvar_AfterArrayAlign 8 // _Tignore_
-        const byte *const unalignedNewPtr = m_dataPtr;
-        const byte *newPtr = align(unalignedNewPtr, _Tvar_AfterArrayAlign);
+        const byte* newPtr = m_dataPtr;
+        // _Tinsert_AlignmentForAfterArrayAlign
         if (newPtr > m_dataEnd) {
             return false;
         }
