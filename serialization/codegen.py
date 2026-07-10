@@ -359,7 +359,10 @@ def main():
 
         match fer_op.opcode:
             case FerOpcode.COPY1 | FerOpcode.COPY2 | FerOpcode.COPY4 | FerOpcode.COPY8:
-                data_state = fer_code[i - 1].io_state
+                try:
+                    data_state = fer_code[i - 1].io_state
+                except: # fer_code[i - 1] was probably a RepeatArrayInfo
+                    data_state = fer_code[i - 2].io_state
                 data_type = c_primitive_type(data_state)
 
                 receiver_name = 'processArg' + str(arg_num)
