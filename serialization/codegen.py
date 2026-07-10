@@ -218,7 +218,7 @@ def has_length_field(fer_code: FerCodeItem) -> bool:
 #   where the minimum length will be exceeded for some span starting addresses.
 #
 # The result is: Dict[op_index, SpanItem]
-def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, (int, int)]) \
+def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, ArrayAlignments]) \
                         -> Dict[int, SpanItem]:
 
     ret: Dict[int, SpanItem] = {}
@@ -276,14 +276,14 @@ def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, (in
             begin_array_indexes.append(i)
             arr_align = array_alignments[i]
 
-            addr_set = arr_align["before"]
+            addr_set = arr_align.before
 
         elif fer_op.opcode == FerOpcode.END_ARRAY:
             begin_arr_idx = begin_array_indexes.pop()
             assert ops[begin_arr_idx].opcode == FerOpcode.BEGIN_ARRAY
             arr_align = array_alignments[begin_arr_idx]
 
-            addr_set = arr_align["after"]
+            addr_set = arr_align.after
 
             i += 1 # skip FerRepeatArray
 
@@ -311,7 +311,7 @@ def main():
 
     fer_code = ferCode.fer_encode_signature(signature)
 
-    array_alignments: Dict[int, Dict[str, int]] = ferCode.optimize_fer_ops(fer_code)
+    array_alignments: Dict[int, ArrayAlignments] = ferCode.optimize_fer_ops(fer_code)
 
     span_addrs: Dict[int, SpanItem] = calculate_span_addrs(fer_code, array_alignments)
 

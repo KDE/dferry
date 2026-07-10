@@ -83,6 +83,10 @@ class FerNesting:
 # Type for heterogeneous bytecode list
 FerCodeItem = Union[FerOp, FerRepeatArray, FerNesting]
 
+@dataclass
+class ArrayAlignments:
+    before: int
+    after: int
 
 # ============== Nesting Tracking ==============
 
@@ -422,12 +426,12 @@ def is_basic_addition_op(opcode: FerOpcode) -> bool:
 def is_var_length_op(opcode: FerOpcode) -> bool:
     return opcode in (FerOpcode.STRING, FerOpcode.OBJECT_PATH, FerOpcode.SIGNATURE, FerOpcode.ENTER_VARIANT)
 
-def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, Dict[str, int]]:
+def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
     """
     Main optimizer: align merging, array loopback tuning, variant/struct/variant nesting tracking.
     """
-    # key: BeginArray index → {"before": addr_set, "after": addr_set}
-    array_alignments: Dict[int, Dict[str, int]] = {}
+    # key: BeginArray index
+    array_alignments: Dict[int, ArrayAlignments] = {}
     begin_array_indexes: List[int] = []
 
     is_variant = ops[0].opcode == FerOpcode.BEGIN_VARIANT_SIGNATURE
@@ -477,7 +481,7 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, Dict[str, int]]:
                 optimize_arrays(ops, addr_set, i, array_alignments)
 
             arr_align = array_alignments[i]
-            addr_set = arr_align["before"]
+            addr_set = arr_align.before
 
             begin_array_indexes.append(i)
 
@@ -492,11 +496,11 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, Dict[str, int]]:
             # Can we skip alignment on loopback?
             loop_back_align = ops[begin_arr_idx].post_align_exponent
             if loop_back_align:
-                after_contents_aligned = apply_alignment(arr_align["after"], loop_back_align)
-                if after_contents_aligned == arr_align["after"]:
+                after_contents_aligned = apply_alignment(arr_align.after, loop_back_align)
+                if after_contents_aligned == arr_align.after:
                     loop_back_align = 0
 
-            addr_set = arr_align["after"]
+            addr_set = arr_align.after
 
             i += 1
             ops[i] = FerRepeatArray(go_back_align_exponent=loop_back_align, go_back_op_index=go_back_idx)
@@ -512,14 +516,14 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, Dict[str, int]]:
 
 def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
                     begin_array_index: int,
-                    array_alignments: Dict[int, Dict[str, int]]) -> int:
+                    array_alignments: Dict[int, ArrayAlignments]) -> int:
     """Pre-pass to collect possible alignment states for array elements."""
     assert ops[begin_array_index].opcode == FerOpcode.BEGIN_ARRAY
 
     if begin_array_index not in array_alignments:
-        array_alignments[begin_array_index] = {"before": addr_set, "after": 0}
+        array_alignments[begin_array_index] = ArrayAlignments(addr_set, 0)
     else:
-        array_alignments[begin_array_index]["before"] |= addr_set
+        array_alignments[begin_array_index].before |= addr_set
 
     i = begin_array_index + 1
     while i < len(ops):
@@ -545,21 +549,21 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
 
             # After inner array
             inner_align = array_alignments[inner_begin_array_index]
-            addr_set = inner_align["after"]
+            addr_set = inner_align.after
 
         elif op.opcode == FerOpcode.END_ARRAY:
             no_more_addr_set_changes = False
 
             arr_data = array_alignments[begin_array_index]
-            if arr_data["after"] != 0:
+            if arr_data.after != 0:
                 # We've seen this array before
-                addr_set |= arr_data["after"]
-                no_more_addr_set_changes = arr_data["after"] == addr_set
+                addr_set |= arr_data.after
+                no_more_addr_set_changes = arr_data.after == addr_set
             else:
                 # First pass: initial alignment = after alignment?
-                no_more_addr_set_changes = arr_data["before"] == addr_set
+                no_more_addr_set_changes = arr_data.before == addr_set
 
-            arr_data["after"] = addr_set
+            arr_data.after = addr_set
 
             if (no_more_addr_set_changes):
                 return i
