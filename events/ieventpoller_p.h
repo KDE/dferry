@@ -21,45 +21,40 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef STRINGTOOLS_H
-#define STRINGTOOLS_H
+#ifndef IEVENTPOLLER_P_H
+#define IEVENTPOLLER_P_H
 
+#include "eventdispatcher.h"
+
+#include "platform_p.h"
 #include "types.h"
 
-#include <sstream>
-#include <string>
-#include <vector>
+class IioEventListener;
 
-// export is for dferryclient library...
-std::vector<std::string> DFERRY_EXPORT split(const std::string &s, char delimiter, bool keepEmptyParts = true);
-#ifndef DFERRY_SERDES_ONLY
-std::string hexEncode(const std::string &s);
-std::string sha1Hex(const std::string &s);
-#endif
-
-inline std::string toStdString(cstring cstr)
+class IEventPoller
 {
-    return std::string(cstr.ptr, cstr.length);
-}
+public:
+    enum InterruptAction {
+        NoInterrupt = 0,
+        ProcessAuxEvents,
+        Stop
+    };
 
-// In C++11, std::to_string doesn't exist yet... so use this instead
-template <typename T>
-std::string dfToString(T value)
-{
-    std::stringstream ss;
-    ss.imbue(std::locale::classic());
-    ss << value;
-    return ss.str();
-}
+    // if you need to refer to the dispatcher, grab and save the value here - not all implementations
+    // need it
+    IEventPoller(EventDispatcher *dispatcher);
+    virtual ~IEventPoller();
 
-// kind of like std::stoi (note: available in C+11) but without exceptions
-template <typename T>
-static bool dfFromString(const std::string &s, T *t)
-{
-    std::istringstream is(s);
-    is.imbue(std::locale::classic());
-    is >> *t;
-    return !is.fail() && is.eof();
-}
+    virtual InterruptAction poll(int timeout = -1) = 0;
+    // interrupt the waiting for events (from another thread)
+    virtual void interrupt(InterruptAction action) = 0;
 
-#endif // STRINGTOOLS_H
+    virtual void addFileDescriptor(FileDescriptor fd, uint32 ioRw) = 0;
+    virtual void removeFileDescriptor(FileDescriptor fd) = 0;
+    virtual void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) = 0;
+
+protected:
+    EventDispatcher *m_dispatcher;
+};
+
+#endif // IEVENTPOLLER_P_H

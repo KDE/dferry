@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "ipsocket.h"
+#include "ipsocket_p.h"
 
 #include "connectaddress.h"
-#include "ipresolver.h"
+#include "ipresolver_p.h"
 
 #ifdef __unix__
 #include <errno.h>

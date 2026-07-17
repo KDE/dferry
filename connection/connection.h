@@ -24,7 +24,7 @@
 #ifndef CONNECTION_H
 #define CONNECTION_H
 
-#include "commutex.h"
+#include "commutex_p.h"
 #include "types.h"
 
 #include <string>
@@ -59,6 +59,7 @@ public:
 
     // Reference for passing to another thread; it guarantees that the target Connection
     // either exists or not, but is not currently being destroyed. Yes, the data is all private.
+    /// \private
     class CommRef
     {
         friend class Connection;

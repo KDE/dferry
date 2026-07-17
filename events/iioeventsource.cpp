@@ -21,9 +21,9 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iioeventsource.h"
+#include "iioeventsource_p.h"
 
-#include "iioeventlistener.h"
+#include "iioeventlistener_p.h"
 
 #include <cassert>
 

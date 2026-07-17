@@ -23,7 +23,7 @@
 
 #include "eventdispatcher.h"
 #include "icompletionlistener.h"
-#include "platformtime.h"
+#include "platformtime_p.h"
 #include "timer.h"
 
 #include "../testutil.h"

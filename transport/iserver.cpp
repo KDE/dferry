@@ -21,14 +21,14 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iserver.h"
+#include "iserver_p.h"
 
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
-#include "itransport.h"
-#include "ipserver.h"
+#include "itransport_p.h"
+#include "ipserver_p.h"
 #ifdef __unix__
-#include "localserver.h"
+#include "localserver_p.h"
 #endif
 
 #include <string>
@@ -36,7 +36,7 @@
 
 #ifdef __unix__
 #include <random>
-#include "stringtools.h"
+#include "stringtools_p.h"
 
 static std::string randomDbusSocketName()
 {

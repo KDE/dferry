@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "authclient.h"
+#include "authclient_p.h"
 
 #include "icompletionlistener.h"
-#include "itransport.h"
-#include "stringtools.h"
+#include "itransport_p.h"
+#include "stringtools_p.h"
 
 #include <cassert>
 #include <cstring>
@@ -40,7 +40,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <sddl.h>
-#include "winutil.h"
+#include "winutil_p.h"
 #endif
 
 AuthClient::AuthClient(ITransport *transport)

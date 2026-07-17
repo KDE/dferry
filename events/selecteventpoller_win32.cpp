@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "selecteventpoller_win32.h"
+#include "selecteventpoller_win32_p.h"
 
 #include "eventdispatcher_p.h"
-#include "iioeventlistener.h"
+#include "iioeventlistener_p.h"
 
 #include <iostream>
 #include <thread>

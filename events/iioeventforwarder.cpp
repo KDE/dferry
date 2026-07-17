@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "iioeventforwarder.h"
+#include "iioeventforwarder_p.h"
 
 #include <cassert>
 

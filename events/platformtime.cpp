@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "platformtime.h"
+#include "platformtime_p.h"
 
 #ifdef _WIN32
 // GetTickCount64() requires Vista or greater which is NT version 0x0600

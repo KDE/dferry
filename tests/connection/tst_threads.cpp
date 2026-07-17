@@ -27,7 +27,7 @@
 #include "imessagereceiver.h"
 #include "message.h"
 #include "pendingreply.h"
-#include "stringtools.h"
+#include "stringtools_p.h"
 #include "connection.h"
 
 #include "../testutil.h"

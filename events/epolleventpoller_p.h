@@ -21,31 +21,29 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef LOCALSERVER_H
-#define LOCALSERVER_H
+#ifndef EPOLLEVENTPOLLER_P_H
+#define EPOLLEVENTPOLLER_P_H
 
-#include "iserver.h"
+#include "ieventpoller_p.h"
 
-#include <string>
-
-class LocalServer : public IServer
+class EpollEventPoller : public IEventPoller
 {
 public:
-    // This is for now intended only for client to client connections, so UID (via SCM_CREDENTIALS)
-    // is not checked - instead socketFilePath should only be accessible by the appropriate user(s).
-    LocalServer(const std::string &socketFilePath);
-    ~LocalServer() override;
+    EpollEventPoller(EventDispatcher *dispatcher);
+    ~EpollEventPoller() override;
+    IEventPoller::InterruptAction poll(int timeout) override;
+    void interrupt(IEventPoller::InterruptAction) override;
 
-    bool isListening() const override;
-
-    void platformClose() override;
-
-    FileDescriptor fileDescriptor() const override;
-
-    IO::Status handleIoReady(IO::RW rw) override;
+    // reimplemented from IEventPoller
+    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
+    void removeFileDescriptor(FileDescriptor fd) override;
+    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
 
 private:
-    int m_listenFd;
+    void notifyRead(int fd);
+
+    int m_interruptPipe[2];
+    FileDescriptor m_epollFd;
 };
 
-#endif // LOCALSERVER_H
+#endif // EPOLLEVENTPOLLER_P_H

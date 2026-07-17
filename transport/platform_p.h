@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2023 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,43 +21,39 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IPRESOLVER_H
-#define IPRESOLVER_H
+#ifndef PLATFORM_P_H
+#define PLATFORM_P_H
 
-// For platforms with a POSIX-like API but no getaddrinfo(), comment this out
-#define USE_GETADDRINFO
-
-#ifdef __unix__
-#ifdef USE_GETADDRINFO
-#include <netdb.h>
-#else
-#include <arpa/inet.h>
-#endif
-#endif
+// Note about invalid descriptors: On Unix they are -1 signed, on Windows they are
+// ~0 unsigned. Same bit pattern, not directly interchangeable in use.
 
 #ifdef _WIN32
-#include <ws2tcpip.h>
-#endif
-
-class ConnectAddress;
-
-class IpResolver
-{
-public:
-    IpResolver(const ConnectAddress& ca);
-    ~IpResolver();
-
-    bool resultValid() const;
-    const struct sockaddr* resolved() const;
-    socklen_t resolvedLength() const;
-
-private:
-#ifdef USE_GETADDRINFO
-    struct addrinfo* m_resolved = nullptr;
+// this is ugly, but including all of winsock2.h in lots of headers is also ugly...
+#ifdef _WIN64
+typedef unsigned long long int FileDescriptor;
 #else
-    struct sockaddr_in m_resolved;
+typedef unsigned int FileDescriptor;
 #endif
-    bool m_resultValid;
+#else
+// So far, Windows is the only supported platform where a file descriptor isn't just a (signed) int.
+typedef int FileDescriptor;
+#endif
+
+enum InvalidFileDescriptorEnum : FileDescriptor {
+#ifdef _WIN32
+    InvalidFileDescriptor = ~ FileDescriptor(0)
+#else
+    InvalidFileDescriptor = -1
+#endif
 };
 
-#endif // IPRESOLVER_H
+static inline bool isValidFileDescriptor(FileDescriptor fd)
+{
+#ifdef _WIN32
+    return fd != InvalidFileDescriptor;
+#else
+    return fd >= 0;
+#endif
+}
+
+#endif // PLATFORM_P_H

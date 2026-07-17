@@ -21,9 +21,9 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "itransportlistener.h"
+#include "itransportlistener_p.h"
 
-#include "itransport.h"
+#include "itransport_p.h"
 
 #include <cassert>
 

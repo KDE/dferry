@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IIOEVENTFORWARDER_H
-#define IIOEVENTFORWARDER_H
+#ifndef IIOEVENTFORWARDER_P_H
+#define IIOEVENTFORWARDER_P_H
 
-#include "iioeventlistener.h"
-#include "iioeventsource.h"
+#include "iioeventlistener_p.h"
+#include "iioeventsource_p.h"
 
 // How to use:
 // - construct with upstream source as constructor argument
@@ -62,4 +62,4 @@ private:
     IIoEventListener *m_downstream = nullptr;
 };
 
-#endif // IIOEVENTFORWARDER_H
+#endif // IIOEVENTFORWARDER_P_H

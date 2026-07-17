@@ -27,10 +27,10 @@
 #include "connection.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
-#include "iioeventforwarder.h"
+#include "iioeventforwarder_p.h"
 #include "inewconnectionlistener.h"
-#include "iserver.h"
-#include "itransport.h"
+#include "iserver_p.h"
+#include "itransport_p.h"
 
 #include <cassert>
 

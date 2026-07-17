@@ -24,8 +24,8 @@
 #include "foreigneventloopintegrator.h"
 
 #include "eventdispatcher_p.h"
-#include "ieventpoller.h"
-#include "iioeventlistener.h"
+#include "ieventpoller_p.h"
+#include "iioeventlistener_p.h"
 
 #include <cassert>
 #include <unordered_map>

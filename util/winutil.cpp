@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "winutil.h"
+#include "winutil_p.h"
 
 #include <iostream>
 

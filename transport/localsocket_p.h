@@ -21,39 +21,38 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef PLATFORM_H
-#define PLATFORM_H
+#ifndef LOCALSOCKET_P_H
+#define LOCALSOCKET_P_H
 
-// Note about invalid descriptors: On Unix they are -1 signed, on Windows they are
-// ~0 unsigned. Same bit pattern, not directly interchangeable in use.
+#include "itransport_p.h"
 
-#ifdef _WIN32
-// this is ugly, but including all of winsock2.h in lots of headers is also ugly...
-#ifdef _WIN64
-typedef unsigned long long int FileDescriptor;
-#else
-typedef unsigned int FileDescriptor;
-#endif
-#else
-// So far, Windows is the only supported platform where a file descriptor isn't just a (signed) int.
-typedef int FileDescriptor;
-#endif
+#include <string>
 
-enum InvalidFileDescriptorEnum : FileDescriptor {
-#ifdef _WIN32
-    InvalidFileDescriptor = ~ FileDescriptor(0)
-#else
-    InvalidFileDescriptor = -1
-#endif
+class LocalSocket : public ITransport
+{
+public:
+    // Connect to local socket at socketFilePath
+    LocalSocket(const std::string &socketFilePath);
+    // Use an already open file descriptor
+    LocalSocket(int fd);
+
+    ~LocalSocket() override;
+
+    // virtuals from ITransport
+    IO::Result write(chunk data, const chunk *data2,
+                     const std::vector<int> *fileDescriptors = nullptr) override;
+    IO::Result read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
+    void platformClose() override;
+    bool isOpen() override;
+    FileDescriptor fileDescriptor() const override;
+    // end ITransport
+
+    LocalSocket() = delete;
+    LocalSocket(const LocalSocket &) = delete;
+    LocalSocket &operator=(const LocalSocket &) = delete;
+
+private:
+    int m_fd;
 };
 
-static inline bool isValidFileDescriptor(FileDescriptor fd)
-{
-#ifdef _WIN32
-    return fd != InvalidFileDescriptor;
-#else
-    return fd >= 0;
-#endif
-}
-
-#endif // PLATFORM_H
+#endif // LOCALSOCKET_P_H

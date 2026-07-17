@@ -21,13 +21,13 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "ipserver.h"
+#include "ipserver_p.h"
 
 #include "connectaddress.h"
-#include "ipresolver.h"
+#include "ipresolver_p.h"
 
 #include "icompletionlistener.h"
-#include "ipsocket.h"
+#include "ipsocket_p.h"
 
 #ifdef __unix__
 #include <netinet/in.h>

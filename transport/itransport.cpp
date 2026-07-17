@@ -21,16 +21,16 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "itransport.h"
+#include "itransport_p.h"
 
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
-#include "itransportlistener.h"
-#include "ipsocket.h"
+#include "itransportlistener_p.h"
+#include "ipsocket_p.h"
 #include "connectaddress.h"
 
 #ifdef __unix__
-#include "localsocket.h"
+#include "localsocket_p.h"
 #endif
 
 #include <algorithm>

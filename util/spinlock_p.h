@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef SPINLOCK_H
-#define SPINLOCK_H
+#ifndef SPINLOCK_P_H
+#define SPINLOCK_P_H
 
 #include <atomic>
 #include <cassert>
@@ -87,4 +87,4 @@ private:
     Spinlock *m_lock;
 };
 
-#endif // SPINLOCK_H
+#endif // SPINLOCK_P_H

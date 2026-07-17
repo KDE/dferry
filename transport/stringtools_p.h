@@ -21,40 +21,45 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IEVENTPOLLER_H
-#define IEVENTPOLLER_H
+#ifndef STRINGTOOLS_P_H
+#define STRINGTOOLS_P_H
 
-#include "eventdispatcher.h"
-
-#include "platform.h"
 #include "types.h"
 
-class IioEventListener;
+#include <sstream>
+#include <string>
+#include <vector>
 
-class IEventPoller
+// export is for dferryclient library...
+std::vector<std::string> DFERRY_EXPORT split(const std::string &s, char delimiter, bool keepEmptyParts = true);
+#ifndef DFERRY_SERDES_ONLY
+std::string hexEncode(const std::string &s);
+std::string sha1Hex(const std::string &s);
+#endif
+
+inline std::string toStdString(cstring cstr)
 {
-public:
-    enum InterruptAction {
-        NoInterrupt = 0,
-        ProcessAuxEvents,
-        Stop
-    };
+    return std::string(cstr.ptr, cstr.length);
+}
 
-    // if you need to refer to the dispatcher, grab and save the value here - not all implementations
-    // need it
-    IEventPoller(EventDispatcher *dispatcher);
-    virtual ~IEventPoller();
+// In C++11, std::to_string doesn't exist yet... so use this instead
+template <typename T>
+std::string dfToString(T value)
+{
+    std::stringstream ss;
+    ss.imbue(std::locale::classic());
+    ss << value;
+    return ss.str();
+}
 
-    virtual InterruptAction poll(int timeout = -1) = 0;
-    // interrupt the waiting for events (from another thread)
-    virtual void interrupt(InterruptAction action) = 0;
+// kind of like std::stoi (note: available in C+11) but without exceptions
+template <typename T>
+static bool dfFromString(const std::string &s, T *t)
+{
+    std::istringstream is(s);
+    is.imbue(std::locale::classic());
+    is >> *t;
+    return !is.fail() && is.eof();
+}
 
-    virtual void addFileDescriptor(FileDescriptor fd, uint32 ioRw) = 0;
-    virtual void removeFileDescriptor(FileDescriptor fd) = 0;
-    virtual void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) = 0;
-
-protected:
-    EventDispatcher *m_dispatcher;
-};
-
-#endif // IEVENTPOLLER_H
+#endif // STRINGTOOLS_P_H

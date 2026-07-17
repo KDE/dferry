@@ -21,40 +21,38 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IPSOCKET_H
-#define IPSOCKET_H
+#ifndef SELECTEVENTPOLLER_UNIX_P_H
+#define SELECTEVENTPOLLER_UNIX_P_H
 
-#include "itransport.h"
+#include "ieventpoller.h"
 
-#include <string>
+#include <unordered_map>
 
-class ConnectAddress;
+#include <sys/select.h>
 
-class IpSocket : public ITransport
+class SelectEventPoller : public IEventPoller
 {
 public:
-    // Connect to local socket at socketFilePath
-    IpSocket(const ConnectAddress &ca);
-    // Use an already open file descriptor
-    IpSocket(FileDescriptor fd);
+    SelectEventPoller(EventDispatcher *dispatcher);
+    ~SelectEventPoller();
+    IEventPoller::InterruptAction poll(int timeout) override;
+    void interrupt(IEventPoller::InterruptAction) override;
 
-    ~IpSocket() override;
-
-    // pure virtuals from ITransport
-    IO::Result write(chunk data, const chunk *data2,
-                     const std::vector<int> *fileDescriptors = nullptr) override;
-    IO::Result read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
-    void platformClose() override;
-    bool isOpen() override;
-    FileDescriptor fileDescriptor() const override;
-    // end ITransport
-
-    IpSocket() = delete;
-    IpSocket(const IpSocket &) = delete;
-    IpSocket &operator=(const IpSocket &) = delete;
+    // reimplemented from IEventPoller
+    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
+    void removeFileDescriptor(FileDescriptor fd) override;
+    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
 
 private:
-    FileDescriptor m_fd;
+    void notifyRead(int fd);
+    void resetFdSets();
+
+    std::unordered_map<FileDescriptor, uint32 /*ioRw*/> m_fds;
+
+    fd_set m_readSet;
+    fd_set m_writeSet;
+
+    int m_interruptPipe[2];
 };
 
-#endif // IPSOCKET_H
+#endif // SELECTEVENTPOLLER_UNIX_P_H

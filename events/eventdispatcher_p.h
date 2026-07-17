@@ -26,10 +26,10 @@
 
 #include "eventdispatcher.h"
 
-#include "iioeventsource.h"
+#include "iioeventsource_p.h"
 #include "message.h"
-#include "platform.h"
-#include "spinlock.h"
+#include "platform_p.h"
+#include "spinlock_p.h"
 #include "types.h"
 
 #include <map>

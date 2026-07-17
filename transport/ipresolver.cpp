@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "ipresolver.h"
+#include "ipresolver_p.h"
 
 #include "connectaddress.h"
 

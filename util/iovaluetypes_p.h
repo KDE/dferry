@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2018 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,14 +21,37 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef PLATFORMTIME_H
-#define PLATFORMTIME_H
+#ifndef IOVALUETYPES_P_H
+#define IOVALUETYPES_P_H
 
 #include "types.h"
 
-namespace PlatformTime
+namespace IO
 {
-uint64 DFERRY_EXPORT monotonicMsecs();
-}
 
-#endif // PLATFORMTIME_H
+// would be nice to wrap this into a type-safe bitset enum / class, but since it's for
+// internal use, uint32 is okay...
+enum class RW
+{
+    Read = 1,
+    Write = 2,
+};
+
+enum class Status
+{
+    OK = 0,
+    RemoteClosed,
+    LocalClosed,
+    PayloadError,
+    InternalError
+};
+
+struct Result
+{
+    Status status = Status::OK;
+    uint32 length = 0;
+};
+
+} // namespace IO
+
+#endif // IOVALUETYPES_P_H

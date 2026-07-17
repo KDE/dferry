@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2014 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,31 +21,14 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IPSERVER_H
-#define IPSERVER_H
+#ifndef PLATFORMTIME_P_H
+#define PLATFORMTIME_P_H
 
-#include "iserver.h"
+#include "types.h"
 
-#include <string>
-
-class ConnectAddress;
-
-class IpServer : public IServer
+namespace PlatformTime
 {
-public:
-    IpServer(const ConnectAddress &ca);
-    ~IpServer() override;
+uint64 DFERRY_EXPORT monotonicMsecs();
+}
 
-    bool isListening() const override;
-
-    void platformClose() override;
-
-    FileDescriptor fileDescriptor() const override;
-
-    IO::Status handleIoReady(IO::RW rw) override;
-
-private:
-    FileDescriptor m_listenFd;
-};
-
-#endif // IPSERVER_H
+#endif // PLATFORMTIME_P_H

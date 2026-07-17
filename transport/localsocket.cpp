@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "localsocket.h"
+#include "localsocket_p.h"
 
 #include <errno.h>
 #include <fcntl.h>

@@ -29,8 +29,8 @@
 #include "connectaddress.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
-#include "iioeventforwarder.h"
-#include "spinlock.h"
+#include "iioeventforwarder_p.h"
+#include "spinlock_p.h"
 
 #include <deque>
 #include <unordered_map>

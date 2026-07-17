@@ -23,7 +23,7 @@
 
 #include "connectaddress.h"
 
-#include "stringtools.h"
+#include "stringtools_p.h"
 
 #include <cassert>
 #include <cstdint>
@@ -44,7 +44,7 @@
 #include <windows.h>
 #include <sddl.h>
 #include <mbstring.h>
-#include "winutil.h"
+#include "winutil_p.h"
 #endif
 
 #ifdef __unix__

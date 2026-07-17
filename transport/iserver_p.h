@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ISERVER_H
-#define ISERVER_H
+#ifndef ISERVER_P_H
+#define ISERVER_P_H
 
-#include "iioeventlistener.h"
-#include "platform.h"
+#include "iioeventlistener_p.h"
+#include "platform_p.h"
 #include "types.h"
 
 #include <deque>
@@ -63,4 +63,4 @@ protected:
     ICompletionListener *m_newConnectionListener;
 };
 
-#endif // ISERVER_H
+#endif // ISERVER_P_H
