@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "epolleventpoller.h"
+#include "epolleventpoller_p.h"
 
 #include "eventdispatcher_p.h"
-#include "iioeventlistener.h"
+#include "iioeventlistener_p.h"
 
 #include <sys/epoll.h>
 #include <fcntl.h>

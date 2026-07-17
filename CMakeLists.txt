@@ -102,7 +102,6 @@ set(DFER_PUBLIC_HEADERS
     serialization/argumentsbcreader_p.h
     serialization/argumentsreader_p.h   # no to be included separately, but required by arguments.h
     serialization/argumentswriter_p.h   # as above
-    util/commutex.h
     util/error.h
     util/export.h
     util/icompletionlistener.h
@@ -110,37 +109,40 @@ set(DFER_PUBLIC_HEADERS
     util/valgrind-noop.h)
 
 set(DFER_PRIVATE_HEADERS
-    connection/authclient.h
-    events/event.h
-    events/ieventpoller.h
-    events/iioeventforwarder.h
-    events/iioeventlistener.h
-    events/iioeventsource.h
-    events/platformtime.h
+    connection/authclient_p.h
+    events/event_p.h
+    events/ieventpoller_p.h
+    events/iioeventforwarder_p.h
+    events/iioeventlistener_p.h
+    events/iioeventsource_p.h
+    events/platformtime_p.h
     serialization/basictypeio.h
     serialization/fercode_p.h
-    transport/ipserver.h
-    transport/ipsocket.h
-    transport/ipresolver.h
-    transport/iserver.h
-    transport/itransport.h
-    transport/itransportlistener.h
-    transport/platform.h
-    transport/stringtools.h)
+    transport/ipserver_p.h
+    transport/ipsocket_p.h
+    transport/ipresolver_p.h
+    transport/iserver_p.h
+    transport/itransport_p.h
+    transport/itransportlistener_p.h
+    transport/platform_p.h
+    transport/stringtools_p.h
+    util/commutex_p.h
+    util/iovaluetypes_p.h
+    util/spinlock_p.h)
 if (UNIX)
     list(APPEND DFER_PRIVATE_HEADERS
-         transport/localserver.h
-         transport/localsocket.h)
+         transport/localserver_p.h
+         transport/localsocket_p.h)
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     list(APPEND DFER_SOURCES events/epolleventpoller.cpp)
-    list(APPEND DFER_PRIVATE_HEADERS events/epolleventpoller.h)
+    list(APPEND DFER_PRIVATE_HEADERS events/epolleventpoller_p.h)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     list(APPEND DFER_SOURCES events/selecteventpoller_win32.cpp util/winutil.cpp)
-    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_win32.h util/winutil.h)
+    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_win32_p.h util/winutil_p.h)
 elseif(UNIX)
     list(APPEND DFER_SOURCES events/selecteventpoller_unix.cpp)
-    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_unix.h)
+    list(APPEND DFER_PRIVATE_HEADERS events/selecteventpoller_unix_p.h)
 else()
     message(FATAL_ERROR "This operating system is not supported.")
 endif()

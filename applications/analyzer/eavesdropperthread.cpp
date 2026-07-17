@@ -28,7 +28,6 @@
 #include "eavesdroppermodel.h"
 #include "error.h"
 #include "eventdispatcher.h"
-#include "localsocket.h"
 #include "message.h"
 #include "pendingreply.h"
 #include "connection.h"

@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2015 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,24 +21,26 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef LOCALSOCKET_H
-#define LOCALSOCKET_H
+#ifndef IPSOCKET_P_H
+#define IPSOCKET_P_H
 
-#include "itransport.h"
+#include "itransport_p.h"
 
 #include <string>
 
-class LocalSocket : public ITransport
+class ConnectAddress;
+
+class IpSocket : public ITransport
 {
 public:
     // Connect to local socket at socketFilePath
-    LocalSocket(const std::string &socketFilePath);
+    IpSocket(const ConnectAddress &ca);
     // Use an already open file descriptor
-    LocalSocket(int fd);
+    IpSocket(FileDescriptor fd);
 
-    ~LocalSocket() override;
+    ~IpSocket() override;
 
-    // virtuals from ITransport
+    // pure virtuals from ITransport
     IO::Result write(chunk data, const chunk *data2,
                      const std::vector<int> *fileDescriptors = nullptr) override;
     IO::Result read(byte *buffer, uint32 maxSize, std::vector<int> *fileDescriptors) override;
@@ -47,12 +49,12 @@ public:
     FileDescriptor fileDescriptor() const override;
     // end ITransport
 
-    LocalSocket() = delete;
-    LocalSocket(const LocalSocket &) = delete;
-    LocalSocket &operator=(const LocalSocket &) = delete;
+    IpSocket() = delete;
+    IpSocket(const IpSocket &) = delete;
+    IpSocket &operator=(const IpSocket &) = delete;
 
 private:
-    int m_fd;
+    FileDescriptor m_fd;
 };
 
-#endif // LOCALSOCKET_H
+#endif // IPSOCKET_P_H

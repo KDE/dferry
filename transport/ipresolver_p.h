@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2018 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2023 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,37 +21,43 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IOVALUETYPES_H
-#define IOVALUETYPES_H
+#ifndef IPRESOLVER_P_H
+#define IPRESOLVER_P_H
 
-#include "types.h"
+// For platforms with a POSIX-like API but no getaddrinfo(), comment this out
+#define USE_GETADDRINFO
 
-namespace IO
+#ifdef __unix__
+#ifdef USE_GETADDRINFO
+#include <netdb.h>
+#else
+#include <arpa/inet.h>
+#endif
+#endif
+
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#endif
+
+class ConnectAddress;
+
+class IpResolver
 {
+public:
+    IpResolver(const ConnectAddress& ca);
+    ~IpResolver();
 
-// would be nice to wrap this into a type-safe bitset enum / class, but since it's for
-// internal use, uint32 is okay...
-enum class RW
-{
-    Read = 1,
-    Write = 2,
+    bool resultValid() const;
+    const struct sockaddr* resolved() const;
+    socklen_t resolvedLength() const;
+
+private:
+#ifdef USE_GETADDRINFO
+    struct addrinfo* m_resolved = nullptr;
+#else
+    struct sockaddr_in m_resolved;
+#endif
+    bool m_resultValid;
 };
 
-enum class Status
-{
-    OK = 0,
-    RemoteClosed,
-    LocalClosed,
-    PayloadError,
-    InternalError
-};
-
-struct Result
-{
-    Status status = Status::OK;
-    uint32 length = 0;
-};
-
-} // namespace IO
-
-#endif // IOVALUETYPES_H
+#endif // IPRESOLVER_P_H

@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "localserver.h"
+#include "localserver_p.h"
 
 #include "icompletionlistener.h"
-#include "localsocket.h"
+#include "localsocket_p.h"
 
 #include <fcntl.h>
 #include <sys/socket.h>

@@ -1,5 +1,5 @@
-#ifndef EVENT_H
-#define EVENT_H
+#ifndef EVENT_P_H
+#define EVENT_P_H
 
 #include "error.h"
 #include "message.h"
@@ -94,4 +94,4 @@ struct UniqueNameReceivedEvent : public Event
     std::string uniqueName;
 };
 
-#endif // EVENT_H
+#endif // EVENT_P_H

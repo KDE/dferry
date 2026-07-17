@@ -25,19 +25,19 @@
 #include "connection_p.h"
 
 #include "arguments.h"
-#include "authclient.h"
-#include "event.h"
+#include "authclient_p.h"
+#include "event_p.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
 #include "iconnectionstatelistener.h"
 #include "imessagereceiver.h"
-#include "iserver.h"
-#include "itransport.h"
+#include "iserver_p.h"
+#include "itransport_p.h"
 #include "message.h"
 #include "message_p.h"
 #include "pendingreply.h"
 #include "pendingreply_p.h"
-#include "stringtools.h"
+#include "stringtools_p.h"
 
 #include <algorithm>
 #include <cassert>

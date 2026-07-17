@@ -21,31 +21,31 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef EPOLLEVENTPOLLER_H
-#define EPOLLEVENTPOLLER_H
+#ifndef IPSERVER_P_H
+#define IPSERVER_P_H
 
-#include "ieventpoller.h"
+#include "iserver_p.h"
 
-#include <map>
+#include <string>
 
-class EpollEventPoller : public IEventPoller
+class ConnectAddress;
+
+class IpServer : public IServer
 {
 public:
-    EpollEventPoller(EventDispatcher *dispatcher);
-    ~EpollEventPoller() override;
-    IEventPoller::InterruptAction poll(int timeout) override;
-    void interrupt(IEventPoller::InterruptAction) override;
+    IpServer(const ConnectAddress &ca);
+    ~IpServer() override;
 
-    // reimplemented from IEventPoller
-    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
-    void removeFileDescriptor(FileDescriptor fd) override;
-    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
+    bool isListening() const override;
+
+    void platformClose() override;
+
+    FileDescriptor fileDescriptor() const override;
+
+    IO::Status handleIoReady(IO::RW rw) override;
 
 private:
-    void notifyRead(int fd);
-
-    int m_interruptPipe[2];
-    FileDescriptor m_epollFd;
+    FileDescriptor m_listenFd;
 };
 
-#endif // EPOLLEVENTPOLLER_H
+#endif // IPSERVER_P_H

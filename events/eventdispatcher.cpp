@@ -26,19 +26,19 @@
 
 #ifndef DFERRY_NO_NATIVE_POLL
 #ifdef __linux__
-#include "epolleventpoller.h"
+#include "epolleventpoller_p.h"
 #elif defined _WIN32
-#include "selecteventpoller_win32.h"
+#include "selecteventpoller_win32_p.h"
 #else
-#include "selecteventpoller_unix.h"
+#include "selecteventpoller_unix_p.h"
 #endif
 #endif
 
-#include "event.h"
+#include "event_p.h"
 #include "foreigneventloopintegrator.h"
-#include "ieventpoller.h"
-#include "iioeventlistener.h"
-#include "platformtime.h"
+#include "ieventpoller_p.h"
+#include "iioeventlistener_p.h"
+#include "platformtime_p.h"
 #include "connection_p.h"
 #include "timer.h"
 

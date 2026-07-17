@@ -26,12 +26,12 @@
 
 #include "arguments_p.h"
 #include "basictypeio.h"
-#include "malloccache.h"
-#include "stringtools.h"
+#include "malloccache_p.h"
+#include "stringtools_p.h"
 
 #ifndef DFERRY_SERDES_ONLY
 #include "icompletionlistener.h"
-#include "itransport.h"
+#include "itransport_p.h"
 #endif
 
 #include <cassert>

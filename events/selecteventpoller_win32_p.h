@@ -21,8 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef SELECTEVENTPOLLER_H
-#define SELECTEVENTPOLLER_H
+#ifndef SELECTEVENTPOLLER_WIN32_P_H
+#define SELECTEVENTPOLLER_WIN32_P_H
 
 #include "ieventpoller.h"
 
@@ -67,4 +67,4 @@ private:
     FileDescriptor m_interruptSocket[2];
 };
 
-#endif // SELECTEVENTPOLLER_H
+#endif // SELECTEVENTPOLLER_WIN32_P_H

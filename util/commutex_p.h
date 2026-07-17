@@ -11,8 +11,8 @@
  * through the same Commutex as well as destruction of the receiver.
  */
 
-#ifndef COMMUTEX_H
-#define COMMUTEX_H
+#ifndef COMMUTEX_P_H
+#define COMMUTEX_P_H
 
 #include <atomic>
 #include <cassert>
@@ -317,4 +317,4 @@ private:
     Commutex::TryLockResult m_tryLockResult;
 };
 
-#endif // COMMUTEX_H
+#endif // COMMUTEX_P_H

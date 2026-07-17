@@ -21,11 +21,11 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ITRANSPORT_H
-#define ITRANSPORT_H
+#ifndef ITRANSPORT_P_H
+#define ITRANSPORT_P_H
 
-#include "iioeventlistener.h"
-#include "platform.h"
+#include "iioeventlistener_p.h"
+#include "platform_p.h"
 #include "types.h"
 
 #include <vector>
@@ -82,4 +82,4 @@ private:
     ITransportListener *m_writeListener = nullptr;
 };
 
-#endif // ITRANSPORT_H
+#endif // ITRANSPORT_P_H

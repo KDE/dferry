@@ -21,34 +21,31 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef ITRANSPORTLISTENER_H
-#define ITRANSPORTLISTENER_H
+#ifndef LOCALSERVER_P_H
+#define LOCALSERVER_P_H
 
-#include "iovaluetypes.h"
+#include "iserver_p.h"
 
-class ITransport;
+#include <string>
 
-class ITransportListener
+class LocalServer : public IServer
 {
 public:
-    ITransportListener();
-    virtual ~ITransportListener();
+    // This is for now intended only for client to client connections, so UID (via SCM_CREDENTIALS)
+    // is not checked - instead socketFilePath should only be accessible by the appropriate user(s).
+    LocalServer(const std::string &socketFilePath);
+    ~LocalServer() override;
 
-    ITransport *readTransport() const;
-    ITransport *writeTransport() const;
+    bool isListening() const override;
 
-    // public mainly for testing purposes - only call if you know what you're doing
-    // no-op default implementations are provided so you only need to reimplement what you need
-    virtual IO::Status handleTransportCanRead();
-    virtual IO::Status handleTransportCanWrite();
+    void platformClose() override;
 
-protected:
-    uint32 m_ioInterest = 0;
-    friend class ITransport;
+    FileDescriptor fileDescriptor() const override;
+
+    IO::Status handleIoReady(IO::RW rw) override;
+
 private:
-    void updateIoInterest(IO::RW which, bool enable);
-    ITransport *m_readTransport = nullptr; // set from ITransport::setReadListener()
-    ITransport *m_writeTransport = nullptr; // set from ITransport::setWriteListener()
+    int m_listenFd;
 };
 
-#endif // ITRANSPORTLISTENER_H
+#endif // LOCALSERVER_P_H

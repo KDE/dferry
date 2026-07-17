@@ -25,7 +25,7 @@
 #include "arguments_p.h"
 
 #include "basictypeio.h"
-#include "malloccache.h"
+#include "malloccache_p.h"
 
 #include <cstring>
 

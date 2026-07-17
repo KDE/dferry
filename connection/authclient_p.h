@@ -21,12 +21,12 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef AUTHCLIENT_H
-#define AUTHCLIENT_H
+#ifndef AUTHCLIENT_P_H
+#define AUTHCLIENT_P_H
 
-#include "itransportlistener.h"
+#include "itransportlistener_p.h"
 
-#include "iovaluetypes.h"
+#include "iovaluetypes_p.h"
 
 #include <string>
 

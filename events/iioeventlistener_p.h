@@ -21,12 +21,12 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IIOEVENTLISTENER_H
-#define IIOEVENTLISTENER_H
+#ifndef IIOEVENTLISTENER_P_H
+#define IIOEVENTLISTENER_P_H
 
-#include "platform.h"
+#include "platform_p.h"
 #include "types.h"
-#include "iovaluetypes.h"
+#include "iovaluetypes_p.h"
 
 class IIoEventSource;
 
@@ -56,4 +56,4 @@ private:
     uint32 m_ioInterest = 0; // set by this class, read by IIoEventSource
 };
 
-#endif // IIOEVENTLISTENER_H
+#endif // IIOEVENTLISTENER_P_H

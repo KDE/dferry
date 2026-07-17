@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef IIOEVENTSOURCE_H
-#define IIOEVENTSOURCE_H
+#ifndef IIOEVENTSOURCE_P_H
+#define IIOEVENTSOURCE_P_H
 
-#include "iovaluetypes.h"
+#include "iovaluetypes_p.h"
 #include "types.h"
 
 class IIoEventListener;
@@ -64,4 +64,4 @@ private:
     void updateIoInterest(IIoEventListener *iol);
 };
 
-#endif // IIOEVENTSOURCE_H
+#endif // IIOEVENTSOURCE_P_H

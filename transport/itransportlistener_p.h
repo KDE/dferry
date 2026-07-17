@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2015 Andreas Hartmetz <ahartmetz@gmail.com>
+   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -21,38 +21,34 @@
    http://www.mozilla.org/MPL/
 */
 
-#ifndef SELECTEVENTPOLLER_H
-#define SELECTEVENTPOLLER_H
+#ifndef ITRANSPORTLISTENER_P_H
+#define ITRANSPORTLISTENER_P_H
 
-#include "ieventpoller.h"
+#include "iovaluetypes_p.h"
 
-#include <unordered_map>
+class ITransport;
 
-#include <sys/select.h>
-
-class SelectEventPoller : public IEventPoller
+class ITransportListener
 {
 public:
-    SelectEventPoller(EventDispatcher *dispatcher);
-    ~SelectEventPoller();
-    IEventPoller::InterruptAction poll(int timeout) override;
-    void interrupt(IEventPoller::InterruptAction) override;
+    ITransportListener();
+    virtual ~ITransportListener();
 
-    // reimplemented from IEventPoller
-    void addFileDescriptor(FileDescriptor fd, uint32 ioRw) override;
-    void removeFileDescriptor(FileDescriptor fd) override;
-    void setReadWriteInterest(FileDescriptor fd, uint32 ioRw) override;
+    ITransport *readTransport() const;
+    ITransport *writeTransport() const;
 
+    // public mainly for testing purposes - only call if you know what you're doing
+    // no-op default implementations are provided so you only need to reimplement what you need
+    virtual IO::Status handleTransportCanRead();
+    virtual IO::Status handleTransportCanWrite();
+
+protected:
+    uint32 m_ioInterest = 0;
+    friend class ITransport;
 private:
-    void notifyRead(int fd);
-    void resetFdSets();
-
-    std::unordered_map<FileDescriptor, uint32 /*ioRw*/> m_fds;
-
-    fd_set m_readSet;
-    fd_set m_writeSet;
-
-    int m_interruptPipe[2];
+    void updateIoInterest(IO::RW which, bool enable);
+    ITransport *m_readTransport = nullptr; // set from ITransport::setReadListener()
+    ITransport *m_writeTransport = nullptr; // set from ITransport::setWriteListener()
 };
 
-#endif // SELECTEVENTPOLLER_H
+#endif // ITRANSPORTLISTENER_P_H

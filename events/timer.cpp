@@ -26,7 +26,7 @@
 #include "eventdispatcher.h"
 #include "eventdispatcher_p.h"
 #include "icompletionlistener.h"
-#include "platformtime.h"
+#include "platformtime_p.h"
 
 #include <algorithm>
 #include <cassert>

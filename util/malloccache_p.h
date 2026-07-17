@@ -1,5 +1,5 @@
-#ifndef MALLOCCACHE_H
-#define MALLOCCACHE_H
+#ifndef MALLOCCACHE_P_H
+#define MALLOCCACHE_P_H
 
 #include <cassert>
 #include <cstdlib>
@@ -69,4 +69,4 @@ private:
     size_t m_blocksCached;
 };
 
-#endif // MALLOCCACHE_H
+#endif // MALLOCCACHE_P_H

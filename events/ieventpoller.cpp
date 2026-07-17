@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "ieventpoller.h"
+#include "ieventpoller_p.h"
 
 IEventPoller::IEventPoller(EventDispatcher *dispatcher)
    : m_dispatcher(dispatcher)

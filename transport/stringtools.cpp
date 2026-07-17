@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "stringtools.h"
+#include "stringtools_p.h"
 
 #include <sstream>
 

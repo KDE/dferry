@@ -21,10 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "selecteventpoller_unix.h"
+#include "selecteventpoller_unix_p.h"
 
 #include "eventdispatcher_p.h"
-#include "iioeventlistener.h"
+#include "iioeventlistener_p.h"
 
 #include <fcntl.h>
 #include <unistd.h>

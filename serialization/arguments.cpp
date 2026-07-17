@@ -26,10 +26,10 @@
 
 #include "basictypeio.h"
 #include "error.h"
-#include "malloccache.h"
+#include "malloccache_p.h"
 #include "message.h"
-#include "platform.h"
-#include "stringtools.h"
+#include "platform_p.h"
+#include "stringtools_p.h"
 
 #include <algorithm>
 #include <cassert>
