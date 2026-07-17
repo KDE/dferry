@@ -1,0 +1,16 @@
+PROJECT_NAME           = Dferry
+EXTRACT_LOCAL_CLASSES  = NO
+HIDE_FRIEND_COMPOUNDS  = YES
+INPUT                  = . \
+                         ../connection \
+                         ../events \
+                         ../serialization \
+                         ../transport \
+                         ../util
+FILE_PATTERNS          = *.c \
+                         *.cpp \
+                         *.h \
+                         *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = *_p.h
+GENERATE_LATEX         = NO
