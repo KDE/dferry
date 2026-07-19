@@ -22,6 +22,8 @@
 */
 
 #include "arguments.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "error.h"
 #include "eventdispatcher.h"
@@ -40,7 +42,7 @@
 static void test_signatureHeader()
 {
     Message msg;
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     writer.writeByte(123);
     writer.writeUint64(1);
     msg.setArguments(writer.finish());
@@ -88,7 +90,7 @@ void testBasic(const ConnectAddress &clientAddress)
     clientConnection.setSpontaneousMessageReceiver(&printAndTerminateClient);
 
     Message msg = Message::createCall("/foo", "org.foo.interface", "laze");
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     writer.writeString("couch");
     msg.setArguments(writer.finish());
 
@@ -106,7 +108,7 @@ void testMessageLength()
     for (int i = 0; i < 2; i++) {
         const bool makeTooLong = i == 1;
 
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, Arguments::MaxArrayLength));
 
         // Our minimal Message is going to have the following variable headers (in that order):
@@ -139,7 +141,7 @@ enum {
 #ifdef __unix__
 static Arguments createArgumentsWithDummyFileDescriptors(uint fdCount)
 {
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     for (uint i = 0; i < fdCount; i++) {
         writer.writeUnixFd(DummyFdOffset - i);
     }
@@ -157,7 +159,7 @@ void testFileDescriptorsInArguments()
         {
             // const ref to arguments
             const Arguments &args = msg.arguments();
-            Arguments::Reader reader(args);
+            ArgumentsReader reader(args);
             for (uint j = 0; j < i; j++) {
                 TEST(reader.readUnixFd() == int(DummyFdOffset - j));
                 TEST(reader.isValid());
@@ -167,7 +169,7 @@ void testFileDescriptorsInArguments()
         {
             // copy of arguments
             Arguments args = msg.arguments();
-            Arguments::Reader reader(args);
+            ArgumentsReader reader(args);
             for (uint j = 0; j < i; j++) {
                 TEST(reader.readUnixFd() == int(DummyFdOffset - j));
                 TEST(reader.isValid());
@@ -180,7 +182,7 @@ void testFileDescriptorsInArguments()
 void testTooManyFileDescriptors()
 {
     // TODO re-think what is the best place to catch too many file descriptors...
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
 }
 
 void testFileDescriptorsHeader()
@@ -211,7 +213,7 @@ public:
             return;
         }
 
-        Arguments::Reader reader(msg.arguments());
+        ArgumentsReader reader(msg.arguments());
         for (uint i = 0; i < FdCountToSend; i++) {
             int fd = reader.readUnixFd();
             uint readBuf = 12345;
@@ -236,7 +238,7 @@ void testFileDescriptorsForDataTransfer()
     Message msg = Message::createCall("/foo", "org.foo.interface", "testFileDescriptorsForDataTransfer");
     msg.setDestination(conn.uniqueName());
 
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     for (uint i = 0; i < FdCountToSend; i++) {
         TEST(pipe2(pipeFds + 2 * i, O_NONBLOCK) == 0);
         // write into write side of the pipe... will be read when the message is received back from bus

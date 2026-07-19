@@ -24,7 +24,7 @@
 #include "argumentsmodel.h"
 
 #include "message.h"
-#include "arguments.h"
+#include "argumentsreader.h"
 
 #include <QStandardItemModel>
 
@@ -82,7 +82,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
 
     QStandardItem *parent = model->invisibleRootItem();
 
-    Arguments::Reader reader(message->arguments());
+    ArgumentsReader reader(message->arguments());
     if (!reader.isValid()) {
         return withFaultyData(model);
     }
@@ -113,7 +113,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = ascend(parent, model);
             break;
         case Arguments::BeginArray: {
-            inEmptyArray = !reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            inEmptyArray = !reader.beginArray(ArgumentsReader::ReadTypesOnlyIfEmpty);
             parent = descend(parent, inEmptyArray ? "Array (no elements, showing just types)" : "Array");
             break; }
         case Arguments::EndArray:
@@ -122,7 +122,7 @@ QAbstractItemModel* createArgumentsModel(Message *message)
             parent = ascend(parent, model);
             break;
         case Arguments::BeginDict: {
-            inEmptyArray = !reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            inEmptyArray = !reader.beginDict(ArgumentsReader::ReadTypesOnlyIfEmpty);
             parent = descend(parent, inEmptyArray ? "Dict (no elements, showing just types)" : "Dict");
             break; }
         case Arguments::EndDict:

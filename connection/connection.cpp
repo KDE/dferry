@@ -24,7 +24,7 @@
 #include "connection.h"
 #include "connection_p.h"
 
-#include "arguments.h"
+#include "argumentsreader.h"
 #include "authclient_p.h"
 #include "event_p.h"
 #include "eventdispatcher_p.h"
@@ -393,7 +393,7 @@ void ConnectionPrivate::handleHelloReply()
     delete m_helloReceiver;
     m_helloReceiver = nullptr;
 
-    Arguments::Reader reader(argList);
+    ArgumentsReader reader(argList);
     cstring busName = reader.readString();
     if (reader.state() != Arguments::Finished) {
         handleHelloFailed();

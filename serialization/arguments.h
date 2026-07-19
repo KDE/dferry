@@ -37,7 +37,8 @@
 #include <memory>
 #endif
 
-union FerCode;
+class ArgumentsReader;
+class ArgumentsWriter;
 class Error;
 class Message;
 class MessagePrivate;
@@ -47,9 +48,6 @@ class MessagePrivate;
 class DFERRY_EXPORT Arguments
 {
 public:
-    class Reader;
-    class Writer;
-
     enum SignatureType
     {
         MethodSignature = 0,
@@ -115,6 +113,13 @@ public:
         LastState
     };
 
+    enum class FerEncodeOptions
+    {
+        None = 0,
+        ElideStructs
+    };
+
+
     // Constructs an empty argument list
     Arguments();
 
@@ -159,12 +164,7 @@ public:
     static bool isObjectPathElementValid(cstring pathElement);
     static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
 
-    static void copyOneElement(Reader *reader, Writer *writer);
-
-#include "argumentsreader_p.h"
-#include "argumentsbcreader_p.h"
-
-#include "argumentswriter_p.h"
+    static void copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer);
 
     class Private;
 

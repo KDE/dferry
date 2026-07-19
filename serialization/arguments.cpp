@@ -24,6 +24,9 @@
 #include "arguments.h"
 #include "arguments_p.h"
 
+#include "argumentsreader.h"
+#include "argumentswriter.h"
+
 #include "basictypeio.h"
 #include "error.h"
 #include "malloccache_p.h"
@@ -137,7 +140,7 @@ cstring printableState(Arguments::IoState state)
 // TODO: that text above belongs into a "Reader and Writer state / errors" explanation of the docs
 
 // static
-void Arguments::copyOneElement(Arguments::Reader *reader, Arguments::Writer *writer)
+void Arguments::copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer)
 {
     switch(reader->state()) {
     case Arguments::BeginStruct:
@@ -164,9 +167,9 @@ void Arguments::copyOneElement(Arguments::Reader *reader, Arguments::Writer *wri
             const std::pair<Arguments::IoState, chunk> arrayData = reader->readPrimitiveArray();
             writer->writePrimitiveArray(arrayData.first, arrayData.second);
         } else {
-            const bool hasData = reader->beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
-            writer->beginArray(hasData ? Arguments::Writer::NonEmptyArray
-                                       : Arguments::Writer::WriteTypesOfEmptyArray);
+            const bool hasData = reader->beginArray(ArgumentsReader::ReadTypesOnlyIfEmpty);
+            writer->beginArray(hasData ? ArgumentsWriter::NonEmptyArray
+                                       : ArgumentsWriter::WriteTypesOfEmptyArray);
         }
         break; }
     case Arguments::EndArray:
@@ -174,9 +177,9 @@ void Arguments::copyOneElement(Arguments::Reader *reader, Arguments::Writer *wri
         writer->endArray();
         break;
     case Arguments::BeginDict: {
-        const bool hasData = reader->beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
-        writer->beginDict(hasData ? Arguments::Writer::NonEmptyArray
-                                    : Arguments::Writer::WriteTypesOfEmptyArray);
+        const bool hasData = reader->beginDict(ArgumentsReader::ReadTypesOnlyIfEmpty);
+        writer->beginDict(hasData ? ArgumentsWriter::NonEmptyArray
+                                    : ArgumentsWriter::WriteTypesOfEmptyArray);
         break; }
     case Arguments::EndDict:
         reader->endDict();
@@ -439,7 +442,7 @@ static bool strEndsWith(const std::string &str, const std::string &ending)
 
 std::string Arguments::prettyPrint() const
 {
-    Reader reader(*this);
+    ArgumentsReader reader(*this);
     if (!reader.isValid()) {
         return std::string();
     }
@@ -504,7 +507,7 @@ std::string Arguments::prettyPrint() const
                 }
                 ret << " ]\n";
             } else {
-                inEmptyArray = !reader.beginArray(Arguments::Reader::ReadTypesOnlyIfEmpty);
+                inEmptyArray = !reader.beginArray(ArgumentsReader::ReadTypesOnlyIfEmpty);
                 ret << nestingPrefix << "begin array\n";
                 nestingPrefix += "[ ";
             }
@@ -516,7 +519,7 @@ std::string Arguments::prettyPrint() const
             ret << nestingPrefix << "end array\n";
             break;
         case Arguments::BeginDict: {
-            inEmptyArray = !reader.beginDict(Arguments::Reader::ReadTypesOnlyIfEmpty);
+            inEmptyArray = !reader.beginDict(ArgumentsReader::ReadTypesOnlyIfEmpty);
             ret << nestingPrefix << "begin dict\n";
             nestingPrefix += "{ ";
             break; }

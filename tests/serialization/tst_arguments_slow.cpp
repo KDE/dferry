@@ -22,6 +22,7 @@
 */
 
 #include "arguments.h"
+#include "argumentswriter.h"
 
 #include "../testutil.h"
 
@@ -34,7 +35,7 @@ static void test_arrayLength()
     for (int i = 0; i < 2; i++) {
         const bool withVariant = i == 1;
         {
-            Arguments::Writer writer;
+            ArgumentsWriter writer;
             if (withVariant) {
                 writer.beginVariant();
             }
@@ -51,7 +52,7 @@ static void test_arrayLength()
             TEST(writer.state() == Arguments::Finished);
         }
         {
-            Arguments::Writer writer;
+            ArgumentsWriter writer;
             if (withVariant) {
                 writer.beginVariant();
             }
@@ -73,7 +74,7 @@ static void test_arrayLength()
     // The following two tests are overspecific to the implementation - it can only "guess" the full final
     // message size because it simply isn't known in the ArgumentList. Still better than nothing.
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         for (uint32 i = 0; i < 2; i++) {
             writer.beginArray();
             // -2 because array length prefix adds one uint32 per array, and we must also subtract
@@ -89,7 +90,7 @@ static void test_arrayLength()
         TEST(writer.state() == Arguments::Finished);
     }
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         for (uint32 i = 0; i < 2; i++) {
             writer.beginArray();
             for (uint32 j = 0; j < maxInt32Count - 1; j++) {
@@ -114,7 +115,7 @@ static void test_argumentsLength()
     for (int i = 0; i < 2; i++) {
         const bool withVariant = i == 1;
 
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         for (int j = 0; j < 4; j++) {
             if (withVariant) {
                 writer.beginVariant();
@@ -130,7 +131,7 @@ static void test_argumentsLength()
                         writer.endVariant();
                     }
                 }
-                Arguments::Writer writer2(writer);
+                ArgumentsWriter writer2(writer);
                 TEST(writer2.state() != Arguments::InvalidData);
                 writer2.finish();
                 TEST(writer2.state() == Arguments::InvalidData);
@@ -144,7 +145,7 @@ static void test_argumentsLength()
         const bool makeTooLong = i & 1;
         const bool withVariant = i & 2;
 
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         // note: Arguments does not count Arguments::signature() length towards length
         uint32 left = Arguments::MaxMessageLength;
         writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, Arguments::MaxArrayLength));

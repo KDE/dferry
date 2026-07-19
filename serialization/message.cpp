@@ -25,6 +25,8 @@
 #include "message_p.h"
 
 #include "arguments_p.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 #include "basictypeio.h"
 #include "malloccache_p.h"
 #include "stringtools_p.h"
@@ -1114,7 +1116,7 @@ bool MessagePrivate::deserializeVariableHeaders()
     cstring varHeadersSig("ia(yv)");
     Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
 
-    Arguments::Reader reader(argList);
+    ArgumentsReader reader(argList);
     assert(reader.isValid());
 
     if (reader.state() != Arguments::Int32) {
@@ -1258,7 +1260,7 @@ void MessagePrivate::serializeFixedHeaders()
     basic::writeUint32(p + sizeof(uint32), m_serial);
 }
 
-static void doVarHeaderPrologue(Arguments::Writer *writer, Message::VariableHeader field)
+static void doVarHeaderPrologue(ArgumentsWriter *writer, Message::VariableHeader field)
 {
     writer->beginStruct();
     writer->writeByte(byte(field));
@@ -1266,7 +1268,7 @@ static void doVarHeaderPrologue(Arguments::Writer *writer, Message::VariableHead
 
 Arguments MessagePrivate::serializeVariableHeaders()
 {
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
 
     // note that we don't have to deal with empty arrays because all valid message types require
     // at least one of the variable headers

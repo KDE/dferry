@@ -22,6 +22,8 @@
 */
 
 #include "arguments.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "error.h"
 #include "eventdispatcher.h"
