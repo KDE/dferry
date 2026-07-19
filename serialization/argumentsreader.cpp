@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentsreader.h"
 #include "arguments_p.h"
 
 #include "basictypeio.h"
@@ -37,10 +37,10 @@
 #endif
 
 
-class Arguments::Reader::Private
+class ArgumentsReader::Private
 {
 public:
-    const Arguments *m_args = nullptr;
+    const Arguments::Private *m_argsPriv = nullptr;
     cstring m_signature;
     uint32 m_signaturePosition = uint32(-1);
     chunk m_data;
@@ -68,7 +68,7 @@ public:
 
     struct AggregateInfo
     {
-        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        Arguments::IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
         union {
             ArrayInfo arr;
             VariantInfo var;
@@ -83,25 +83,25 @@ public:
 #endif
 };
 
-thread_local static MallocCache<sizeof(Arguments::Reader::Private), 4> allocCache;
+thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
-Arguments::Reader::Reader(const Arguments &args)
+ArgumentsReader::ArgumentsReader(const Arguments &args)
    : d(new(allocCache.allocate()) Private),
-     m_state(NotStarted)
+     m_state(Arguments::NotStarted)
 {
-    d->m_args = &args;
+    d->m_argsPriv = Arguments::Private::of(&args);
     beginRead();
 }
 
-Arguments::Reader::Reader(const Message &msg)
+ArgumentsReader::ArgumentsReader(const Message &msg)
    : d(new(allocCache.allocate()) Private),
-     m_state(NotStarted)
+     m_state(Arguments::NotStarted)
 {
-    d->m_args = &msg.arguments();
+    d->m_argsPriv = Arguments::Private::of(&msg.arguments());
     beginRead();
 }
 
-Arguments::Reader::Reader(Reader &&other)
+ArgumentsReader::ArgumentsReader(ArgumentsReader &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -109,7 +109,7 @@ Arguments::Reader::Reader(Reader &&other)
     other.d = nullptr;
 }
 
-void Arguments::Reader::operator=(Reader &&other)
+void ArgumentsReader::operator=(ArgumentsReader &&other)
 {
     if (&other == this) {
         return;
@@ -125,7 +125,7 @@ void Arguments::Reader::operator=(Reader &&other)
     other.d = nullptr;
 }
 
-Arguments::Reader::Reader(const Reader &other)
+ArgumentsReader::ArgumentsReader(const ArgumentsReader &other)
    : d(nullptr),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -135,7 +135,7 @@ Arguments::Reader::Reader(const Reader &other)
     }
 }
 
-void Arguments::Reader::operator=(const Reader &other)
+void ArgumentsReader::operator=(const ArgumentsReader &other)
 {
     if (&other == this) {
         return;
@@ -145,12 +145,12 @@ void Arguments::Reader::operator=(const Reader &other)
     if (d && other.d) {
         *d = *other.d;
     } else {
-        Reader temp(other);
+        ArgumentsReader temp(other);
         std::swap(d, temp.d);
     }
 }
 
-Arguments::Reader::~Reader()
+ArgumentsReader::~ArgumentsReader()
 {
     if (d) {
         d->~Private();
@@ -159,11 +159,11 @@ Arguments::Reader::~Reader()
     }
 }
 
-void Arguments::Reader::beginRead()
+void ArgumentsReader::beginRead()
 {
-    VALID_IF(d->m_args, Error::NotAttachedToArguments);
-    d->m_signature = d->m_args->d->m_signature;
-    d->m_data = d->m_args->d->m_data;
+    VALID_IF(d->m_argsPriv, Error::NotAttachedToArguments);
+    d->m_signature = d->m_argsPriv->m_signature;
+    d->m_data = d->m_argsPriv->m_data;
     // as a slightly hacky optimizaton, we allow empty Arguments to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
         VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
@@ -171,37 +171,37 @@ void Arguments::Reader::beginRead()
     advanceState();
 }
 
-bool Arguments::Reader::isValid() const
+bool ArgumentsReader::isValid() const
 {
-    return d->m_args;
+    return d->m_argsPriv;
 }
 
-Error Arguments::Reader::error() const
+Error ArgumentsReader::error() const
 {
     return d->m_error;
 }
 
-cstring Arguments::Reader::stateString() const
+cstring ArgumentsReader::stateString() const
 {
     return printableState(m_state);
 }
 
-bool Arguments::Reader::isInsideEmptyArray() const
+bool ArgumentsReader::isInsideEmptyArray() const
 {
     return d->m_nilArrayNesting > 0;
 }
 
-cstring Arguments::Reader::currentSignature() const
+cstring ArgumentsReader::currentSignature() const
 {
     return d->m_signature;
 }
 
-uint32 Arguments::Reader::currentSignaturePosition() const
+uint32 ArgumentsReader::currentSignaturePosition() const
 {
     return d->m_signaturePosition;
 }
 
-cstring Arguments::Reader::currentSingleCompleteTypeSignature() const
+cstring ArgumentsReader::currentSingleCompleteTypeSignature() const
 {
     const uint32 startingLength = d->m_signature.length - d->m_signaturePosition;
     cstring sigCopy = { d->m_signature.ptr + d->m_signaturePosition, startingLength };
@@ -215,7 +215,7 @@ cstring Arguments::Reader::currentSingleCompleteTypeSignature() const
     return sigCopy;
 }
 
-void Arguments::Reader::replaceData(chunk data)
+void ArgumentsReader::replaceData(chunk data)
 {
     VALID_IF(data.length >= d->m_dataPosition, Error::ReplacementDataIsShorter);
 
@@ -225,7 +225,7 @@ void Arguments::Reader::replaceData(chunk data)
     // don't touch the original (= call parameter, not variant) signature, which does not point into m_data.
     bool isMainSignature = true;
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
-        if (aggregate.aggregateType == BeginVariant) {
+        if (aggregate.aggregateType == Arguments::BeginVariant) {
             if (isMainSignature) {
                 isMainSignature = false;
             } else {
@@ -238,48 +238,48 @@ void Arguments::Reader::replaceData(chunk data)
     }
 
     d->m_data = data;
-    if (m_state == NeedMoreData) {
+    if (m_state == Arguments::NeedMoreData) {
         advanceState();
     }
 }
 
-void Arguments::Reader::doReadPrimitiveType()
+void ArgumentsReader::doReadPrimitiveType()
 {
     switch(m_state) {
-    case Boolean: {
-        uint32 num = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Boolean: {
+        uint32 num = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         m_u.Boolean = num == 1;
         VALID_IF(num <= 1, Error::MalformedMessageData);
         break; }
-    case Byte:
+    case Arguments::Byte:
         m_u.Byte = d->m_data.ptr[d->m_dataPosition];
         break;
-    case Int16:
-        m_u.Int16 = basic::readInt16(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Int16:
+        m_u.Int16 = basic::readInt16(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Uint16:
-        m_u.Uint16 = basic::readUint16(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Uint16:
+        m_u.Uint16 = basic::readUint16(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Int32:
-        m_u.Int32 = basic::readInt32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Int32:
+        m_u.Int32 = basic::readInt32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Uint32:
-        m_u.Uint32 = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Uint32:
+        m_u.Uint32 = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Int64:
-        m_u.Int64 = basic::readInt64(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Int64:
+        m_u.Int64 = basic::readInt64(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Uint64:
-        m_u.Uint64 = basic::readUint64(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Uint64:
+        m_u.Uint64 = basic::readUint64(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case Double:
-        m_u.Double = basic::readDouble(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::Double:
+        m_u.Double = basic::readDouble(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         break;
-    case UnixFd: {
-        uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+    case Arguments::UnixFd: {
+        uint32 index = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
         if (!d->m_nilArrayNesting) {
-            VALID_IF(index < d->m_args->d->m_fileDescriptors.size(), Error::MalformedMessageData);
-            m_u.Int32 = d->m_args->d->m_fileDescriptors[index];
+            VALID_IF(index < d->m_argsPriv->m_fileDescriptors.size(), Error::MalformedMessageData);
+            m_u.Int32 = d->m_argsPriv->m_fileDescriptors[index];
         } else {
             m_u.Int32 = int32(InvalidFileDescriptor);
         }
@@ -290,36 +290,36 @@ void Arguments::Reader::doReadPrimitiveType()
     }
 }
 
-void Arguments::Reader::doReadString(uint32 lengthPrefixSize)
+void ArgumentsReader::doReadString(uint32 lengthPrefixSize)
 {
     uint32 stringLength = 1;
     if (lengthPrefixSize == 1) {
         stringLength += d->m_data.ptr[d->m_dataPosition];
     } else {
         stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
-                                          d->m_args->d->m_isByteSwapped);
+                                          d->m_argsPriv->m_isByteSwapped);
         VALID_IF(stringLength + 1 <= Arguments::MaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
     if (unlikely(d->m_dataPosition + stringLength > d->m_data.length)) {
-        m_state = NeedMoreData;
+        m_state = Arguments::NeedMoreData;
         return;
     }
     m_u.String.ptr = reinterpret_cast<char *>(d->m_data.ptr) + d->m_dataPosition;
     m_u.String.length = stringLength - 1; // terminating null is not counted
     d->m_dataPosition += stringLength;
     bool isValidString = false;
-    if (m_state == String) {
+    if (m_state == Arguments::String) {
         isValidString = Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length));
-    } else if (m_state == ObjectPath) {
+    } else if (m_state == Arguments::ObjectPath) {
         isValidString = Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length));
-    } else if (m_state == Signature) {
+    } else if (m_state == Arguments::Signature) {
         isValidString = Arguments::isSignatureValid(cstring(m_u.String.ptr, m_u.String.length));
     }
     VALID_IF(isValidString, Error::MalformedMessageData);
 }
 
-void Arguments::Reader::advanceState()
+void ArgumentsReader::advanceState()
 {
     // if we don't have enough data, the strategy is to keep everything unchanged
     // except for the state which will be NeedMoreData
@@ -328,7 +328,7 @@ void Arguments::Reader::advanceState()
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
 
-    if (unlikely(m_state == InvalidData)) { // nonrecoverable...
+    if (unlikely(m_state == Arguments::InvalidData)) { // nonrecoverable...
         return;
     }
     // can't do the following because a dict is one aggregate in our counting, but two according to
@@ -346,21 +346,21 @@ void Arguments::Reader::advanceState()
     if (d->m_aggregateStack.empty()) {
         // TODO check if there is still data left, if so it's probably an error
         if (d->m_signaturePosition >= d->m_signature.length) {
-            m_state = Finished;
+            m_state = Arguments::Finished;
             return;
         }
     } else {
         const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
-        case BeginStruct:
+        case Arguments::BeginStruct:
             break; // handled later by TypeInfo knowing ')' -> EndStruct
-        case BeginVariant:
+        case Arguments::BeginVariant:
             if (d->m_signaturePosition >= d->m_signature.length) {
-                m_state = EndVariant;
+                m_state = Arguments::EndVariant;
                 return;
             }
             break;
-        case BeginArray:
+        case Arguments::BeginArray:
             if (d->m_signaturePosition > aggregateInfo.arr.containedTypeBegin) {
                 // End of current iteration; either there are more or the array ends
                 const Private::ArrayInfo &arrayInfo = aggregateInfo.arr;
@@ -371,11 +371,11 @@ void Arguments::Reader::advanceState()
                 }
                 // check that data end lines up exactly
                 VALID_IF(d->m_dataPosition == arrayInfo.dataEnd, Error::MalformedMessageData);
-                m_state = EndArray;
+                m_state = Arguments::EndArray;
                 return;
             }
             break;
-        case BeginDict:
+        case Arguments::BeginDict:
             if (d->m_signaturePosition > aggregateInfo.arr.containedTypeBegin + 1) {
                 // Almost like BeginArray, only differences are commented
                 const Private::ArrayInfo &arrayInfo = aggregateInfo.arr;
@@ -384,20 +384,20 @@ void Arguments::Reader::advanceState()
                     d->m_signaturePosition = arrayInfo.containedTypeBegin;
 #ifdef WITH_DICT_ENTRY
                     d->m_signaturePosition--;
-                    m_state = EndDictEntry;
+                    m_state = Arguments::EndDictEntry;
                     m_u.Uint32 = 0; // meaning: more dict entries follow (state after next is BeginDictEntry)
                     return;
 #endif
                     break;
                 }
 #ifdef WITH_DICT_ENTRY
-                m_state = EndDictEntry;
+                m_state = Arguments::EndDictEntry;
                 m_u.Uint32 = 1; // meaning: array end reached (state after next is EndDict)
                 return;
 #endif
                 // check that data end lines up exactly
                 VALID_IF(d->m_dataPosition == arrayInfo.dataEnd, Error::MalformedMessageData);
-                m_state = EndDict;
+                m_state = Arguments::EndDict;
                 return;
             }
             break;
@@ -411,7 +411,7 @@ void Arguments::Reader::advanceState()
     const TypeInfo ty = typeInfo(d->m_signature.ptr[d->m_signaturePosition]);
     m_state = ty.state();
 
-    VALID_IF(m_state != InvalidData, Error::MalformedMessageData);
+    VALID_IF(m_state != Arguments::InvalidData, Error::MalformedMessageData);
 
     // check if we have enough data for the next type, and read it
     // if we're in a nil array, we are iterating only over the types without reading any data
@@ -434,7 +434,7 @@ void Arguments::Reader::advanceState()
                 d->m_dataPosition += ty.alignment;
             } else {
                 doReadString(ty.alignment);
-                if (unlikely(m_state == NeedMoreData)) {
+                if (unlikely(m_state == Arguments::NeedMoreData)) {
                     goto out_needMoreData;
                 }
             }
@@ -449,18 +449,19 @@ void Arguments::Reader::advanceState()
     // now the interesting part: aggregates
 
     switch (m_state) {
-    case BeginStruct:
+    case Arguments::BeginStruct:
         VALID_IF(d->m_nesting.beginParen(), Error::MalformedMessageData);
         break;
-    case EndStruct:
+    case Arguments::EndStruct:
 #ifndef NDEBUG // in case the compiler is unable to optimize out the container accesses
-        if (!d->m_aggregateStack.size() || d->m_aggregateStack.back().aggregateType != BeginStruct) {
+        if (!d->m_aggregateStack.size() ||
+            d->m_aggregateStack.back().aggregateType != Arguments::BeginStruct) {
             assert(false); // should never happen due to the pre-validated signature
         }
 #endif
         break;
 
-    case BeginVariant: {
+    case Arguments::BeginVariant: {
         cstring signature;
         if (unlikely(d->m_nilArrayNesting)) {
             static const char *emptyString = "";
@@ -486,7 +487,7 @@ void Arguments::Reader::advanceState()
         m_u.String.length = signature.length;
         break; }
 
-    case BeginArray: {
+    case Arguments::BeginArray: {
         // NB: Do not make non-idempotent changes to member variables before potentially going to
         //     out_needMoreData! We'll make the same change again after getting more data.
         uint32 arrayLength = 0;
@@ -494,13 +495,13 @@ void Arguments::Reader::advanceState()
             if (unlikely(d->m_dataPosition + sizeof(uint32) > d->m_data.length)) {
                 goto out_needMoreData;
             }
-            arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_args->d->m_isByteSwapped);
+            arrayLength = basic::readUint32(d->m_data.ptr + d->m_dataPosition, d->m_argsPriv->m_isByteSwapped);
             VALID_IF(arrayLength <= Arguments::MaxArrayLength, Error::MalformedMessageData);
             d->m_dataPosition += sizeof(uint32);
         }
 
         if (d->m_signature.ptr[d->m_signaturePosition + 1] == '{') {
-            m_state = BeginDict;
+            m_state = Arguments::BeginDict;
         }
 
         uint32 dataEnd = d->m_dataPosition;
@@ -513,7 +514,7 @@ void Arguments::Reader::advanceState()
         // TODO: unit-test this
         if (likely(!d->m_nilArrayNesting)) {
             const uint32 padStart = d->m_dataPosition;
-            const uint32 alignment = m_state == BeginDict ? uint32(StructAlignment) :
+            const uint32 alignment = m_state == Arguments::BeginDict ? uint32(StructAlignment) :
                                      typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]).alignment;
             d->m_dataPosition = align(d->m_dataPosition, alignment);
             VALID_IF(isPaddingZero(d->m_data, padStart, d->m_dataPosition), Error::MalformedMessageData);
@@ -524,7 +525,7 @@ void Arguments::Reader::advanceState()
         }
 
         VALID_IF(d->m_nesting.beginArray(), Error::MalformedMessageData);
-        if (m_state == BeginDict) {
+        if (m_state == Arguments::BeginDict) {
             // TODO check whether the first type is a primitive or string type! // ### isn't that already
             // checked for the main signature and / or variants, though?
             // only closed at end of dict - there is no observable difference for clients
@@ -545,12 +546,12 @@ out_needMoreData:
     // we only start an array when the data for it has fully arrived (possible due to the length
     // prefix), so if we still run out of data in an array the input is invalid.
     VALID_IF(!d->m_nesting.array, Error::MalformedMessageData);
-    m_state = NeedMoreData;
+    m_state = Arguments::NeedMoreData;
     d->m_signaturePosition = savedSignaturePosition;
     d->m_dataPosition = savedDataPosition;
 }
 
-void Arguments::Reader::skipArrayOrDictSignature(bool isDict)
+void ArgumentsReader::skipArrayOrDictSignature(bool isDict)
 {
     // Note that we cannot just pass a dummy Nesting instance to parseSingleCompleteType, it must
     // actually check the nesting because an array may contain other nested aggregates. So we must
@@ -582,16 +583,16 @@ void Arguments::Reader::skipArrayOrDictSignature(bool isDict)
     }
 }
 
-bool Arguments::Reader::beginArray(EmptyArrayOption option)
+bool ArgumentsReader::beginArray(EmptyArrayOption option)
 {
-    if (unlikely(m_state != BeginArray)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginArray)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
 
     Private::AggregateInfo aggregateInfo;
-    aggregateInfo.aggregateType = BeginArray;
+    aggregateInfo.aggregateType = Arguments::BeginArray;
     Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
     arrayInfo.dataEnd = m_u.Uint32;
     arrayInfo.containedTypeBegin = d->m_signaturePosition + 1;
@@ -610,13 +611,13 @@ bool Arguments::Reader::beginArray(EmptyArrayOption option)
     return !d->m_nilArrayNesting;
 }
 
-void Arguments::Reader::skipArrayOrDict(bool isDict)
+void ArgumentsReader::skipArrayOrDict(bool isDict)
 {
     // fast-forward the signature and data positions
     skipArrayOrDictSignature(isDict);
     d->m_dataPosition = m_u.Uint32;
 
-    // m_state = isDict ? EndDict : EndArray; // nobody looks at it
+    // m_state = isDict ? Arguments::EndDict : Arguments::EndArray; // nobody looks at it
     if (isDict) {
         d->m_nesting.endParen();
         d->m_signaturePosition++; // skip '}'
@@ -627,20 +628,20 @@ void Arguments::Reader::skipArrayOrDict(bool isDict)
     advanceState();
 }
 
-void Arguments::Reader::skipArray()
+void ArgumentsReader::skipArray()
 {
-    if (unlikely(m_state != BeginArray)) {
+    if (unlikely(m_state != Arguments::BeginArray)) {
         // TODO test this
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
         skipArrayOrDict(false);
     }
 }
 
-void Arguments::Reader::endArray()
+void ArgumentsReader::endArray()
 {
-    VALID_IF(m_state == EndArray, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::EndArray, Error::ReadWrongType);
     d->m_signaturePosition--; // fix up for the pre-increment of d->m_signaturePosition in advanceState()
     d->m_nesting.endArray();
     d->m_aggregateStack.pop_back();
@@ -650,11 +651,11 @@ void Arguments::Reader::endArray()
     advanceState();
 }
 
-std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
+std::pair<Arguments::IoState, chunk> ArgumentsReader::readPrimitiveArray()
 {
-    auto ret = std::make_pair(InvalidData, chunk());
+    auto ret = std::make_pair(Arguments::InvalidData, chunk());
 
-    if (m_state != BeginArray) {
+    if (m_state != Arguments::BeginArray) {
         return ret;
     }
 
@@ -662,10 +663,11 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     // reject anything that needs validation, including booleans
 
     const TypeInfo elementType = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
-    if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
+    if (!elementType.isPrimitive || elementType.state() == Arguments::Boolean ||
+        elementType.state() == Arguments::UnixFd) {
         return ret;
     }
-    if (d->m_args->d->m_isByteSwapped && elementType.state() != Byte) {
+    if (d->m_argsPriv->m_isByteSwapped && elementType.state() != Arguments::Byte) {
         return ret;
     }
 
@@ -683,7 +685,7 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     ret.first = elementType.state();
     d->m_signaturePosition += 1;
     d->m_dataPosition = m_u.Uint32;
-    m_state = EndArray;
+    m_state = Arguments::EndArray;
     d->m_nesting.endArray();
 
     // ... leave the array, there is nothing more to do in it
@@ -692,30 +694,31 @@ std::pair<Arguments::IoState, chunk> Arguments::Reader::readPrimitiveArray()
     return ret;
 }
 
-Arguments::IoState Arguments::Reader::peekPrimitiveArray(EmptyArrayOption option) const
+Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) const
 {
     // almost duplicated from readPrimitiveArray(), so keep it in sync
-    if (m_state != BeginArray) {
-        return InvalidData;
+    if (m_state != Arguments::BeginArray) {
+        return Arguments::InvalidData;
     }
     const uint32 arrayLength = m_u.Uint32 - d->m_dataPosition;
     if (option == SkipIfEmpty && !arrayLength) {
-        return BeginArray;
+        return Arguments::BeginArray;
     }
     const TypeInfo elementType = typeInfo(d->m_signature.ptr[d->m_signaturePosition + 1]);
-    if (!elementType.isPrimitive || elementType.state() == Boolean || elementType.state() == UnixFd) {
-        return BeginArray;
+    if (!elementType.isPrimitive || elementType.state() == Arguments::Boolean ||
+        elementType.state() == Arguments::UnixFd) {
+        return Arguments::BeginArray;
     }
-    if (d->m_args->d->m_isByteSwapped && elementType.state() != Byte) {
-        return BeginArray;
+    if (d->m_argsPriv->m_isByteSwapped && elementType.state() != Arguments::Byte) {
+        return Arguments::BeginArray;
     }
     return elementType.state();
 }
 
-bool Arguments::Reader::beginDict(EmptyArrayOption option)
+bool ArgumentsReader::beginDict(EmptyArrayOption option)
 {
-    if (unlikely(m_state != BeginDict)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginDict)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
@@ -723,7 +726,7 @@ bool Arguments::Reader::beginDict(EmptyArrayOption option)
     d->m_signaturePosition++; // skip '{`
 
     Private::AggregateInfo aggregateInfo;
-    aggregateInfo.aggregateType = BeginDict;
+    aggregateInfo.aggregateType = Arguments::BeginDict;
     Private::ArrayInfo &arrayInfo = aggregateInfo.arr; // also used for dict
     arrayInfo.dataEnd = m_u.Uint32;
     arrayInfo.containedTypeBegin = d->m_signaturePosition + 1;
@@ -742,7 +745,7 @@ bool Arguments::Reader::beginDict(EmptyArrayOption option)
         endDictEntry();
         return ret;
     }
-    m_state = BeginDictEntry;
+    m_state = Arguments::BeginDictEntry;
 #else
     }
 
@@ -751,11 +754,11 @@ bool Arguments::Reader::beginDict(EmptyArrayOption option)
     return !d->m_nilArrayNesting;
 }
 
-void Arguments::Reader::skipDict()
+void ArgumentsReader::skipDict()
 {
-    if (unlikely(m_state != BeginDict)) {
+    if (unlikely(m_state != Arguments::BeginDict)) {
         // TODO test this
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
         d->m_signaturePosition++; // skip '{' like beginDict() does - skipArrayOrDict() expects it
@@ -763,19 +766,19 @@ void Arguments::Reader::skipDict()
     }
 }
 
-bool Arguments::Reader::isDictKey() const
+bool ArgumentsReader::isDictKey() const
 {
     if (!d->m_aggregateStack.empty()) {
         const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
-        return aggregateInfo.aggregateType == BeginDict &&
+        return aggregateInfo.aggregateType == Arguments::BeginDict &&
                d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin;
     }
     return false;
 }
 
-void Arguments::Reader::endDict()
+void ArgumentsReader::endDict()
 {
-    VALID_IF(m_state == EndDict, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::EndDict, Error::ReadWrongType);
     d->m_nesting.endParen();
     //d->m_signaturePosition++; // skip '}'
     //d->m_signaturePosition--; // fix up for the pre-increment of d->m_signaturePosition in advanceState()
@@ -788,56 +791,56 @@ void Arguments::Reader::endDict()
 }
 
 #ifdef WITH_DICT_ENTRY
-void Arguments::Reader::beginDictEntry()
+void ArgumentsReader::beginDictEntry()
 {
-    VALID_IF(m_state == BeginDictEntry, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::BeginDictEntry, Error::ReadWrongType);
     advanceState();
 }
 
-void Arguments::Reader::endDictEntry()
+void ArgumentsReader::endDictEntry()
 {
-    VALID_IF(m_state == EndDictEntry, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::EndDictEntry, Error::ReadWrongType);
     if (m_u.Uint32 == 0) {
-        m_state = BeginDictEntry;
+        m_state = Arguments::BeginDictEntry;
     } else {
-        m_state = EndDict;
+        m_state = Arguments::EndDict;
     }
 }
 #endif
 
-void Arguments::Reader::beginStruct()
+void ArgumentsReader::beginStruct()
 {
-    VALID_IF(m_state == BeginStruct, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::BeginStruct, Error::ReadWrongType);
     Private::AggregateInfo aggregateInfo;
-    aggregateInfo.aggregateType = BeginStruct;
+    aggregateInfo.aggregateType = Arguments::BeginStruct;
     d->m_aggregateStack.push_back(aggregateInfo);
     advanceState();
 }
 
-void Arguments::Reader::skipStruct()
+void ArgumentsReader::skipStruct()
 {
-    if (unlikely(m_state != BeginStruct)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginStruct)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
         skipCurrentElement();
     }
 }
 
-void Arguments::Reader::endStruct()
+void ArgumentsReader::endStruct()
 {
-    VALID_IF(m_state == EndStruct, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::EndStruct, Error::ReadWrongType);
     d->m_nesting.endParen();
     d->m_aggregateStack.pop_back();
     advanceState();
 }
 
-void Arguments::Reader::beginVariant()
+void ArgumentsReader::beginVariant()
 {
-    VALID_IF(m_state == BeginVariant, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::BeginVariant, Error::ReadWrongType);
 
     Private::AggregateInfo aggregateInfo;
-    aggregateInfo.aggregateType = BeginVariant;
+    aggregateInfo.aggregateType = Arguments::BeginVariant;
     Private::VariantInfo &variantInfo = aggregateInfo.var;
     variantInfo.prevSignaturePtr = d->m_signature.ptr;
     variantInfo.prevSignatureLength = d->m_signature.length;
@@ -850,19 +853,19 @@ void Arguments::Reader::beginVariant()
     advanceState();
 }
 
-void Arguments::Reader::skipVariant()
+void ArgumentsReader::skipVariant()
 {
-    if (unlikely(m_state != BeginVariant)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginVariant)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
     } else {
         skipCurrentElement();
     }
 }
 
-void Arguments::Reader::endVariant()
+void ArgumentsReader::endVariant()
 {
-    VALID_IF(m_state == EndVariant, Error::ReadWrongType);
+    VALID_IF(m_state == Arguments::EndVariant, Error::ReadWrongType);
     d->m_nesting.endVariant();
 
     const Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -875,7 +878,7 @@ void Arguments::Reader::endVariant()
     advanceState();
 }
 
-void Arguments::Reader::skipCurrentElement()
+void ArgumentsReader::skipCurrentElement()
 {
     // ### We could implement a skipping fast path for more aggregates, but it would be a lot of work, so
     //     until it's proven to be a problem, just reuse what we have.
@@ -903,7 +906,7 @@ void Arguments::Reader::skipCurrentElement()
             endStruct();
             nestingLevel--;
             if (!nestingLevel) {
-                assert(stateOnEntry == BeginStruct);
+                assert(stateOnEntry == Arguments::BeginStruct);
             }
             break;
         case Arguments::BeginVariant:
@@ -914,15 +917,15 @@ void Arguments::Reader::skipCurrentElement()
             endVariant();
             nestingLevel--;
             if (!nestingLevel) {
-                assert(stateOnEntry == BeginVariant);
+                assert(stateOnEntry == Arguments::BeginVariant);
             }
             break;
         case Arguments::BeginArray:
             skipArray();
             break;
         case Arguments::EndArray:
-            assert(stateOnEntry == EndArray); // only way this can happen - we gracefully skip EndArray
-                                              // and DON'T decrease nestingLevel b/c it would go negative.
+            assert(stateOnEntry == Arguments::EndArray); // only way this can happen - we gracefully skip EndArray
+                                                         // and DON'T decrease nestingLevel b/c it would go negative.
             endArray();
             break;
         case Arguments::BeginDict:
@@ -937,8 +940,8 @@ void Arguments::Reader::skipCurrentElement()
             break;
 #endif
         case Arguments::EndDict:
-            assert(stateOnEntry == EndDict); // only way this can happen - we gracefully "skip" EndDict
-                                             // and DON'T decrease nestingLevel b/c it would go negative.
+            assert(stateOnEntry == Arguments::EndDict); // only way this can happen - we gracefully "skip" EndDict
+                                                        // and DON'T decrease nestingLevel b/c it would go negative.
             endDict();
             break;
         case Arguments::Boolean:
@@ -985,7 +988,7 @@ void Arguments::Reader::skipCurrentElement()
             // resuming, but that is going to get really ugly
             [[fallthrough]];
         default:
-            m_state = InvalidData;
+            m_state = Arguments::InvalidData;
             d->m_error.setCode(Error::StateNotSkippable);
             [[fallthrough]];
         case Arguments::InvalidData:
@@ -998,9 +1001,9 @@ void Arguments::Reader::skipCurrentElement()
     }
 }
 
-std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
+std::vector<Arguments::IoState> ArgumentsReader::aggregateStack() const
 {
-    std::vector<IoState> ret;
+    std::vector<Arguments::IoState> ret;
     ret.reserve(d->m_aggregateStack.size());
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
         ret.push_back(aggregate.aggregateType);
@@ -1008,15 +1011,15 @@ std::vector<Arguments::IoState> Arguments::Reader::aggregateStack() const
     return ret;
 }
 
-uint32 Arguments::Reader::aggregateDepth() const
+uint32 ArgumentsReader::aggregateDepth() const
 {
     return d->m_aggregateStack.size();
 }
 
-Arguments::IoState Arguments::Reader::currentAggregate() const
+Arguments::IoState ArgumentsReader::currentAggregate() const
 {
     if (d->m_aggregateStack.empty()) {
-        return NotStarted;
+        return Arguments::NotStarted;
     }
     return d->m_aggregateStack.back().aggregateType;
 }

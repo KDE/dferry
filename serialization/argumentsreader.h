@@ -1,60 +1,63 @@
-// This is inside the class definition for Arguments, hence no header guard and "private:" and "public:",
-// but otherwise it's just like a class definition
+/*
+   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
 
-private:
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public
+   License as published by the Free Software Foundation; either
+   version 2 of the License, or (at your option) any later version.
 
-struct podCstring // Same as cstring but without ctor.
-                  // Can't put the cstring type into a union because it has a constructor :/
-{
-    char *ptr;
-    uint32 length;
-};
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
 
-typedef union
-{
-    byte Byte;
-    bool Boolean;
-    int16 Int16;
-    uint16 Uint16;
-    int32 Int32;
-    uint32 Uint32;
-    int64 Int64;
-    uint64 Uint64;
-    double Double;
-    podCstring String; // also for ObjectPath and Signature
-} DataUnion;
+   You should have received a copy of the GNU Library General Public License
+   along with this library; see the file COPYING.LGPL.  If not, write to
+   the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.
 
-public:
+   Alternatively, this file is available under the Mozilla Public License
+   Version 1.1.  You may obtain a copy of the License at
+   http://www.mozilla.org/MPL/
+*/
+
+#ifndef ARGUMENTSREADER_H
+#define ARGUMENTSREADER_H
+
+#include "arguments.h"
+
+//TODO make these more private, move to private header, move to Arguments... but they can't stay here!
+
 // error handling is done by asking state() or isError(), not by method return values.
 // occasionally looking at isError() is less work than checking every call.
-class DFERRY_EXPORT Reader
+class DFERRY_EXPORT ArgumentsReader
 {
 public:
-    explicit Reader(const Arguments &args);
-    explicit Reader(const Message &msg);
-    Reader(Reader &&other);
-    void operator=(Reader &&other);
+    explicit ArgumentsReader(const Arguments &args);
+    explicit ArgumentsReader(const Message &msg);
+    ArgumentsReader(ArgumentsReader &&other);
+    void operator=(ArgumentsReader &&other);
     // TODO unit-test copy and assignment
-    Reader(const Reader &other);
-    void operator=(const Reader &other);
+    ArgumentsReader(const ArgumentsReader &other);
+    void operator=(const ArgumentsReader &other);
 
-    ~Reader();
+    ~ArgumentsReader();
 
     bool isValid() const;
     Error error() const; // see also: aggregateStack()
 
-    IoState state() const { return m_state; }
+    Arguments::IoState state() const { return m_state; }
     cstring stateString() const;
     bool isInsideEmptyArray() const;
     cstring currentSignature() const; // current signature, either main signature or current variant
     uint32 currentSignaturePosition() const;
     cstring currentSingleCompleteTypeSignature() const;
     // HACK call this in NeedMoreData state when more data has been added; this replaces m_data
-    // WARNING: calling replaceData() invalidates copies (if any) of this Reader
+    // WARNING: calling replaceData() invalidates copies (if any) of this ArgumentsReader
     void replaceData(chunk data);
 
-    bool isFinished() const { return m_state == Finished; }
-    bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; } // TODO remove
+    bool isFinished() const { return m_state == Arguments::Finished; }
+    bool isError() const { return m_state == Arguments::InvalidData || m_state == Arguments::NeedMoreData; } // TODO remove
 
     enum EmptyArrayOption
     {
@@ -94,9 +97,9 @@ public:
     void skipVariant(); // like skipArray();
     void endVariant(); // like endArray()
 
-    std::vector<IoState> aggregateStack() const; // the aggregates the reader is currently in
+    std::vector<Arguments::IoState> aggregateStack() const; // the aggregates the reader is currently in
     uint32 aggregateDepth() const; // like calling aggregateStack().size() but much faster
-    IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
+    Arguments::IoState currentAggregate() const; // the innermost aggregate, NotStarted if not in an aggregate
 
     // reading a type that is not indicated by state() will cause undefined behavior and at
     // least return garbage.
@@ -151,9 +154,33 @@ private:
     Private *d;
 
     // two data members not behind d-pointer for performance reasons, especially inlining
-    IoState m_state;
+    Arguments::IoState m_state;
+
+
+    struct podCstring // Same as cstring but without ctor.
+                      // Can't put the cstring type into a union because it has a constructor :/
+    {
+        char *ptr;
+        uint32 length;
+    };
+
+    typedef union
+    {
+        byte Byte;
+        bool Boolean;
+        int16 Int16;
+        uint16 Uint16;
+        int32 Int32;
+        uint32 Uint32;
+        int64 Int64;
+        uint64 Uint64;
+        double Double;
+        podCstring String; // also for ObjectPath and Signature
+    } DataUnion;
 
     // it is more efficient, in code size and performance, to read the data in advanceState()
     // and store the result for later retrieval in readFoo()
     DataUnion m_u;
 };
+
+#endif // ARGUMENTSREADER_H

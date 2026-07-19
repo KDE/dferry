@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "error.h"
 #include "eventdispatcher.h"
@@ -69,7 +69,7 @@ void test_errorPropagation()
         ReplierReceiver replier;
         conn.setSpontaneousMessageReceiver(&replier);
 
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginVariant();
 
         // If errorAtStep == 0, we do NOT introduce an error, just to check that the intentional

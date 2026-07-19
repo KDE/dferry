@@ -28,7 +28,7 @@
       stuff should really be separate! Maybe separate namespace, in any case separate enum
 
     an error (if any) propagates in the following way, so you don't need to check at every step:
-    Arguments::Writer -> Arguments -> Message -> PendingReply
+    ArgumentsWriter -> Arguments -> Message -> PendingReply
 
 */
 

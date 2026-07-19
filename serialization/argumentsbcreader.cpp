@@ -21,7 +21,9 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentsbcreader.h"
+
+#include "arguments.h" // TODO needed?
 #include "arguments_p.h"
 
 #include "message.h"
@@ -32,14 +34,12 @@
 #include <boost/container/small_vector.hpp>
 #endif
 
-#include <iostream> // TODO remove
-
 #undef VALID_IF
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    m_state = InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
+    m_state = Arguments::InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
 
 #define VALID_IF_STATE(expectedState) if (likely(m_state == expectedState)) {} else { \
-    m_state = InvalidData; d->m_error.setCode(Error::ReadWrongType); return; }
+    m_state = Arguments::InvalidData; d->m_error.setCode(Error::ReadWrongType); return; }
 
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
@@ -76,7 +76,7 @@ struct VariantInfo
     uint32 prevOpsIndex;
 };
 
-class Arguments::BcReader::Private
+class ArgumentsBcReader::Private
 {
 public:
     const FerCode *m_opsPtr{};    // end pointer not needed, we stop at FerOpcode::End
@@ -105,55 +105,55 @@ static const char s_nullBuffer[16] {}; // inert fake data for callers when readi
 
 
 // TODO must memoize signature -> FerCode to amortize its generation and get a real performance benefit
-Arguments::BcReader::BcReader(const Arguments &args, FerEncodeOptions encodeOptions)
+ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncodeOptions encodeOptions)
     : d(new Private)
 {
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
-    d->m_data = args.d->m_data;
+    d->m_data = Arguments::Private::of(&args)->m_data;
     beginRead();
 }
 
-Arguments::BcReader::BcReader(const Message &msg, FerEncodeOptions encodeOptions)
+ArgumentsBcReader::ArgumentsBcReader(const Message &msg, Arguments::FerEncodeOptions encodeOptions)
     : d(new Private)
 {
     const Arguments &args = msg.arguments();
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
-    d->m_data = args.d->m_data;
+    d->m_data = Arguments::Private::of(&args)->m_data;
     beginRead();
 }
 
 #ifdef HAVE_BOOST
-Arguments::BcReader::BcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
+ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
 #else
-Arguments::BcReader::BcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode)
+ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode)
 #endif
     : d(new Private)
 {
     d->m_ops = ferCode;
-    d->m_data = args.d->m_data;
+    d->m_data = Arguments::Private::of(&args)->m_data;
     beginRead();
 }
 
 #ifdef HAVE_BOOST
-Arguments::BcReader::BcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
+ArgumentsBcReader::ArgumentsBcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
 #else
-Arguments::BcReader::BcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode)
+ArgumentsBcReader::ArgumentsBcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode)
 #endif
 {
     const Arguments &args = msg.arguments();
     d->m_ops = ferCode;
-    d->m_data = args.d->m_data;
+    d->m_data = Arguments::Private::of(&args)->m_data;
     beginRead();
 }
 
-Arguments::BcReader::BcReader(BcReader &&other)
+ArgumentsBcReader::ArgumentsBcReader(ArgumentsBcReader &&other)
     : m_state(other.m_state),
       d(other.d)
 {
     other.d = nullptr;
 }
 
-Arguments::BcReader::BcReader(const BcReader &other)
+ArgumentsBcReader::ArgumentsBcReader(const ArgumentsBcReader &other)
     : m_state(other.m_state),
       d(nullptr)
 
@@ -163,7 +163,7 @@ Arguments::BcReader::BcReader(const BcReader &other)
     }
 }
 
-void Arguments::BcReader::operator=(BcReader &&other)
+void ArgumentsBcReader::operator=(ArgumentsBcReader &&other)
 {
     if (&other == this) {
         return;
@@ -177,7 +177,7 @@ void Arguments::BcReader::operator=(BcReader &&other)
     other.d = nullptr;
 }
 
-void Arguments::BcReader::operator=(const BcReader &other)
+void ArgumentsBcReader::operator=(const ArgumentsBcReader &other)
 {
     if (&other == this) {
         return;
@@ -186,28 +186,28 @@ void Arguments::BcReader::operator=(const BcReader &other)
     if (d && other.d) {
         *d = *other.d;
     } else {
-        BcReader temp(other);
+        ArgumentsBcReader temp(other);
         std::swap(d, temp.d);
     }
 }
 
-Arguments::BcReader::~BcReader()
+ArgumentsBcReader::~ArgumentsBcReader()
 {
     delete d;
     d = nullptr;
 }
 
-bool Arguments::BcReader::isValid() const
+bool ArgumentsBcReader::isValid() const
 {
     return true; // TODO
 }
 
-Error Arguments::BcReader::error() const
+Error ArgumentsBcReader::error() const
 {
     return d->m_error;
 }
 
-bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
+bool ArgumentsBcReader::beginArrayInternal(EmptyArrayOption option)
 {
     (void)option; // TODO
 
@@ -252,7 +252,7 @@ bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
         return true;
 
     } else {
-        m_state = EndArray;
+        m_state = Arguments::EndArray;
 
         // Skip d->m_opsPtr to the end of the array (TODO? add skip-to-end-index data to FerCode?)
         // We need to special-case opcodes that are followed by data that doesn't *have* opcodes so that
@@ -295,78 +295,78 @@ bool Arguments::BcReader::beginArrayInternal(EmptyArrayOption option)
     }
 }
 
-bool Arguments::BcReader::beginArray(EmptyArrayOption option)
+bool ArgumentsBcReader::beginArray(EmptyArrayOption option)
 {
-    if (unlikely(m_state != BeginArray)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginArray)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
     return beginArrayInternal(option);
 }
 
-void Arguments::BcReader::endArray()
+void ArgumentsBcReader::endArray()
 {
-    VALID_IF_STATE(EndArray);
+    VALID_IF_STATE(Arguments::EndArray);
     advanceState();
 }
 
-bool Arguments::BcReader::beginDict(EmptyArrayOption option)
+bool ArgumentsBcReader::beginDict(EmptyArrayOption option)
 {
-    if (unlikely(m_state != BeginDict)) {
-        m_state = InvalidData;
+    if (unlikely(m_state != Arguments::BeginDict)) {
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
     return beginArrayInternal(option);
 }
 
-void Arguments::BcReader::endDict()
+void ArgumentsBcReader::endDict()
 {
-    VALID_IF_STATE(EndDict);
+    VALID_IF_STATE(Arguments::EndDict);
     advanceState();
 }
 
-void Arguments::BcReader::beginStruct()
+void ArgumentsBcReader::beginStruct()
 {
-    VALID_IF_STATE(BeginStruct);
+    VALID_IF_STATE(Arguments::BeginStruct);
     advanceState();
 }
 
-void Arguments::BcReader::endStruct()
+void ArgumentsBcReader::endStruct()
 {
-    VALID_IF_STATE(EndStruct);
+    VALID_IF_STATE(Arguments::EndStruct);
     advanceState();
 }
 
-void Arguments::BcReader::beginVariant()
+void ArgumentsBcReader::beginVariant()
 {
-    VALID_IF_STATE(BeginVariant);
+    VALID_IF_STATE(Arguments::BeginVariant);
     advanceState();
 }
 
-void Arguments::BcReader::endVariant()
+void ArgumentsBcReader::endVariant()
 {
-    VALID_IF_STATE(EndVariant);
+    VALID_IF_STATE(Arguments::EndVariant);
     advanceState();
 }
 
 #ifdef WITH_DICT_ENTRY
-void Arguments::BcReader::beginDictEntry()
+void ArgumentsBcReader::beginDictEntry()
 {
 }
 
-void Arguments::BcReader::endDictEntry()
+void ArgumentsBcReader::endDictEntry()
 {
 }
 #endif
 
-void Arguments::BcReader::doReadString(uint32 lengthPrefixSize)
+void ArgumentsBcReader::doReadString(uint32 lengthPrefixSize)
 {
     (void)lengthPrefixSize;
 }
 
-void Arguments::BcReader::beginRead()
+void ArgumentsBcReader::beginRead()
 {
     //std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
 
@@ -378,9 +378,9 @@ void Arguments::BcReader::beginRead()
     d->m_dataEnd = d->m_dataPtr + d->m_data.length;
 }
 
-const void *Arguments::BcReader::advanceState()
+const void *ArgumentsBcReader::advanceState()
 {
-    if (unlikely(m_state == InvalidData || m_state == Finished)) { // nonrecoverable...
+    if (unlikely(m_state == Arguments::InvalidData || m_state == Arguments::Finished)) { // nonrecoverable...
         return s_nullBuffer;
     }
 

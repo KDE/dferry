@@ -1,52 +1,72 @@
-// This is inside the class definition for Arguments, hence no header guard and "private:" and "public:",
-// but otherwise it's just like a class definition
+/*
+   Copyright (C) 2013 Andreas Hartmetz <ahartmetz@gmail.com>
 
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public
+   License as published by the Free Software Foundation; either
+   version 2 of the License, or (at your option) any later version.
 
-public:
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
 
-enum class FerEncodeOptions
-{
-    None = 0,
-    ElideStructs
-};
+   You should have received a copy of the GNU Library General Public License
+   along with this library; see the file COPYING.LGPL.  If not, write to
+   the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.
+
+   Alternatively, this file is available under the Mozilla Public License
+   Version 1.1.  You may obtain a copy of the License at
+   http://www.mozilla.org/MPL/
+*/
+
+#ifndef ARGUMENTSBCREADER_H
+#define ARGUMENTSBCREADER_H
+
+#include "arguments.h"
+
+union FerCode;
 
 // error handling is done by asking state() or isError(), not by method return values.
 // occasionally looking at isError() is less work than checking every call.
-class DFERRY_EXPORT BcReader
+class DFERRY_EXPORT ArgumentsBcReader
 {
 public:
-    explicit BcReader(const Arguments &args, FerEncodeOptions encodeOptions = FerEncodeOptions::None);
-    explicit BcReader(const Message &msg, FerEncodeOptions encodeOptions = FerEncodeOptions::None);
+    explicit ArgumentsBcReader(const Arguments &args,
+                               Arguments::FerEncodeOptions encodeOptions = Arguments::FerEncodeOptions::None);
+    explicit ArgumentsBcReader(const Message &msg,
+                               Arguments::FerEncodeOptions encodeOptions = Arguments::FerEncodeOptions::None);
 #ifdef HAVE_BOOST
-    BcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
-    BcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
+    ArgumentsBcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
+    ArgumentsBcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode);
 #else
-    BcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode);
-    BcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode);
+    ArgumentsBcReader(const Arguments &args, std::shared_ptr<std::vector<FerCode>> ferCode);
+    ArgumentsBcReader(const Message &msg, std::shared_ptr<std::vector<FerCode>> ferCode);
 #endif
-    BcReader(BcReader &&other);
-    BcReader(const BcReader &other);
+    ArgumentsBcReader(ArgumentsBcReader &&other);
+    ArgumentsBcReader(const ArgumentsBcReader &other);
 
-    ~BcReader();
+    ~ArgumentsBcReader();
 
-    void operator=(BcReader &&other);
+    void operator=(ArgumentsBcReader &&other);
     // TODO unit-test copy and assignment
 
-    void operator=(const BcReader &other);
+    void operator=(const ArgumentsBcReader &other);
 
 
     bool isValid() const;
     Error error() const;
 
-    IoState state() const { return m_state; }
+    Arguments::IoState state() const { return m_state; }
     //cstring stateString() const;
     //bool isInsideEmptyArray() const;
     //cstring currentSignature() const; // current signature, either main signature or current variant
     //uint32 currentSignaturePosition() const;
     //cstring currentSingleCompleteTypeSignature() const;
 
-    bool isFinished() const { return m_state == Finished; }
-    bool isError() const { return m_state == InvalidData || m_state == NeedMoreData; } // TODO remove
+    bool isFinished() const { return m_state == Arguments::Finished; }
+    bool isError() const { return m_state == Arguments::InvalidData || m_state == Arguments::NeedMoreData; } // TODO remove
 
     enum EmptyArrayOption
     {
@@ -150,9 +170,11 @@ private:
     //void skipArrayOrDictSignature(bool isDict);
     //void skipArrayOrDict(bool isDict);
 
-    IoState m_state;
+    Arguments::IoState m_state;
 
     class Private;
     friend class Private;
     Private *d;
 };
+
+#endif // ARGUMENTSBCREADER_H

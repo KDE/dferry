@@ -21,7 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
@@ -59,7 +60,7 @@ public:
         }
         {
             const Arguments args = ping.arguments();
-            Arguments::Reader reader(args);
+            ArgumentsReader reader(args);
             cstring payload = reader.readString();
             TEST(!reader.error().isError());
             TEST(reader.isFinished());
@@ -68,7 +69,7 @@ public:
 
         {
             Message pong = Message::createReplyTo(ping);
-            Arguments::Writer writer;
+            ArgumentsWriter writer;
             writer.writeString(pongPayload);
             pong.setArguments(writer.finish());
 
@@ -117,7 +118,7 @@ public:
         Message pong = pongReply->takeReply();
 
         Arguments args = pong.arguments();
-        Arguments::Reader reader(args);
+        ArgumentsReader reader(args);
         std::string strPayload = toStdString(reader.readString());
         TEST(!reader.error().isError());
         TEST(reader.isFinished());
@@ -143,7 +144,7 @@ static void testPingPong()
 
     // send ping message to other thread
     Message ping = Message::createCall(echoPath, echoInterface, echoMethod);
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     writer.writeString(pingPayload);
     ping.setArguments(writer.finish());
     ping.setDestination(conn.uniqueName());

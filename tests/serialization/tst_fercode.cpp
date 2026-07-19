@@ -21,7 +21,10 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "../../serialization/fercode_p.h"
+#include "fercode_p.h"
+#include "argumentsbcreader.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 
 #include "../testutil.h"
 
@@ -139,22 +142,22 @@ static void test_arrayEncode()
 static void test_reader_basic()
 {
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.writeUint32(123);
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::Uint32);
         TEST(reader.readUint32() == 123);
         TEST(reader.state() == Arguments::Finished);
     }
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.writeUint32(123);
         writer.writeUint64(123123123123123123);
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::Uint32);
         TEST(reader.readUint32() == 123);
         TEST(reader.state() == Arguments::Uint64);
@@ -163,7 +166,7 @@ static void test_reader_basic()
     }
     // TODO strings
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.writeUint32(123);
         writer.beginStruct();
         writer.writeUint32(444);
@@ -171,7 +174,7 @@ static void test_reader_basic()
         writer.endStruct();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::Uint32);
         TEST(reader.readUint32() == 123);
         TEST(reader.state() == Arguments::BeginStruct);
@@ -193,13 +196,13 @@ static void test_reader_array()
     // - structs as array or dict values
 
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginArray();
         writer.writeUint32(123);
         writer.endArray();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginArray);
         reader.beginArray();
         TEST(reader.state() == Arguments::Uint32);
@@ -209,14 +212,14 @@ static void test_reader_array()
         TEST(reader.state() == Arguments::Finished);
     }
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginArray();
         writer.writeUint32(123);
         writer.writeUint32(234);
         writer.endArray();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginArray);
         reader.beginArray();
         TEST(reader.state() == Arguments::Uint32);
@@ -228,7 +231,7 @@ static void test_reader_array()
         TEST(reader.state() == Arguments::Finished);
     }
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginArray();
         writer.writeUint32(123);
         writer.writeUint32(234);
@@ -236,7 +239,7 @@ static void test_reader_array()
         writer.writeUint64(12345678901234);
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginArray);
         reader.beginArray();
         TEST(reader.state() == Arguments::Uint32);
@@ -251,14 +254,14 @@ static void test_reader_array()
     }
 
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginDict();
         writer.writeByte(12);
         writer.writeByte(123);
         writer.endDict();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginDict);
         reader.beginDict();
         TEST(reader.state() == Arguments::Byte);
@@ -271,13 +274,13 @@ static void test_reader_array()
     }
 
     {
-        Arguments::Writer writer;
-        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        ArgumentsWriter writer;
+        writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.writeByte(12);
         writer.endArray();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginArray);
         reader.beginArray();
         TEST(reader.state() == Arguments::EndArray);
@@ -286,14 +289,14 @@ static void test_reader_array()
     }
 
     {
-        Arguments::Writer writer;
-        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        ArgumentsWriter writer;
+        writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.writeByte(12);
         writer.endArray();
         writer.writeUint64(1234567890);
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginArray);
         reader.beginArray();
         TEST(reader.state() == Arguments::EndArray);
@@ -307,13 +310,13 @@ static void test_reader_array()
 static void test_reader_variant()
 {
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginVariant();
         writer.writeByte(12);
         writer.endVariant();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginVariant);
         reader.beginVariant();
         TEST(reader.state() == Arguments::Byte);
@@ -322,13 +325,13 @@ static void test_reader_variant()
         reader.endVariant();
     }
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginVariant();
         writer.writeUint64(12345678901234);
         writer.endVariant();
         const Arguments arg = writer.finish();
 
-        Arguments::BcReader reader(arg);
+        ArgumentsBcReader reader(arg);
         TEST(reader.state() == Arguments::BeginVariant);
         reader.beginVariant();
         TEST(reader.state() == Arguments::Uint64);
@@ -343,7 +346,7 @@ static void test_reader_variant()
 static void test_benchmark()
 {
     {
-        Arguments::Writer writer;
+        ArgumentsWriter writer;
         writer.beginArray();
         static constexpr int repCount = 100000;
         static constexpr int arrayCount = 1;
@@ -360,7 +363,7 @@ static void test_benchmark()
 
         const std::chrono::time_point beginBcReader = std::chrono::high_resolution_clock::now();
         for (int j = 0; j < repCount; j++) {
-            Arguments::BcReader reader(arg);
+            ArgumentsBcReader reader(arg);
             reader.beginArray();
             for (int i = 0; i < arrayCount; i++) {
                 reader.beginStruct();
@@ -375,7 +378,7 @@ static void test_benchmark()
 
         const std::chrono::time_point beginNormalReader = std::chrono::high_resolution_clock::now();
         for (int j = 0; j < repCount; j++) {
-            Arguments::Reader reader(arg);
+            ArgumentsReader reader(arg);
             reader.beginArray();
             for (int i = 0; i < arrayCount; i++) {
                 reader.beginStruct();

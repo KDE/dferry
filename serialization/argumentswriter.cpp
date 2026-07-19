@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentswriter.h"
 #include "arguments_p.h"
 
 #include "basictypeio.h"
@@ -41,7 +41,7 @@ inline constexpr byte alignmentLog2(uint32 alignment)
     return alignLog[alignment];
 }
 
-class Arguments::Writer::Private
+class ArgumentsWriter::Private
 {
 public:
     Private()
@@ -58,7 +58,7 @@ public:
     Private(const Private &other);
     void operator=(const Private &other);
 
-    void reserveData(uint32 size, IoState *state)
+    void reserveData(uint32 size, Arguments::IoState *state)
     {
         size += 16; // enough extra for anything but variable-length data such as strings and arrays
         if (likely(size <= m_dataCapacity)) {
@@ -84,7 +84,7 @@ public:
         // access. Any following writing API calls will then cleanly abort due to m_state == InvalidData.
         // ### Callers DO need to check m_state before possibly overwriting it, hiding the error!
         if (newCapacity > Arguments::MaxMessageLength * 3) {
-            *state = InvalidData;
+            *state = Arguments::InvalidData;
             m_error.setCode(Error::ArgumentsTooLong);
         }
     }
@@ -209,7 +209,7 @@ public:
 
     struct AggregateInfo
     {
-        IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
+        Arguments::IoState aggregateType; // can be BeginArray, BeginDict, BeginStruct, BeginVariant
         union {
             ArrayInfo arr;
             VariantInfo var;
@@ -226,14 +226,14 @@ public:
     std::vector<QueuedDataInfo> m_queuedData;
 };
 
-thread_local static MallocCache<sizeof(Arguments::Writer::Private), 4> allocCache;
+thread_local static MallocCache<sizeof(ArgumentsWriter::Private), 4> allocCache;
 
-Arguments::Writer::Private::Private(const Private &other)
+ArgumentsWriter::Private::Private(const Private &other)
 {
     *this = other;
 }
 
-void Arguments::Writer::Private::operator=(const Private &other)
+void ArgumentsWriter::Private::operator=(const Private &other)
 {
     if (&other == this) {
         assert(false); // if this happens, the (internal) caller did something wrong
@@ -263,13 +263,13 @@ void Arguments::Writer::Private::operator=(const Private &other)
     m_queuedData = other.m_queuedData;
 }
 
-Arguments::Writer::Writer()
+ArgumentsWriter::ArgumentsWriter()
    : d(new(allocCache.allocate()) Private),
-     m_state(AnyData)
+     m_state(Arguments::AnyData)
 {
 }
 
-Arguments::Writer::Writer(Writer &&other)
+ArgumentsWriter::ArgumentsWriter(ArgumentsWriter &&other)
    : d(other.d),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -277,7 +277,7 @@ Arguments::Writer::Writer(Writer &&other)
     other.d = nullptr;
 }
 
-void Arguments::Writer::operator=(Writer &&other)
+void ArgumentsWriter::operator=(ArgumentsWriter &&other)
 {
     if (&other == this) {
         return;
@@ -289,7 +289,7 @@ void Arguments::Writer::operator=(Writer &&other)
     other.d = nullptr;
 }
 
-Arguments::Writer::Writer(const Writer &other)
+ArgumentsWriter::ArgumentsWriter(const ArgumentsWriter &other)
    : d(nullptr),
      m_state(other.m_state),
      m_u(other.m_u)
@@ -300,7 +300,7 @@ Arguments::Writer::Writer(const Writer &other)
 
 }
 
-void Arguments::Writer::operator=(const Writer &other)
+void ArgumentsWriter::operator=(const ArgumentsWriter &other)
 {
     if (&other == this) {
         return;
@@ -310,12 +310,12 @@ void Arguments::Writer::operator=(const Writer &other)
     if (d && other.d) {
         *d = *other.d;
     } else {
-        Writer temp(other);
+        ArgumentsWriter temp(other);
         std::swap(d, temp.d);
     }
 }
 
-Arguments::Writer::~Writer()
+ArgumentsWriter::~ArgumentsWriter()
 {
     if (d) {
         free(d->m_data);
@@ -326,27 +326,27 @@ Arguments::Writer::~Writer()
     }
 }
 
-bool Arguments::Writer::isValid() const
+bool ArgumentsWriter::isValid() const
 {
     return !d->m_error.isError();
 }
 
-Error Arguments::Writer::error() const
+Error ArgumentsWriter::error() const
 {
     return d->m_error;
 }
 
-cstring Arguments::Writer::stateString() const
+cstring ArgumentsWriter::stateString() const
 {
     return printableState(m_state);
 }
 
-bool Arguments::Writer::isInsideEmptyArray() const
+bool ArgumentsWriter::isInsideEmptyArray() const
 {
     return d->m_nilArrayNesting > 0;
 }
 
-cstring Arguments::Writer::currentSignature() const
+cstring ArgumentsWriter::currentSignature() const
 {
     // A signature must be null-terminated to be valid.
     // We're only overwriting uninitialized memory, no need to undo that later.
@@ -354,45 +354,45 @@ cstring Arguments::Writer::currentSignature() const
     return d->m_signature;
 }
 
-uint32 Arguments::Writer::currentSignaturePosition() const
+uint32 ArgumentsWriter::currentSignaturePosition() const
 {
     return d->m_signaturePosition;
 }
 
-void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
+void ArgumentsWriter::doWritePrimitiveType(Arguments::IoState type, uint32 alignAndSize)
 {
     zeroPad(d->m_data, alignAndSize, &d->m_dataPosition);
 
     switch(type) {
-    case Boolean: {
+    case Arguments::Boolean: {
         uint32 num = m_u.Boolean ? 1 : 0;
         basic::writeUint32(d->m_data + d->m_dataPosition, num);
         break; }
-    case Byte:
+    case Arguments::Byte:
         d->m_data[d->m_dataPosition] = m_u.Byte;
         break;
-    case Int16:
+    case Arguments::Int16:
         basic::writeInt16(d->m_data + d->m_dataPosition, m_u.Int16);
         break;
-    case Uint16:
+    case Arguments::Uint16:
         basic::writeUint16(d->m_data + d->m_dataPosition, m_u.Uint16);
         break;
-    case Int32:
+    case Arguments::Int32:
         basic::writeInt32(d->m_data + d->m_dataPosition, m_u.Int32);
         break;
-    case Uint32:
+    case Arguments::Uint32:
         basic::writeUint32(d->m_data + d->m_dataPosition, m_u.Uint32);
         break;
-    case Int64:
+    case Arguments::Int64:
         basic::writeInt64(d->m_data + d->m_dataPosition, m_u.Int64);
         break;
-    case Uint64:
+    case Arguments::Uint64:
         basic::writeUint64(d->m_data + d->m_dataPosition, m_u.Uint64);
         break;
-    case Double:
+    case Arguments::Double:
         basic::writeDouble(d->m_data + d->m_dataPosition, m_u.Double);
         break;
-    case UnixFd: {
+    case Arguments::UnixFd: {
         const uint32 index = d->m_fileDescriptors.size();
         if (!d->m_nilArrayNesting) {
             d->m_fileDescriptors.push_back(m_u.Int32);
@@ -408,15 +408,15 @@ void Arguments::Writer::doWritePrimitiveType(IoState type, uint32 alignAndSize)
     d->maybeQueueData(alignAndSize, alignAndSize);
 }
 
-void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
+void ArgumentsWriter::doWriteString(Arguments::IoState type, uint32 lengthPrefixSize)
 {
-    if (type == String) {
+    if (type == Arguments::String) {
         VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidString);
-    } else if (type == ObjectPath) {
+    } else if (type == Arguments::ObjectPath) {
         VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidObjectPath);
-    } else if (type == Signature) {
+    } else if (type == Arguments::Signature) {
         VALID_IF(Arguments::isSignatureValid(cstring(m_u.String.ptr, m_u.String.length)),
                  Error::InvalidSignature);
     }
@@ -436,7 +436,7 @@ void Arguments::Writer::doWriteString(IoState type, uint32 lengthPrefixSize)
     d->appendBulkData(chunk(m_u.String.ptr, m_u.String.length + 1));
 }
 
-void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState)
+void ArgumentsWriter::advanceState(cstring signatureFragment, Arguments::IoState newState)
 {
     // what needs to happen here:
     // - if we are in an existing portion of the signature (like writing the >1st iteration of an array)
@@ -469,31 +469,32 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     }
 
     d->reserveData(d->m_dataPosition, &m_state);
-    if (unlikely(m_state == InvalidData)) { // this is not only for reserveData, but also pre-existing errors
+    // this check is not only for reserveData, but also pre-existing errors
+    if (unlikely(m_state == Arguments::InvalidData)) {
         return;
     }
 
-    m_state = AnyData;
+    m_state = Arguments::AnyData;
 
     bool isWritingSignature = d->m_signaturePosition == d->m_signature.length;
     if (isWritingSignature) {
         // signature additions must conform to syntax
-        VALID_IF(d->m_signaturePosition + signatureFragment.length <= MaxSignatureLength,
+        VALID_IF(d->m_signaturePosition + signatureFragment.length <= Arguments::MaxSignatureLength,
                  Error::SignatureTooLong);
     }
     if (!d->m_aggregateStack.empty()) {
         Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
         switch (aggregateInfo.aggregateType) {
-        case BeginVariant:
+        case Arguments::BeginVariant:
             // arrays and variants may contain just one single complete type; note that this will
             // trigger only when not inside an aggregate inside the variant or (see below) array
             if (d->m_signaturePosition >= 1) {
-                VALID_IF(newState == EndVariant, Error::NotSingleCompleteTypeInVariant);
+                VALID_IF(newState == Arguments::EndVariant, Error::NotSingleCompleteTypeInVariant);
             }
             break;
-        case BeginArray:
+        case Arguments::BeginArray:
             if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 1
-                && newState != EndArray) {
+                && newState != Arguments::EndArray) {
                 // we are not at start of contained type's signature, the array is at top of stack
                 // -> we are at the end of the single complete type inside the array, start the next
                 // entry. TODO: check compatibility (essentially what's in the else branch below)
@@ -501,14 +502,14 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 isWritingSignature = false;
             }
             break;
-        case BeginDict:
+        case Arguments::BeginDict:
             if (d->m_signaturePosition == aggregateInfo.arr.containedTypeBegin) {
 #ifdef WITH_DICT_ENTRY
                 if (aggregateInfo.arr.dictEntryState == Private::RequireBeginDictEntry) {
                     // This is only reached immediately after beginDict() so it's kinda wasteful, oh well.
                     VALID_IF(newState == BeginDictEntry, Error::MissingBeginDictEntry);
                     aggregateInfo.arr.dictEntryState = Private::InDictEntry;
-                    m_state = DictKey;
+                    m_state = Arguments::DictKey;
                     return; // BeginDictEntry writes no data
                 }
 #endif
@@ -520,7 +521,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 if (aggregateInfo.arr.dictEntryState == Private::RequireEndDictEntry) {
                     VALID_IF(newState == EndDictEntry, Error::MissingEndDictEntry);
                     aggregateInfo.arr.dictEntryState = Private::AfterEndDictEntry;
-                    m_state = BeginDictEntry;
+                    m_state = Arguments::BeginDictEntry;
                     return; // EndDictEntry writes no data
                 } else {
                     // v should've been caught earlier
@@ -535,7 +536,7 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
                 // ending another aggregate would be somewhat involved and need to happen somewhere
                 // else, so just don't do that. We still produce an error when endDictEntry() is not
                 // used correctly.
-                // m_state = EndDictEntry;
+                // m_state = Arguments::EndDictEntry;
 
                 // continue and write the dict entry's value
             }
@@ -543,12 +544,12 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
             // first type has been checked already, second must be present (checked in EndDict
             // state handler). no third type allowed.
             if (d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + 2
-                && newState != EndDict) {
+                && newState != Arguments::EndDict) {
                 // align to dict entry
                 d->alignData(StructAlignment);
                 d->m_signaturePosition = aggregateInfo.arr.containedTypeBegin;
                 isWritingSignature = false;
-                m_state = DictKey;
+                m_state = Arguments::DictKey;
 #ifdef WITH_DICT_ENTRY
                 assert(newState == BeginDictEntry);
                 aggregateInfo.arr.dictEntryState = Private::InDictEntry;
@@ -613,26 +614,26 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     Private::AggregateInfo aggregateInfo;
 
     switch (newState) {
-    case BeginStruct:
+    case Arguments::BeginStruct:
         VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
-        aggregateInfo.aggregateType = BeginStruct;
+        aggregateInfo.aggregateType = Arguments::BeginStruct;
         aggregateInfo.sct.containedTypeBegin = d->m_signaturePosition;
         d->m_aggregateStack.push_back(aggregateInfo);
         d->alignData(alignment);
         break;
-    case EndStruct:
+    case Arguments::EndStruct:
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndStructHere);
         aggregateInfo = d->m_aggregateStack.back();
-        VALID_IF(aggregateInfo.aggregateType == BeginStruct &&
+        VALID_IF(aggregateInfo.aggregateType == Arguments::BeginStruct &&
                  d->m_signaturePosition > aggregateInfo.sct.containedTypeBegin + 1,
                  Error::EmptyStruct); // empty structs are not allowed
         d->m_nesting.endParen();
         d->m_aggregateStack.pop_back();
         break;
 
-    case BeginVariant: {
+    case Arguments::BeginVariant: {
         VALID_IF(d->m_nesting.beginVariant(), Error::ExcessiveNesting);
-        aggregateInfo.aggregateType = BeginVariant;
+        aggregateInfo.aggregateType = Arguments::BeginVariant;
 
         Private::VariantInfo &variantInfo = aggregateInfo.var;
         variantInfo.prevSignatureOffset = uint32(reinterpret_cast<byte *>(d->m_signature.ptr) - d->m_data);
@@ -656,17 +657,17 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_signaturePosition = 0;
         d->m_dataPosition = newDataPosition;
         break; }
-    case EndVariant: {
+    case Arguments::EndVariant: {
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndVariantHere);
         aggregateInfo = d->m_aggregateStack.back();
-        VALID_IF(aggregateInfo.aggregateType == BeginVariant, Error::CannotEndVariantHere);
+        VALID_IF(aggregateInfo.aggregateType == Arguments::BeginVariant, Error::CannotEndVariantHere);
         d->m_nesting.endVariant();
         if (likely(!d->m_nilArrayNesting)) {
             // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
             // No use adding stuff when it's not required or even possible.
             VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
-            assert(d->m_signaturePosition <= MaxSignatureLength); // should have been caught earlier
+            assert(d->m_signaturePosition <= Arguments::MaxSignatureLength); // should have been caught earlier
         }
         d->m_signature.ptr[-1] = byte(d->m_signaturePosition);
 
@@ -683,10 +684,10 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
 
         break; }
 
-    case BeginDict:
-    case BeginArray: {
+    case Arguments::BeginDict:
+    case Arguments::BeginArray: {
         VALID_IF(d->m_nesting.beginArray(), Error::ExcessiveNesting);
-        if (newState == BeginDict) {
+        if (newState == Arguments::BeginDict) {
             // not re-opened before each element: there is no observable difference for clients
             VALID_IF(d->m_nesting.beginParen(), Error::ExcessiveNesting);
         }
@@ -700,25 +701,25 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_dataPosition += sizeof(uint32);
         d->maybeQueueData(sizeof(uint32), Private::QueuedDataInfo::ArrayLengthField);
 
-        if (newState == BeginDict) {
+        if (newState == Arguments::BeginDict) {
             d->alignData(StructAlignment);
 #ifdef WITH_DICT_ENTRY
-            m_state = BeginDictEntry;
+            m_state = Arguments::BeginDictEntry;
             aggregateInfo.arr.dictEntryState = Private::RequireBeginDictEntry;
 #else
-            m_state = DictKey;
+            m_state = Arguments::DictKey;
 #endif
         }
 
         d->m_aggregateStack.push_back(aggregateInfo);
         break; }
-    case EndDict:
-    case EndArray: {
-        const bool isDict = newState == EndDict;
+    case Arguments::EndDict:
+    case Arguments::EndArray: {
+        const bool isDict = newState == Arguments::EndDict;
 
         VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndArrayHere);
         aggregateInfo = d->m_aggregateStack.back();
-        VALID_IF(aggregateInfo.aggregateType == (isDict ? BeginDict : BeginArray),
+        VALID_IF(aggregateInfo.aggregateType == (isDict ? Arguments::BeginDict : Arguments::BeginArray),
                  Error::CannotEndArrayOrDictHere);
         VALID_IF(d->m_signaturePosition >= aggregateInfo.arr.containedTypeBegin + (isDict ? 3 : 1),
                  Error::TooFewTypesInArrayOrDict);
@@ -759,8 +760,8 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
         d->m_aggregateStack.pop_back();
         break; }
 #ifdef WITH_DICT_ENTRY
-    case BeginDictEntry:
-    case EndDictEntry:
+    case Arguments::BeginDictEntry:
+    case Arguments::EndDictEntry:
         break;
 #endif
     default:
@@ -769,9 +770,9 @@ void Arguments::Writer::advanceState(cstring signatureFragment, IoState newState
     }
 }
 
-void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
+void ArgumentsWriter::beginArrayOrDict(Arguments::IoState beginWhat, ArrayOption option)
 {
-    assert(beginWhat == BeginArray || beginWhat == BeginDict);
+    assert(beginWhat == Arguments::BeginArray || beginWhat == Arguments::BeginDict);
     if (unlikely(option == RestartEmptyArrayToWriteTypes)) {
         if (!d->m_aggregateStack.empty()) {
             Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -786,7 +787,7 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
                         d->m_nilArrayNesting = 1;
                         d->m_dataElementsCountBeforeNilArray = d->m_queuedData.size() + 2; // +2 as below
                         // Now correct for the elements already added in advanceState() with BeginArray / BeginDict
-                        d->m_dataElementsCountBeforeNilArray -= (beginWhat == BeginDict) ? 2 : 1;
+                        d->m_dataElementsCountBeforeNilArray -= (beginWhat == Arguments::BeginDict) ? 2 : 1;
                     } else {
                         // The array may be implicitly nil (so our poor API client doesn't notice) because
                         // an array below in the aggregate stack is nil, so just allow this as a no-op.
@@ -809,41 +810,41 @@ void Arguments::Writer::beginArrayOrDict(IoState beginWhat, ArrayOption option)
             d->m_dataElementsCountBeforeNilArray = d->m_queuedData.size() + 2;
         }
     }
-    if (beginWhat == BeginArray) {
+    if (beginWhat == Arguments::BeginArray) {
         advanceState(cstring("a", strlen("a")), beginWhat);
     } else {
         advanceState(cstring("a{", strlen("a{")), beginWhat);
     }
 }
 
-void Arguments::Writer::beginArray(ArrayOption option)
+void ArgumentsWriter::beginArray(ArrayOption option)
 {
-    beginArrayOrDict(BeginArray, option);
+    beginArrayOrDict(Arguments::BeginArray, option);
 }
 
-void Arguments::Writer::endArray()
+void ArgumentsWriter::endArray()
 {
-    advanceState(cstring(), EndArray);
+    advanceState(cstring(), Arguments::EndArray);
 }
 
-void Arguments::Writer::beginDict(ArrayOption option)
+void ArgumentsWriter::beginDict(ArrayOption option)
 {
-    beginArrayOrDict(BeginDict, option);
+    beginArrayOrDict(Arguments::BeginDict, option);
 }
 
-void Arguments::Writer::endDict()
+void ArgumentsWriter::endDict()
 {
-    advanceState(cstring("}", strlen("}")), EndDict);
+    advanceState(cstring("}", strlen("}")), Arguments::EndDict);
 }
 
 #ifdef WITH_DICT_ENTRY
-void Arguments::Writer::beginDictEntry()
+void ArgumentsWriter::beginDictEntry()
 {
-    VALID_IF(m_state == BeginDictEntry, Error::MisplacedBeginDictEntry);
+    VALID_IF(m_state == Arguments::BeginDictEntry, Error::MisplacedBeginDictEntry);
     advanceState(cstring(), BeginDictEntry);
 }
 
-void Arguments::Writer::endDictEntry()
+void ArgumentsWriter::endDictEntry()
 {
     if (!d->m_aggregateStack.empty()) {
         Private::AggregateInfo &aggregateInfo = d->m_aggregateStack.back();
@@ -857,27 +858,27 @@ void Arguments::Writer::endDictEntry()
 }
 #endif
 
-void Arguments::Writer::beginStruct()
+void ArgumentsWriter::beginStruct()
 {
-    advanceState(cstring("(", strlen("(")), BeginStruct);
+    advanceState(cstring("(", strlen("(")), Arguments::BeginStruct);
 }
 
-void Arguments::Writer::endStruct()
+void ArgumentsWriter::endStruct()
 {
-    advanceState(cstring(")", strlen(")")), EndStruct);
+    advanceState(cstring(")", strlen(")")), Arguments::EndStruct);
 }
 
-void Arguments::Writer::beginVariant()
+void ArgumentsWriter::beginVariant()
 {
-    advanceState(cstring("v", strlen("v")), BeginVariant);
+    advanceState(cstring("v", strlen("v")), Arguments::BeginVariant);
 }
 
-void Arguments::Writer::endVariant()
+void ArgumentsWriter::endVariant()
 {
-    advanceState(cstring(), EndVariant);
+    advanceState(cstring(), Arguments::EndVariant);
 }
 
-void Arguments::Writer::writeVariantForMessageHeader(char sig)
+void ArgumentsWriter::writeVariantForMessageHeader(char sig)
 {
     // Note: the signature we're working with there is a(yv)
     // If we know that and can trust the client, this can be very easy and fast...
@@ -891,7 +892,7 @@ void Arguments::Writer::writeVariantForMessageHeader(char sig)
     d->m_data[d->m_dataPosition++] = 0;
 }
 
-void Arguments::Writer::fixupAfterWriteVariantForMessageHeader()
+void ArgumentsWriter::fixupAfterWriteVariantForMessageHeader()
 {
     // We just wrote something to the main signature when we shouldn't have.
     d->m_signature.length = 4;
@@ -917,23 +918,23 @@ static char letterForPrimitiveIoState(Arguments::IoState ios)
     return letters[size_t(ios) - size_t(Arguments::Boolean)]; // TODO do we need the casts?
 }
 
-void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
+void ArgumentsWriter::writePrimitiveArray(Arguments::IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);
     if (letterCode == 'c') {
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::NotPrimitiveType);
         return;
     }
     if (data.length > Arguments::MaxArrayLength) {
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ArrayOrDictTooLong);
         return;
     }
 
     const TypeInfo elementType = typeInfo(letterCode);
     if (!isAligned(data.length, elementType.alignment)) {
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::CannotEndArrayOrDictHere);
         return;
     }
@@ -964,28 +965,29 @@ void Arguments::Writer::writePrimitiveArray(IoState type, chunk data)
     endArray();
 }
 
-Arguments Arguments::Writer::finish()
+Arguments ArgumentsWriter::finish()
 {
     // what needs to happen here:
     // - check if the message can be closed - basically the aggregate stack must be empty
     // - close the signature by adding the terminating null
 
     Arguments args;
+    Arguments::Private *argsPriv = Arguments::Private::of(&args);
 
-    if (m_state == InvalidData) {
-        args.d->m_error = d->m_error;
+    if (m_state == Arguments::InvalidData) {
+        argsPriv->m_error = d->m_error;
         return args; // heavily relying on NRVO in all returns here!
     }
     if (d->m_nesting.total() != 0) {
-        m_state = InvalidData;
+        m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::CannotEndArgumentsHere);
-        args.d->m_error = d->m_error;
+        argsPriv->m_error = d->m_error;
         return args;
     }
     assert(!d->m_nilArrayNesting);
     assert(!d->insideVariant());
 
-    assert(d->m_signaturePosition <= MaxSignatureLength); // this should have been caught before
+    assert(d->m_signaturePosition <= Arguments::MaxSignatureLength); // this should have been caught before
     assert(d->m_signature.ptr == reinterpret_cast<char *>(d->m_data) + 1);
 
     // Note that we still keep the full SignatureReservedSpace for the main signature, which means
@@ -1007,22 +1009,22 @@ Arguments Arguments::Writer::finish()
     }
 
     if (!dataSize || !success) {
-        args.d->m_memOwnership = nullptr;
-        args.d->m_signature = cstring();
-        args.d->m_data = chunk();
+        argsPriv->m_memOwnership = nullptr;
+        argsPriv->m_signature = cstring();
+        argsPriv->m_data = chunk();
     } else {
-        args.d->m_memOwnership = d->m_data;
-        args.d->m_signature = cstring(d->m_data + 1 /* w/o length prefix */, d->m_signature.length);
-        args.d->m_data = chunk(d->m_data + Private::SignatureReservedSpace, dataSize);
+        argsPriv->m_memOwnership = d->m_data;
+        argsPriv->m_signature = cstring(d->m_data + 1 /* w/o length prefix */, d->m_signature.length);
+        argsPriv->m_data = chunk(d->m_data + Private::SignatureReservedSpace, dataSize);
         d->m_data = nullptr; // now owned by Arguments and later freed there
     }
 
     if (success) {
-        args.d->m_fileDescriptors = std::move(d->m_fileDescriptors);
-        m_state = Finished;
+        argsPriv->m_fileDescriptors = std::move(d->m_fileDescriptors);
+        m_state = Arguments::Finished;
     } else {
-        m_state = InvalidData;
-        args.d->m_error = d->m_error;
+        m_state = Arguments::InvalidData;
+        argsPriv->m_error = d->m_error;
     }
     return args;
 }
@@ -1033,7 +1035,7 @@ struct ArrayLengthField
     uint32 dataStartPosition;
 };
 
-void Arguments::Writer::flushQueuedData()
+void ArgumentsWriter::flushQueuedData()
 {
     const uint32 count = d->m_queuedData.size();
     assert(count); // just don't call this method otherwise!
@@ -1100,7 +1102,7 @@ void Arguments::Writer::flushQueuedData()
                 const ArrayLengthField al = lengthFieldStack.back();
                 const uint32 arrayLength = outPos - al.dataStartPosition;
                 if (arrayLength > Arguments::MaxArrayLength) {
-                    m_state = InvalidData;
+                    m_state = Arguments::InvalidData;
                     d->m_error.setCode(Error::ArrayOrDictTooLong);
                     i = count + 1; // break out of the loop
                     break;
@@ -1120,15 +1122,15 @@ void Arguments::Writer::flushQueuedData()
             break;
         }
     }
-    assert(m_state == InvalidData || lengthFieldStack.empty());
+    assert(m_state == Arguments::InvalidData || lengthFieldStack.empty());
 
     d->m_dataPosition = outPos;
     d->m_queuedData.clear();
 }
 
-std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
+std::vector<Arguments::IoState> ArgumentsWriter::aggregateStack() const
 {
-    std::vector<IoState> ret;
+    std::vector<Arguments::IoState> ret;
     ret.reserve(d->m_aggregateStack.size());
     for (Private::AggregateInfo &aggregate : d->m_aggregateStack) {
         ret.push_back(aggregate.aggregateType);
@@ -1136,111 +1138,111 @@ std::vector<Arguments::IoState> Arguments::Writer::aggregateStack() const
     return ret;
 }
 
-uint32 Arguments::Writer::aggregateDepth() const
+uint32 ArgumentsWriter::aggregateDepth() const
 {
     return d->m_aggregateStack.size();
 }
 
-Arguments::IoState Arguments::Writer::currentAggregate() const
+Arguments::IoState ArgumentsWriter::currentAggregate() const
 {
     if (d->m_aggregateStack.empty()) {
-        return NotStarted;
+        return Arguments::NotStarted;
     }
     return d->m_aggregateStack.back().aggregateType;
 }
 
-chunk Arguments::Writer::peekSerializedData() const
+chunk ArgumentsWriter::peekSerializedData() const
 {
     chunk ret;
-    if (isValid() && m_state != InvalidData && d->m_nesting.total() == 0) {
+    if (isValid() && m_state != Arguments::InvalidData && d->m_nesting.total() == 0) {
         ret.ptr = d->m_data + Private::SignatureReservedSpace;
         ret.length = d->m_dataPosition - Private::SignatureReservedSpace;
     }
     return ret;
 }
 
-const std::vector<int> &Arguments::Writer::fileDescriptors() const
+const std::vector<int> &ArgumentsWriter::fileDescriptors() const
 {
     return d->m_fileDescriptors;
 }
 
-void Arguments::Writer::writeBoolean(bool b)
+void ArgumentsWriter::writeBoolean(bool b)
 {
     m_u.Boolean = b;
-    advanceState(cstring("b", strlen("b")), Boolean);
+    advanceState(cstring("b", strlen("b")), Arguments::Boolean);
 }
 
-void Arguments::Writer::writeByte(byte b)
+void ArgumentsWriter::writeByte(byte b)
 {
     m_u.Byte = b;
-    advanceState(cstring("y", strlen("y")), Byte);
+    advanceState(cstring("y", strlen("y")), Arguments::Byte);
 }
 
-void Arguments::Writer::writeInt16(int16 i)
+void ArgumentsWriter::writeInt16(int16 i)
 {
     m_u.Int16 = i;
-    advanceState(cstring("n", strlen("n")), Int16);
+    advanceState(cstring("n", strlen("n")), Arguments::Int16);
 }
 
-void Arguments::Writer::writeUint16(uint16 i)
+void ArgumentsWriter::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
-    advanceState(cstring("q", strlen("q")), Uint16);
+    advanceState(cstring("q", strlen("q")), Arguments::Uint16);
 }
 
-void Arguments::Writer::writeInt32(int32 i)
+void ArgumentsWriter::writeInt32(int32 i)
 {
     m_u.Int32 = i;
-    advanceState(cstring("i", strlen("i")), Int32);
+    advanceState(cstring("i", strlen("i")), Arguments::Int32);
 }
 
-void Arguments::Writer::writeUint32(uint32 i)
+void ArgumentsWriter::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
-    advanceState(cstring("u", strlen("u")), Uint32);
+    advanceState(cstring("u", strlen("u")), Arguments::Uint32);
 }
 
-void Arguments::Writer::writeInt64(int64 i)
+void ArgumentsWriter::writeInt64(int64 i)
 {
     m_u.Int64 = i;
-    advanceState(cstring("x", strlen("x")), Int64);
+    advanceState(cstring("x", strlen("x")), Arguments::Int64);
 }
 
-void Arguments::Writer::writeUint64(uint64 i)
+void ArgumentsWriter::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
-    advanceState(cstring("t", strlen("t")), Uint64);
+    advanceState(cstring("t", strlen("t")), Arguments::Uint64);
 }
 
-void Arguments::Writer::writeDouble(double d)
+void ArgumentsWriter::writeDouble(double d)
 {
     m_u.Double = d;
-    advanceState(cstring("d", strlen("d")), Double);
+    advanceState(cstring("d", strlen("d")), Arguments::Double);
 }
 
-void Arguments::Writer::writeString(cstring string)
+void ArgumentsWriter::writeString(cstring string)
 {
     m_u.String.ptr = string.ptr;
     m_u.String.length = string.length;
-    advanceState(cstring("s", strlen("s")), String);
+    advanceState(cstring("s", strlen("s")), Arguments::String);
 }
 
-void Arguments::Writer::writeObjectPath(cstring objectPath)
+void ArgumentsWriter::writeObjectPath(cstring objectPath)
 {
     m_u.String.ptr = objectPath.ptr;
     m_u.String.length = objectPath.length;
-    advanceState(cstring("o", strlen("o")), ObjectPath);
+    advanceState(cstring("o", strlen("o")), Arguments::ObjectPath);
 }
 
-void Arguments::Writer::writeSignature(cstring signature)
+void ArgumentsWriter::writeSignature(cstring signature)
 {
     m_u.String.ptr = signature.ptr;
     m_u.String.length = signature.length;
-    advanceState(cstring("g", strlen("g")), Signature);
+    advanceState(cstring("g", strlen("g")), Arguments::Signature);
 }
 
-void Arguments::Writer::writeUnixFd(int32 fd)
+void ArgumentsWriter::writeUnixFd(int32 fd)
 {
     m_u.Int32 = fd;
-    advanceState(cstring("h", strlen("h")), UnixFd);
+    advanceState(cstring("h", strlen("h")), Arguments::UnixFd);
 }

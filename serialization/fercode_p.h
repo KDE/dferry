@@ -2,6 +2,7 @@
 #define FERCODE_P_H
 
 #include "arguments.h"
+#include "argumentsbcreader.h"
 
 enum FerOpcode : byte
 {
@@ -83,7 +84,7 @@ std::shared_ptr<std::vector<FerCode>>
 #endif
     DFERRY_EXPORT ferCodeForSignature(cstring signature,
                                       Arguments::SignatureType sigType = Arguments::MethodSignature,
-                            Arguments::FerEncodeOptions encodeOptions = Arguments::FerEncodeOptions::None);
+                                      Arguments::FerEncodeOptions encodeOptions = Arguments::FerEncodeOptions::None);
 
 std::string DFERRY_EXPORT printableFerOps(const std::vector<FerCode>& ops);
 

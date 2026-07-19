@@ -24,6 +24,8 @@
 #include "eavesdropperthread.h"
 
 #include "arguments.h"
+#include "argumentsreader.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "eavesdroppermodel.h"
 #include "error.h"

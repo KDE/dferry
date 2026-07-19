@@ -25,7 +25,7 @@ static Message createEavesdropMessage(const char *messageType)
 {
     Message ret = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus", "AddMatch");
     ret.setDestination("org.freedesktop.DBus");
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     std::string str = "eavesdrop=true,type=";
     str += messageType;
     writer.writeString(cstring(str.c_str()));
@@ -47,8 +47,8 @@ static SetupEavesdroppingResult setupEavesdropping(Connection *connection)
         Message msg = Message::createCall("/org/freedesktop/DBus", "org.freedesktop.DBus.Monitoring",
                                           "BecomeMonitor");
         msg.setDestination("org.freedesktop.DBus");
-        Arguments::Writer writer;
-        writer.beginArray(Arguments::Writer::WriteTypesOfEmptyArray);
+        ArgumentsWriter writer;
+        writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.writeString(cstring());
         writer.endArray();
         writer.writeUint32(0);

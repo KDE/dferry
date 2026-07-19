@@ -21,7 +21,7 @@
    http://www.mozilla.org/MPL/
 */
 
-#include "arguments.h"
+#include "argumentswriter.h"
 #include "connectaddress.h"
 #include "eventdispatcher.h"
 #include "imessagereceiver.h"
@@ -69,7 +69,7 @@ static void testBusAddress(bool waitForConnected)
     addressMessageToBus(&msg);
     msg.setMethod("RequestName");
 
-    Arguments::Writer writer;
+    ArgumentsWriter writer;
     writer.writeString("Bana.nana"); // requested name
     writer.writeUint32(4); // TODO proper enum or so: 4 == DBUS_NAME_FLAG_DO_NOT_QUEUE
     msg.setArguments(writer.finish());
