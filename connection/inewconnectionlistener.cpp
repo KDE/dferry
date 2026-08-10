@@ -23,6 +23,12 @@
 
 #include "inewconnectionlistener.h"
 
+/** \class INewConnectionListener
+    Interface to handle new (peer-to-peer) connections on a Server.
+
+    \see Server
+*/
+
 INewConnectionListener::~INewConnectionListener()
 {
 }

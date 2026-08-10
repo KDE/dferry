@@ -23,6 +23,12 @@
 
 #include "iconnectionstatelistener.h"
 
+/** \class IConnectionStateListener
+    Interface to listen to state changes on a Connection.
+
+    \see Connection
+*/
+
 IConnectionStateListener::~IConnectionStateListener()
 {
 }

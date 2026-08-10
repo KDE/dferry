@@ -75,6 +75,18 @@ void ServerPrivate::handleCompletion(void *task)
     }
 }
 
+/** \class Server
+    Accepts peer-to-peer connections.
+
+    Peer-to-peer connections do not go through a message bus, so they are not subject to any
+    bus policies and processing overheads.
+
+    Even though such connections are peer-to-peer, one side needs to wait for the other to
+    connect, which is what %Server does.
+
+    \see EventDispatcher, Connection
+*/
+
 Server::Server(EventDispatcher *dispatcher, const ConnectAddress &listenAddress)
    : d(new ServerPrivate(dispatcher))
 {

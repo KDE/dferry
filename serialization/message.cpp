@@ -312,11 +312,20 @@ MessagePrivate::~MessagePrivate()
     clear(/* onlyReleaseResources = */ true);
 }
 
+/** \class Message
+    DBus function call, reply, or signal.
+
+    These all work quite similarly, with only a few differences in the data that they carry.
+
+    \see Arguments, Message::type()
+*/
+
 Message::Message()
    : d(new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(this))
 {
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Message::Message(Message &&other)
    : d(other.d)
 {
@@ -324,6 +333,7 @@ Message::Message(Message &&other)
     d->m_message = this;
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Message &Message::operator=(Message &&other)
 {
     if (this != &other) {

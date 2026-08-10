@@ -1,6 +1,10 @@
 PROJECT_NAME           = Dferry
+JAVADOC_AUTOBRIEF      = YES
+BUILTIN_STL_SUPPORT    = YES
+IDL_PROPERTY_SUPPORT   = NO
 EXTRACT_LOCAL_CLASSES  = NO
 HIDE_FRIEND_COMPOUNDS  = YES
+SHOW_FILES             = NO
 INPUT                  = . \
                          ../connection \
                          ../events \

@@ -66,13 +66,16 @@ public:
         // The way the limit is defined in the spec seems tied a bit too closely to the design of libdbus-1...
     };
 
+    /// State of serialization or deserialization
     enum IoState : byte
     {
         // "exceptional" states
-        NotStarted = 0,
-        Finished,
-        NeedMoreData, // recoverable by adding data; should only happen when parsing the not length-prefixed variable message header
-        InvalidData, // non-recoverable
+        NotStarted = 0, ///< De/serialization not started
+        Finished, ///< De/serialization finished
+        NeedMoreData, ///< Data is too short. Recoverable by adding data; should only happen when parsing
+                      ///  the not length-prefixed variable message header
+                      // TODO remove
+        InvalidData, ///< Input is invalid
         // Writer states when the next type is still open (not iterating in an array or dict)
         // ### it is inconsistent to have DictKey, but nothing for other constraints. The name AnyData is
         //     also weird. Remove DictKey and call AnyData InputData?
@@ -84,28 +87,28 @@ public:
         // of an array or dict where the types must match the first iteration (except inside variants).
 
         // states pertaining to aggregates
-        BeginArray,
-        EndArray,
-        BeginDict,
-        EndDict,
-        BeginStruct, // 10
-        EndStruct,
-        BeginVariant,
-        EndVariant,
+        BeginArray, ///< Beginning of an array
+        EndArray, ///< End of an array
+        BeginDict, ///< Beginning of a dict
+        EndDict, ///< End of a dict
+        BeginStruct, ///< Beginning of a struct
+        EndStruct, ///< End of a struct
+        BeginVariant, ///< Beginning of a variant
+        EndVariant, ///< End of a variant
         // the next element is plain data
-        Boolean,
-        Byte,
-        Int16,
-        Uint16,
-        Int32,
-        Uint32,
-        Int64, // 20
-        Uint64,
-        Double,
-        String,
-        ObjectPath,
-        Signature,
-        UnixFd,
+        Boolean, ///< Boolean value
+        Byte, ///< Byte value (8 bit unsigned integer)
+        Int16, ///< 16 bit signed integer value
+        Uint16, ///< 16 bit unsigned integer value
+        Int32, ///< 32 bit signed integer value
+        Uint32, ///< 32 bit unsigned integer value
+        Int64, ///< 64 bit signed integer value
+        Uint64, ///< 64 bit unsigned integer value
+        Double, ///< Double-precision floating point value
+        String, ///< UTF-8 string value
+        ObjectPath, ///< DBus object path string value
+        Signature, ///< DBus type signature string value
+        UnixFd, ///< Unix file descriptor value
 #ifdef WITH_DICT_ENTRY
         BeginDictEntry,
         EndDictEntry,

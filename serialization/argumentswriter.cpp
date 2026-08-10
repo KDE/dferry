@@ -263,12 +263,46 @@ void ArgumentsWriter::Private::operator=(const Private &other)
     m_queuedData = other.m_queuedData;
 }
 
+/** \class ArgumentsWriter
+    Writes arguments into Arguments.
+
+    This is a single use factory class: The last step in its use is to move out the finished
+    Arguments instance.
+
+    \section argswriter_concepts Concepts
+
+    # TODO move this to a type system section under Arguments, then link to it
+    - An argument list contains zero or more arguments
+    - Aggregate types are arrays, dictionaries, structs and variants
+    - A single complete type is either a basic type (int, string etc) or a valid aggregate
+    - Arrays must contain exactly one single complete type
+    - Dictionaries must contain exactly two types: a primitive type key and a value, which
+      can be any single complete type
+    - A struct must contain one or more single complete types
+    - A variant must contain one single complete type; which one it is can vary at runtime, which
+      is what makes variants special.
+    - There is a string representation of DBus argument lists; the maximum allowed length of a
+      type signature corresponds to a string length of 255.
+
+    - ArgumentsWriter participates in error chaining: # TODO link to error chaining documentation
+      in Error
+
+    - Writing a value that is invalid (e.g. a string that is not valid UTF-8), or whose type is
+      not allowed according to DBus type signature rules, puts the writer into an error state
+      that it cannot leave. It is memory-safe to try to continue to write in that error state,
+      but the result of calling ArgumentsWriter::finish() will always be an Arguments instance
+      containing no data and an error.
+
+    \see Arguments
+*/
+
 ArgumentsWriter::ArgumentsWriter()
    : d(new(allocCache.allocate()) Private),
      m_state(Arguments::AnyData)
 {
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 ArgumentsWriter::ArgumentsWriter(ArgumentsWriter &&other)
    : d(other.d),
      m_state(other.m_state),
@@ -277,6 +311,7 @@ ArgumentsWriter::ArgumentsWriter(ArgumentsWriter &&other)
     other.d = nullptr;
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 void ArgumentsWriter::operator=(ArgumentsWriter &&other)
 {
     if (&other == this) {
@@ -817,33 +852,48 @@ void ArgumentsWriter::beginArrayOrDict(Arguments::IoState beginWhat, ArrayOption
     }
 }
 
+/// Begins writing an array.
+/// An array always has a type, but may not contain any elements. In case you need to write an empty
+/// array, pass \p option = WriteTypesOfEmptyArray and make one pass through the array while writing
+/// data of the appropriate type. The data will be ignored except that its types are recorded.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::beginArray(ArrayOption option)
 {
     beginArrayOrDict(Arguments::BeginArray, option);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::endArray()
 {
     advanceState(cstring(), Arguments::EndArray);
 }
 
+/// Begins writing a dict.
+/// A dict always has a key type and a value type, but may not contain any elements. In case you need
+/// to write an empty dict, pass \p option = WriteTypesOfEmptyArray and make one pass through the dict
+/// while writing data of the appropriate type. The data will be ignored except that its types are
+/// recorded.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::beginDict(ArrayOption option)
 {
     beginArrayOrDict(Arguments::BeginDict, option);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::endDict()
 {
     advanceState(cstring("}", strlen("}")), Arguments::EndDict);
 }
 
 #ifdef WITH_DICT_ENTRY
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::beginDictEntry()
 {
     VALID_IF(m_state == Arguments::BeginDictEntry, Error::MisplacedBeginDictEntry);
     advanceState(cstring(), BeginDictEntry);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::endDictEntry()
 {
     if (!d->m_aggregateStack.empty()) {
@@ -858,21 +908,25 @@ void ArgumentsWriter::endDictEntry()
 }
 #endif
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::beginStruct()
 {
     advanceState(cstring("(", strlen("(")), Arguments::BeginStruct);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::endStruct()
 {
     advanceState(cstring(")", strlen(")")), Arguments::EndStruct);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::beginVariant()
 {
     advanceState(cstring("v", strlen("v")), Arguments::BeginVariant);
 }
 
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::endVariant()
 {
     advanceState(cstring(), Arguments::EndVariant);
@@ -965,6 +1019,8 @@ void ArgumentsWriter::writePrimitiveArray(Arguments::IoState type, chunk data)
     endArray();
 }
 
+/// Finishes writing and returns an Arguments with the data that has been written.
+/// If there was an error, the returned Arguments will contain an error and no data.
 Arguments ArgumentsWriter::finish()
 {
     // what needs to happen here:
@@ -1166,60 +1222,80 @@ const std::vector<int> &ArgumentsWriter::fileDescriptors() const
     return d->m_fileDescriptors;
 }
 
-void ArgumentsWriter::writeBoolean(bool b)
-{
-    m_u.Boolean = b;
-    advanceState(cstring("b", strlen("b")), Arguments::Boolean);
-}
-
+/// Writes a byte (8 bit unsigned int) value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeByte(byte b)
 {
     m_u.Byte = b;
     advanceState(cstring("y", strlen("y")), Arguments::Byte);
 }
 
+/// Writes a boolean value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
+void ArgumentsWriter::writeBoolean(bool b)
+{
+    m_u.Boolean = b;
+    advanceState(cstring("b", strlen("b")), Arguments::Boolean);
+}
+
+/// Writes a 16 bit signed  int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeInt16(int16 i)
 {
     m_u.Int16 = i;
     advanceState(cstring("n", strlen("n")), Arguments::Int16);
 }
 
+/// Writes a 16 bit unsigned int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeUint16(uint16 i)
 {
     m_u.Uint16 = i;
     advanceState(cstring("q", strlen("q")), Arguments::Uint16);
 }
 
+/// Writes a 32 bit signed int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeInt32(int32 i)
 {
     m_u.Int32 = i;
     advanceState(cstring("i", strlen("i")), Arguments::Int32);
 }
 
+/// Writes a 32 bit unsigned int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeUint32(uint32 i)
 {
     m_u.Uint32 = i;
     advanceState(cstring("u", strlen("u")), Arguments::Uint32);
 }
 
+/// Writes a 64 bit signed int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeInt64(int64 i)
 {
     m_u.Int64 = i;
     advanceState(cstring("x", strlen("x")), Arguments::Int64);
 }
 
+/// Writes a 64 bit unsigned int value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeUint64(uint64 i)
 {
     m_u.Uint64 = i;
     advanceState(cstring("t", strlen("t")), Arguments::Uint64);
 }
 
+/// Writes a double-precision floating point value.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeDouble(double d)
 {
     m_u.Double = d;
     advanceState(cstring("d", strlen("d")), Arguments::Double);
 }
 
+/// Writes a string.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeString(cstring string)
 {
     m_u.String.ptr = string.ptr;
@@ -1227,6 +1303,8 @@ void ArgumentsWriter::writeString(cstring string)
     advanceState(cstring("s", strlen("s")), Arguments::String);
 }
 
+/// Writes a DBus object path.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeObjectPath(cstring objectPath)
 {
     m_u.String.ptr = objectPath.ptr;
@@ -1234,6 +1312,8 @@ void ArgumentsWriter::writeObjectPath(cstring objectPath)
     advanceState(cstring("o", strlen("o")), Arguments::ObjectPath);
 }
 
+/// Writes a DBus type signature.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeSignature(cstring signature)
 {
     m_u.String.ptr = signature.ptr;
@@ -1241,6 +1321,8 @@ void ArgumentsWriter::writeSignature(cstring signature)
     advanceState(cstring("g", strlen("g")), Arguments::Signature);
 }
 
+/// Writes a file descriptor.
+/// \see \ref argswriter_concepts "ArgumentsWriter Concepts"
 void ArgumentsWriter::writeUnixFd(int32 fd)
 {
     m_u.Int32 = fd;

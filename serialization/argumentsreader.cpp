@@ -85,6 +85,28 @@ public:
 
 thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
+/** \class ArgumentsReader
+    Reads arguments out of Arguments.
+
+    \section argsreader_concepts States and errors
+    During normal operation, state() describes which element is currently available for reading.
+    You can then retrieve the corresponding data by calling a reader method according to that
+    state. For example: IoState::Uint32 -> readUint32(), or
+    IoState::BeginStruct -> beginStruct() or skipStruct().
+
+    If the reader method called does not match the current state, the return value of the read will
+    be invalid (but the attempt to read will not cause undefined behavior) and the ArgumentsReader
+    will enter error state (state() == IoState::Finished, error().isValid() is true). Error state is
+    sticky - it is not possible to leave it. This allows to safely read some data and only check for
+    errors afterwards - if the invalid data that was read is not used, there is no problem.
+    Note that recovery is possible, if somewhat slow, by copying the ArgumentsReader before entering
+    error state and resuming reading using the saved ArgumentsReader. You will usually not need to do that.
+
+    \see Arguments
+*/
+
+/** Constructs an %ArgumentsReader to read arguments from \p args.
+ */
 ArgumentsReader::ArgumentsReader(const Arguments &args)
    : d(new(allocCache.allocate()) Private),
      m_state(Arguments::NotStarted)
@@ -93,6 +115,10 @@ ArgumentsReader::ArgumentsReader(const Arguments &args)
     beginRead();
 }
 
+/** Constructs an %ArgumentsReader to read arguments from \p msg.
+
+    This is a convenience constructor that just avoids calling msg->arguments().
+ */
 ArgumentsReader::ArgumentsReader(const Message &msg)
    : d(new(allocCache.allocate()) Private),
      m_state(Arguments::NotStarted)
@@ -101,6 +127,7 @@ ArgumentsReader::ArgumentsReader(const Message &msg)
     beginRead();
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 ArgumentsReader::ArgumentsReader(ArgumentsReader &&other)
    : d(other.d),
      m_state(other.m_state),
@@ -109,6 +136,7 @@ ArgumentsReader::ArgumentsReader(ArgumentsReader &&other)
     other.d = nullptr;
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 void ArgumentsReader::operator=(ArgumentsReader &&other)
 {
     if (&other == this) {
@@ -125,6 +153,7 @@ void ArgumentsReader::operator=(ArgumentsReader &&other)
     other.d = nullptr;
 }
 
+/// Copies \p other with all of its state, including read position.
 ArgumentsReader::ArgumentsReader(const ArgumentsReader &other)
    : d(nullptr),
      m_state(other.m_state),
@@ -135,6 +164,7 @@ ArgumentsReader::ArgumentsReader(const ArgumentsReader &other)
     }
 }
 
+/// Copies \p other with all of its state, including read position.
 void ArgumentsReader::operator=(const ArgumentsReader &other)
 {
     if (&other == this) {
@@ -583,6 +613,12 @@ void ArgumentsReader::skipArrayOrDictSignature(bool isDict)
     }
 }
 
+/// Begins reading an array.
+/// Required state: Arguments::BeginArray.
+/// \param option An array always has a type, but may not contain any elements.
+///               In case you want to read the type of an empty array, pass \p option = ReadTypesOnlyIfEmpty
+///               to make one pass through the array while reading inert "null" data.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 bool ArgumentsReader::beginArray(EmptyArrayOption option)
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
@@ -628,6 +664,9 @@ void ArgumentsReader::skipArrayOrDict(bool isDict)
     advanceState();
 }
 
+/// Skips reading an array.
+/// Skips the array (and all elements inside it). Required state: Arguments::BeginArray.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::skipArray()
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
@@ -639,6 +678,9 @@ void ArgumentsReader::skipArray()
     }
 }
 
+/// Ends reading an array.
+/// Required state: Arguments::EndArray.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::endArray()
 {
     VALID_IF(m_state == Arguments::EndArray, Error::ReadWrongType);
@@ -715,6 +757,12 @@ Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) 
     return elementType.state();
 }
 
+/// Begins reading a dict.
+/// Required state: Arguments::BeginDict.
+/// \param option A dict always has a key and a value type, but may not contain any elements.
+///               In case you want to read the types of an empty dict, pass \p option = ReadTypesOnlyIfEmpty
+///               to make one pass through the dict while reading inert "null" data.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 bool ArgumentsReader::beginDict(EmptyArrayOption option)
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
@@ -754,6 +802,9 @@ bool ArgumentsReader::beginDict(EmptyArrayOption option)
     return !d->m_nilArrayNesting;
 }
 
+/// Skips reading a dict.
+/// Skips the dict (and all elements inside it). Required state: Arguments::BeginDict.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::skipDict()
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
@@ -776,6 +827,9 @@ bool ArgumentsReader::isDictKey() const
     return false;
 }
 
+/// Ends reading a dict.
+/// Leaves the dict. Required state: Arguments::EndDict.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::endDict()
 {
     VALID_IF(m_state == Arguments::EndDict, Error::ReadWrongType);
@@ -808,6 +862,9 @@ void ArgumentsReader::endDictEntry()
 }
 #endif
 
+/// Begins reading a struct.
+/// Required state: Arguments::BeginStruct.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::beginStruct()
 {
     VALID_IF(m_state == Arguments::BeginStruct, Error::ReadWrongType);
@@ -817,6 +874,10 @@ void ArgumentsReader::beginStruct()
     advanceState();
 }
 
+/// Skips reading a struct.
+/// Skips the struct (and all elements inside it). Required state: Arguments::BeginStruct.
+/// Otherwise, enters error state.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::skipStruct()
 {
     if (unlikely(m_state != Arguments::BeginStruct)) {
@@ -827,6 +888,9 @@ void ArgumentsReader::skipStruct()
     }
 }
 
+/// Ends reading a struct.
+/// Required state: Arguments::EndStruct.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::endStruct()
 {
     VALID_IF(m_state == Arguments::EndStruct, Error::ReadWrongType);
@@ -835,6 +899,9 @@ void ArgumentsReader::endStruct()
     advanceState();
 }
 
+/// Begins reading a variant.
+/// Required state:  Arguments::BeginVariant.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::beginVariant()
 {
     VALID_IF(m_state == Arguments::BeginVariant, Error::ReadWrongType);
@@ -853,6 +920,9 @@ void ArgumentsReader::beginVariant()
     advanceState();
 }
 
+/// Skips reading a variant.
+/// Skips the variant (and all elements inside it). Required state: Arguments::BeginVariant.
+/// Otherwise, enters error state.
 void ArgumentsReader::skipVariant()
 {
     if (unlikely(m_state != Arguments::BeginVariant)) {
@@ -863,6 +933,9 @@ void ArgumentsReader::skipVariant()
     }
 }
 
+/// Ends reading a variant.
+/// Required state: Arguments::EndVariant.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::endVariant()
 {
     VALID_IF(m_state == Arguments::EndVariant, Error::ReadWrongType);
@@ -878,6 +951,9 @@ void ArgumentsReader::endVariant()
     advanceState();
 }
 
+/// Skips reading the current element.
+/// If the current element is the beginning of an aggregate, skips all elements inside the aggregate as well.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsReader::skipCurrentElement()
 {
     // ### We could implement a skipping fast path for more aggregates, but it would be a lot of work, so
@@ -1011,11 +1087,14 @@ std::vector<Arguments::IoState> ArgumentsReader::aggregateStack() const
     return ret;
 }
 
+/// Returns what aggregateStack().size() would return, but faster.
 uint32 ArgumentsReader::aggregateDepth() const
 {
     return d->m_aggregateStack.size();
 }
 
+/// Returns what aggregateStack().back() would return, but faster.
+/// If the aggregate stack is empty, returns IoState::NotStarted.
 Arguments::IoState ArgumentsReader::currentAggregate() const
 {
     if (d->m_aggregateStack.empty()) {
@@ -1023,3 +1102,57 @@ Arguments::IoState ArgumentsReader::currentAggregate() const
     }
     return d->m_aggregateStack.back().aggregateType;
 }
+
+/// \fn byte ArgumentsReader::readByte()
+/// Reads a byte (8 bit unsigned int). Required state: Arguments::Byte.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn bool ArgumentsReader::readBoolean()
+/// Reads a boolean value. Required state: Arguments::Boolean.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int16 ArgumentsReader::readInt16()
+/// Reads a 16 bit signed int value. Required state: Arguments::Int16.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint16 ArgumentsReader::readUint16()
+/// Reads a 16 bit unsigned int value. Required state: Arguments::Uint16.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int32 ArgumentsReader::readInt32()
+/// Reads a 32 bit signed int value. Required state: Arguments::Int32.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint32 ArgumentsReader::readUint32()
+/// Reads a 32 bit unsigned int value. Required state: Arguments::Uint32.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int64 ArgumentsReader::readInt64()
+/// Reads a 64 bit signed int value. Required state: Arguments::Int64.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint64 ArgumentsReader::readUint64()
+/// Reads a 64 bit unsigned int value. Required state: Arguments::Uint64.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn double ArgumentsReader::readDouble()
+/// Reads a double-precision floating point value. Required state: Arguments::Double.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsReader::readString()
+/// Reads a string. Required state: Arguments::String.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsReader::readObjectPath()
+/// Reads a DBus object path. Required state: Arguments::ObjectPath.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsReader::readSignature()
+/// Reads a DBus type signature. Required state: Arguments::Signature.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int32 ArgumentsReader::readUnixFd()
+/// Reads a file descriptor. The numeric value will usually not be the same as on the sending
+/// side, but it will refer to the same file. Required state: Arguments::UnixFd.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
