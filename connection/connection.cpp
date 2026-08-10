@@ -165,6 +165,16 @@ IO::Status ConnectionPrivate::handleIoReady(IO::RW rw)
     return status;
 }
 
+
+/** \class Connection
+    %Connection to a DBus bus or a peer.
+
+    Connection can be used to connect, to send and receive messages, and to watch the status of the
+    connection.
+
+    \see ConnectAddress, EventDispatcher
+*/
+
 Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
    : d(new ConnectionPrivate(this, dispatcher))
 {
@@ -273,6 +283,7 @@ Connection::Connection(ITransport *transport, EventDispatcher *ed, const Connect
     ConnectionStateChanger stateChanger(d, ConnectionPrivate::Connected);
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Connection::Connection(Connection &&other)
 {
     d = other.d;
@@ -282,6 +293,7 @@ Connection::Connection(Connection &&other)
     }
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Connection &Connection::operator=(Connection &&other)
 {
     this->~Connection();
@@ -625,11 +637,19 @@ IMessageReceiver *Connection::spontaneousMessageReceiver() const
     return d->m_client;
 }
 
+/** Set a receiver for all messages arriving on this connection.
+
+    \see IMessageReceiver
+*/
 void Connection::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
 {
     d->m_client = receiver;
 }
 
+/** Set a listener for state changes of this connection.
+
+    \see IConnectionStateListener
+*/
 IConnectionStateListener *Connection::connectionStateListener() const
 {
     return d->m_connectionStateListener;

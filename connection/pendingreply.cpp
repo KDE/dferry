@@ -31,6 +31,16 @@
 #include <cassert>
 #include <iostream>
 
+/** \class PendingReply
+    Waits for a reply to a Message.
+
+    PendingReply notifies an IMessageReceiver when a reply arrived or when an error occured
+    at any point in the chain of events that leads to receiving a reply.
+
+    \see Message, Connection::send(), TODO error chaining
+*/
+
+/// Constructs an invalid pending reply.
 PendingReply::PendingReply()
    : d(nullptr)
 {
@@ -106,16 +116,21 @@ void PendingReply::dumpState()
     }
 }
 
+/// Returns whether this %PendingReply is null.
+/// A null %PendingReply is a default-constructed or moved-from one.
 bool PendingReply::isNull() const
 {
     return !d;
 }
 
+/// Returns whether this %PendingReply is in a final state.
+/// A final state is either successful completion or definite failure.
 bool PendingReply::isFinished() const
 {
     return !d || d->m_isFinished;
 }
 
+/// Returns whether this %PendingReply has received a non-error reply message.
 bool PendingReply::hasNonErrorReply() const
 {
     return d && d->m_isFinished && !d->m_error.isError();
@@ -134,16 +149,25 @@ bool PendingReply::isError() const
     return d && d->m_error.isError();
 }
 
+/// Sets a auxiliary data for application purposes ("cookie").
+/// It is typically used to identify the PendingReply to application code.
 void PendingReply::setCookie(void *cookie)
 {
     d->m_cookie = cookie;
 }
 
+/// Returns auxiliary data for application purposes ("cookie").
 void *PendingReply::cookie() const
 {
     return d->m_cookie;
 }
 
+/** Sets a receiver for a reply message or error arriving for this %PendingReply.
+
+    The receiver will also be notified if an error occurred while trying to send the request message.
+
+    \see IMessageReceiver
+*/
 void PendingReply::setReceiver(IMessageReceiver *receiver)
 {
     if (d) {

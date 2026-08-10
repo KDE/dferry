@@ -33,6 +33,14 @@
 #include <iostream>
 #include <limits>
 
+/** \class Timer
+    Notifies when a set amount of time has passed.
+
+    This class is used internally by Dferry, but may be used for general-purpose waiting.
+
+    \see EventDispatcher
+*/
+
 Timer::Timer(EventDispatcher *dispatcher)
    : m_eventDispatcher(dispatcher),
      m_completionListener(nullptr),

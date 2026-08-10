@@ -311,6 +311,16 @@ Arguments::Private::~Private()
     }
 }
 
+
+/** \class Arguments
+    %Arguments of a DBus function call, reply, or signal.
+
+    The arguments are encoded according to the (TODO link) DBus type system and marshalling
+    specification. They have a type signature describing their data types.
+
+    \see ArgumentsReader, ArgumentsWriter, Message
+*/
+
 Arguments::Arguments()
    : d(new(allocCache.allocate()) Private)
 {

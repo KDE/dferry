@@ -262,6 +262,12 @@ public:
     std::string m_guid;
 };
 
+/** \class ConnectAddress
+    Address of a DBus bus or a peer.
+
+    \see Connection
+*/
+
 ConnectAddress::ConnectAddress()
    : d(new Private)
 {

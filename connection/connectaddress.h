@@ -34,32 +34,35 @@
 class DFERRY_EXPORT ConnectAddress
 {
 public:
+    /// Standard (at least on Linux systems) buses
     enum class StandardBus : unsigned char
     {
-        System,
-        Session
+        System, ///< The system bus
+        Session ///< The session bus
     };
 
+    /// Address type
     enum class Type : unsigned char
     {
-        None = 0,
-        UnixPath,
-        UnixDir,
-        RuntimeDir,
-        TmpDir,
-        AbstractUnixPath,
-        Tcp = 6,
-        Tcp4,
-        Tcp6
+        None = 0, ///< None
+        UnixPath, ///< Filesystem path to a UNIX local socket
+        UnixDir, ///< Server only: random name under given directory
+        RuntimeDir, ///< Server only: random name under XDG runtime directory
+        TmpDir, ///< Server only; same as UnixDir, but may be an abstract (non-filesystem) directory
+        AbstractUnixPath, ///< Linux only: Non-filesystem path to a UNIX local socket
+        Tcp = 6, ///< TCP/IP (v4 or v6) address and port
+        Tcp4, ///< TCP/IPv4 address and port
+        Tcp6 ///< TCP/IPv6 address and port
     };
 
+    /// %Role of the Connection that will use the address
     enum class Role : unsigned char
     {
-        None = 0,
-        BusClient,
+        None = 0, ///< None
+        BusClient, ///< Client on a message bus (everything except the daemon is a client)
         // BusServer, // = 2, not implemented
-        PeerClient = 3,
-        PeerServer
+        PeerClient = 3, ///< Peer-to-peer client (the one who connects)
+        PeerServer ///< Peer-to-peer server (the one who waits for a connection)
     };
 
     ConnectAddress();

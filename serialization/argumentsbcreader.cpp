@@ -103,6 +103,14 @@ public:
 
 static const char s_nullBuffer[16] {}; // inert fake data for callers when reading bad or nonexistent data
 
+/** \class ArgumentsBcReader
+    Reads arguments out of Arguments using type signature byte-code.
+
+    This class is less flexible, but generally about 2x as fast as ArgumentsReader if the bytecode
+    already exists.
+
+    \see Arguments
+*/
 
 // TODO must memoize signature -> FerCode to amortize its generation and get a real performance benefit
 ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncodeOptions encodeOptions)

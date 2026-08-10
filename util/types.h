@@ -51,6 +51,9 @@ typedef unsigned int uint32;
 typedef long long int int64;
 typedef unsigned long long int uint64;
 
+/** Block of data.
+    Pointer and length in one struct.
+ */
 struct DFERRY_EXPORT chunk
 {
     chunk() : ptr(nullptr), length(0) {}
@@ -61,6 +64,9 @@ struct DFERRY_EXPORT chunk
     uint32 length;
 };
 
+/** UTF-8 string.
+    Pointer and length in one struct.
+ */
 struct DFERRY_EXPORT cstring
 {
     cstring() : ptr(nullptr), length(0) {}

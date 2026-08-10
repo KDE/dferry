@@ -23,6 +23,14 @@
 
 #include "icompletionlistener.h"
 
+/** \class ICompletionListener
+    Interface to listen to task completion.
+*/
+
 ICompletionListener::~ICompletionListener()
 {
 }
+
+/** \class CompletionFunc
+    Listen to task completion with an std::function.
+*/

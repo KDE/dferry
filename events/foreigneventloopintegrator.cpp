@@ -108,6 +108,19 @@ void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(FileDescriptor fd, 
     m_fds.at(fd) = ioRw;
 }
 
+/** \class ForeignEventLoopIntegrator
+    Allows to integrate Dferry event handling into another event loop.
+
+    ForeignEventLoopIntegrator forwards I/O and timer event handling to another event loop
+    owned by e.g. libuv, libevent, Qt, or GLib/GTK... so that Dferry can send and receive
+    messages in an application whose main event loop is owned by such a framework.
+
+    This is an abstract class - you need to add an implementation for the event loop it
+    should integrate with.
+
+    \see EventDispatcher
+*/
+
 ForeignEventLoopIntegrator::ForeignEventLoopIntegrator()
    : d(nullptr)
 {

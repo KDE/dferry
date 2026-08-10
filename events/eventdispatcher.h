@@ -35,15 +35,12 @@ public:
 #ifndef DFERRY_NO_NATIVE_POLL
     EventDispatcher();
 #endif
-    // Does not take ownership of (i.e. does not delete in ~EventDispatcher()) integrator
     EventDispatcher(ForeignEventLoopIntegrator *integrator);
     ~EventDispatcher();
     EventDispatcher(EventDispatcher &other) = delete;
     void operator=(EventDispatcher &other) = delete;
 
-    bool poll(int timeout = -1); // returns false if interrupted by interrupt()
-    // Asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
-    // explicitly allowed to be called from any thread (including its own).
+    bool poll(int timeout = -1);
     void interrupt();
 
 private:
