@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "ipsocket_p.h"
 
 #include "connectaddress.h"
@@ -261,3 +263,5 @@ FileDescriptor IpSocket::fileDescriptor() const
 {
     return m_fd;
 }
+
+#endif // RUNNING_DOXYGEN

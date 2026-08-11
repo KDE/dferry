@@ -5,6 +5,7 @@ IDL_PROPERTY_SUPPORT   = NO
 EXTRACT_LOCAL_CLASSES  = NO
 HIDE_FRIEND_COMPOUNDS  = YES
 SHOW_FILES             = NO
+WARN_IF_UNDOC_ENUM_VAL = YES
 INPUT                  = . \
                          ../connection \
                          ../events \
@@ -18,3 +19,4 @@ FILE_PATTERNS          = *.c \
 RECURSIVE              = YES
 EXCLUDE_PATTERNS       = *_p.h
 GENERATE_LATEX         = NO
+PREDEFINED             = RUNNING_DOXYGEN

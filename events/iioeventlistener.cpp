@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "iioeventlistener_p.h"
 
 #include "iioeventsource_p.h"
@@ -60,3 +62,5 @@ void IIoEventListener::setIoInterest(uint32 ioRw)
         m_eventSource->updateIoInterest(this);
     }
 }
+
+#endif // RUNNING_DOXYGEN

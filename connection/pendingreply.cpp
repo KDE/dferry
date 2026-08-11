@@ -31,6 +31,49 @@
 #include <cassert>
 #include <iostream>
 
+#ifndef RUNNING_DOXYGEN
+void PendingReplyPrivate::handleReceived(Message *reply)
+{
+    m_isFinished = true;
+    // Connection has already unregistered us because it knows this reply is done
+    Connection *const connection = m_connectionOrReply.connection->m_connection;
+    m_connectionOrReply.reply = reply;
+    m_replyTimeout.stop();
+    if (m_receiver) {
+        m_receiver->handlePendingReplyFinished(m_owner, connection);
+    }
+}
+
+void PendingReplyPrivate::handleCompletion(void *task)
+{
+    assert(task == &m_replyTimeout);
+    (void) task;
+    assert(!m_isFinished);
+    // if a reply comes after the timout, it's too late and the reply is probably served as a spontaneous
+    // message by Connection
+    if (m_connectionOrReply.connection) {
+        m_connectionOrReply.connection->unregisterPendingReply(this);
+    }
+    handleError(Error::Timeout);
+}
+
+void PendingReplyPrivate::handleError(Error error)
+{
+    // When there is an error before or during sending, we already have an error, and the timeout it set to
+    // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
+    // to API clients. In that case, the timeout itself is not the error.
+    if (!m_error.isError()) {
+        m_error = error;
+    }
+    m_isFinished = true;
+    Connection *const connection = m_connectionOrReply.connection->m_connection;
+    m_connectionOrReply.reply = nullptr;
+    if (m_receiver) {
+        m_receiver->handlePendingReplyFinished(m_owner, connection);
+    }
+}
+#endif // RUNNING_DOXYGEN
+
 /** \class PendingReply
     Waits for a reply to a Message.
 
@@ -93,18 +136,6 @@ PendingReply &PendingReply::operator=(PendingReply &&other)
         d->m_owner = this;
     }
     return *this;
-}
-
-void PendingReplyPrivate::handleReceived(Message *reply)
-{
-    m_isFinished = true;
-    // Connection has already unregistered us because it knows this reply is done
-    Connection *const connection = m_connectionOrReply.connection->m_connection;
-    m_connectionOrReply.reply = reply;
-    m_replyTimeout.stop();
-    if (m_receiver) {
-        m_receiver->handlePendingReplyFinished(m_owner, connection);
-    }
 }
 
 void PendingReply::dumpState()
@@ -197,33 +228,4 @@ Message PendingReply::takeReply()
         d->m_connectionOrReply.reply = nullptr;
     }
     return reply;
-}
-
-void PendingReplyPrivate::handleCompletion(void *task)
-{
-    assert(task == &m_replyTimeout);
-    (void) task;
-    assert(!m_isFinished);
-    // if a reply comes after the timout, it's too late and the reply is probably served as a spontaneous
-    // message by Connection
-    if (m_connectionOrReply.connection) {
-        m_connectionOrReply.connection->unregisterPendingReply(this);
-    }
-    handleError(Error::Timeout);
-}
-
-void PendingReplyPrivate::handleError(Error error)
-{
-    // When there is an error before or during sending, we already have an error, and the timeout it set to
-    // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
-    // to API clients. In that case, the timeout itself is not the error.
-    if (!m_error.isError()) {
-        m_error = error;
-    }
-    m_isFinished = true;
-    Connection *const connection = m_connectionOrReply.connection->m_connection;
-    m_connectionOrReply.reply = nullptr;
-    if (m_receiver) {
-        m_receiver->handlePendingReplyFinished(m_owner, connection);
-    }
 }

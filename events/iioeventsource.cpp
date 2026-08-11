@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "iioeventsource_p.h"
 
 #include "iioeventlistener_p.h"
@@ -69,3 +71,5 @@ void IIoEventSource::removeIoListenerInternal(IIoEventListener *iol)
 {
     updateIoInterestInternal(iol, 0);
 }
+
+#endif // RUNNING_DOXYGEN

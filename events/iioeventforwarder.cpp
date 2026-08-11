@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "iioeventforwarder_p.h"
 
 #include <cassert>
@@ -74,3 +76,5 @@ IO::Status IIoEventForwarderSubclass::handleIoReady(IO::RW rw)
     }
 }
 #endif
+
+#endif // RUNNING_DOXYGEN

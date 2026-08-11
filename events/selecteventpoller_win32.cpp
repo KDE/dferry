@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "selecteventpoller_win32_p.h"
 
 #include "eventdispatcher_p.h"
@@ -189,3 +191,5 @@ void SelectEventPoller::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
 {
     m_fds.at(fd) = ioRw;
 }
+
+#endif // RUNNING_DOXYGEN

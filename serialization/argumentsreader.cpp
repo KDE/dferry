@@ -36,7 +36,6 @@
 #include <boost/container/small_vector.hpp>
 #endif
 
-
 class ArgumentsReader::Private
 {
 public:

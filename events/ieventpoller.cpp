@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "ieventpoller_p.h"
 
 IEventPoller::IEventPoller(EventDispatcher *dispatcher)
@@ -32,3 +34,5 @@ IEventPoller::~IEventPoller()
 {
     m_dispatcher = nullptr;
 }
+
+#endif // RUNNING_DOXYGEN

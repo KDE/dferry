@@ -1,5 +1,7 @@
+#ifndef RUNNING_DOXYGEN
+
 #include "event_p.h"
 
-Event::~Event()
-{
-}
+Event::~Event() = default;
+
+#endif // RUNNING_DOXYGEN

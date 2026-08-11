@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "itransport_p.h"
 
 #include "eventdispatcher.h"
@@ -135,3 +137,5 @@ ITransport *ITransport::create(const ConnectAddress &ci)
         return nullptr;
     }
 }
+
+#endif // RUNNING_DOXYGEN

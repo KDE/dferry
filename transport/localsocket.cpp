@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "localsocket_p.h"
 
 #include <errno.h>
@@ -283,3 +285,5 @@ int LocalSocket::fileDescriptor() const
 {
     return m_fd;
 }
+
+#endif // RUNNING_DOXYGEN

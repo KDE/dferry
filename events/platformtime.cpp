@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "platformtime_p.h"
 
 #ifdef _WIN32
@@ -55,3 +57,5 @@ uint64 monotonicMsecs()
 }
 
 }
+
+#endif // RUNNING_DOXYGEN

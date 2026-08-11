@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "ipresolver_p.h"
 
 #include "connectaddress.h"
@@ -91,3 +93,5 @@ socklen_t IpResolver::resolvedLength() const
     return sizeof(m_resolved);
 #endif
 }
+
+#endif // RUNNING_DOXYGEN

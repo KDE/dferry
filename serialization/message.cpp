@@ -53,6 +53,7 @@ static const byte s_thisMachineEndianness = 'B';
 static const byte s_thisMachineEndianness = 'l';
 #endif
 
+#ifndef RUNNING_DOXYGEN
 struct MsgAllocCaches
 {
     MallocCache<sizeof(MessagePrivate), 4> msgPrivate;
@@ -311,6 +312,585 @@ MessagePrivate::~MessagePrivate()
 {
     clear(/* onlyReleaseResources = */ true);
 }
+
+#ifndef DFERRY_SERDES_ONLY
+void MessagePrivate::receive(ITransport *transport)
+{
+    if (m_state >= FirstIoState) { // Can only do one I/O operation at a time
+        return;
+    }
+    transport->setReadListener(this);
+    m_state = MessagePrivate::Receiving;
+    m_headerLength = 0;
+    m_bodyLength = 0;
+}
+
+void MessagePrivate::send(ITransport *transport)
+{
+    if (!serialize(!transport->prefersMultiBufferSend())) {
+        m_state = Serialized;
+        assert(m_error.isError());
+        if (!m_error.isError()) {
+            // TODO This error code makes no sense here. We don't have a "generic error" code, and a specific
+            // error code should have been set by whatever code detected the error. Hence the assertion.
+            m_error = Error::MalformedReply;
+        }
+        // Note: We don't call notifyCompletionListener(); since all our timers are internal, we can
+        // expect them to check for errors after this returns. Specifically, Connection::send() has
+        // access to the timer in the PendingReply, so it can produce a deferred error notification
+        // just like success notifications are deferred.
+        return;
+    }
+    if (m_state != MessagePrivate::Sending) {
+        transport->setWriteListener(this);
+        m_state = MessagePrivate::Sending;
+    }
+}
+
+void MessagePrivate::setCompletionListener(ICompletionListener *listener)
+{
+    m_completionListener = listener;
+}
+
+void MessagePrivate::notifyCompletionListener()
+{
+    if (m_completionListener) {
+        m_completionListener->handleCompletion(m_message);
+    }
+}
+
+static constexpr uint32 s_properFixedHeaderLength = 12;
+static constexpr uint32 s_extendedFixedHeaderLength = 16;
+
+IO::Status MessagePrivate::handleTransportCanRead()
+{
+    if (m_state != Receiving) {
+        return IO::Status::InternalError;
+    }
+    IO::Status ret = IO::Status::OK;
+    IO::Result ioRes;
+    do {
+        uint32 readMax = 0;
+        if (!m_headerLength) {
+            // the message might only consist of the header, so we must be careful to avoid reading
+            // data meant for the next message
+            readMax = s_extendedFixedHeaderLength - m_bufferPos;
+        } else {
+            // reading variable headers and/or body
+            readMax = m_headerLength + m_bodyLength - m_bufferPos;
+        }
+        reserveBuffer(m_bufferPos + readMax);
+
+        const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
+
+
+        // According to the DBus spec, file descriptors can arrive anywhere in the message, but
+        // (assuming the message is written in one sendmsg() call) according to UNIX domain socket
+        // documentation, file descriptors will arrive in the first byte of the sent block they are
+        // attached to. We go with the UNIX domain socket documentation.
+        // TODO review and test this for very large messages that cannot be sent in one call
+        ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax,
+                                      m_bufferPos == 0 ? argUnixFds() : nullptr);
+
+        m_bufferPos += ioRes.length;
+        assert(m_bufferPos <= m_buffer.length);
+
+        if (!headersDone) {
+            if (m_headerLength == 0 && m_bufferPos >= s_extendedFixedHeaderLength) {
+                if (!deserializeFixedHeaders()) {
+                    ret = IO::Status::RemoteClosed;
+                    m_error = Error::MalformedReply;
+                    break;
+                }
+            }
+            if (m_headerLength > 0 && m_bufferPos >= m_headerLength) {
+                // ### If we expected to receive the FDs at any point in the message (as opposed to just the
+                //     first byte), we'd have to verify FD count later. But we don't, so this is expedient.
+                if (!deserializeVariableHeaders() ||
+                        m_varHeaders.intHeader(Message::UnixFdsHeader) != argUnixFds()->size()) {
+                    ret = IO::Status::RemoteClosed;
+                    m_error = Error::MalformedReply;
+                    break;
+                }
+            }
+        }
+        if (m_headerLength > 0 && m_bufferPos >= m_headerLength + m_bodyLength) {
+            // all done!
+            assert(m_bufferPos == m_headerLength + m_bodyLength);
+            m_state = Serialized;
+            chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
+            m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
+                                        bodyData, std::move(*argUnixFds()), m_isByteSwapped);
+            assert(ioRes.status == IO::Status::OK && ret == IO::Status::OK);
+            readTransport()->setReadListener(nullptr);
+            notifyCompletionListener(); // do not access members after this because it might delete us!
+            break;
+        }
+        if (!readTransport()->isOpen()) {
+            ret = IO::Status::RemoteClosed;
+            break;
+        }
+    } while (ioRes.status == IO::Status::OK || ioRes.length != 0);
+
+    if (ret != IO::Status::OK) {
+        clear();
+        readTransport()->setReadListener(nullptr);
+        if (!m_error.isError()) {
+            // catch-all, we know that SOME error happened
+            m_error = Error::RemoteDisconnect;
+        }
+        notifyCompletionListener();
+    }
+    return ret;
+}
+
+IO::Status MessagePrivate::handleTransportCanWrite()
+{
+    if (m_state != Sending) {
+        return IO::Status::InternalError;
+    }
+
+    IO::Result ioRes;
+    do {
+        chunk bufs[2]{chunk(m_buffer.ptr + m_bufferPos, m_buffer.length - m_bufferPos), {}};
+        if (m_serializedAsMultiBuffer) {
+            bufs[1] = m_mainArguments.data();
+
+            // eliminate the second buffer and move the second buffer to first position in case we've
+            // completely written out the first one
+            if (m_bufferPos >= m_buffer.length) {
+                const uint32_t intoBuf2 = m_bufferPos - m_buffer.length;
+                bufs[0].ptr = bufs[1].ptr + intoBuf2;
+                bufs[0].length = bufs[1].length - intoBuf2;
+                bufs[1].length = 0;
+            }
+        }
+
+        if (bufs[0].length + bufs[1].length == 0) {
+            m_state = Serialized;
+            writeTransport()->setWriteListener(nullptr);
+            notifyCompletionListener();
+            break;
+        }
+        chunk* maybeBuf2 = bufs[1].length ? &bufs[1] : nullptr;
+
+        if (m_bufferPos == 0) {
+            const size_t sendFdsCount = m_mainArguments.fileDescriptors().size();
+            if (sendFdsCount == 0) {
+                ioRes = writeTransport()->write(bufs[0], maybeBuf2);
+            } else if (sendFdsCount > writeTransport()->supportedPassingUnixFdsCount()) {
+                m_error.setCode(Error::SendingTooManyUnixFds);
+                m_state = Serialized;
+                writeTransport()->setWriteListener(nullptr);
+                // ### Oh well, now we have a special Error value to pass through the stack
+                // (for error handling), but also notifyCompletionListener() for sucessful completion
+                // handling. Can we get rid of one or the other, or are there actually good reasons for
+                // the difference?
+                // Pro separation:
+                // - the arguments I came up with for not doing error handling through callbacks
+                // - the ...convenience?... of using callbacks
+                // - possibly better performance of happy path
+                //
+                // Contra separation:
+                // - two different mechanisms for similar things...
+                // - inconsistency - though is that really a problem? the situations are different.
+                // - suddenly IO code needs to ~know (at least pass through and be technically exposed to)
+                //   error values it doesn't know and can't handle itself; theoretically could use some
+                //   error value wrapping mechanism to pass through opaque errors).
+                return IO::Status::PayloadError; // the connection is fine, only this message has a problem
+            } else {
+                ioRes = writeTransport()->write(bufs[0], maybeBuf2, &m_mainArguments.fileDescriptors());
+            }
+        } else {
+            ioRes = writeTransport()->write(bufs[0], maybeBuf2);
+        }
+
+        m_bufferPos += ioRes.length;
+    } while (ioRes.status == IO::Status::OK && ioRes.length != 0);
+
+    if (ioRes.status != IO::Status::OK) {
+        m_error = Error::RemoteDisconnect;
+        m_state = Serialized;
+        writeTransport()->setWriteListener(nullptr);
+        notifyCompletionListener();
+        return IO::Status::RemoteClosed;
+    }
+
+    return IO::Status::OK;
+}
+#endif // !DFERRY_SERDES_ONLY
+
+bool MessagePrivate::requiredHeadersPresent()
+{
+    m_error = checkRequiredHeaders();
+    return !m_error.isError();
+}
+
+Error MessagePrivate::checkRequiredHeaders() const
+{
+    if (m_serial == 0) {
+        return Error::MessageSerial;
+    }
+    if (m_protocolVersion != 1) {
+        return Error::MessageProtocolVersion;
+    }
+
+    // might want to check for DestinationHeader if the transport is a bus (not peer-to-peer)
+    // very strange that this isn't in the spec!
+
+    switch (m_messageType) {
+    case Message::SignalMessage:
+        // required: PathHeader, InterfaceHeader, MethodHeader
+        if (!m_varHeaders.hasStringHeader(Message::InterfaceHeader)) {
+            return Error::MessageInterface;
+        }
+        [[fallthrough]];
+    case Message::MethodCallMessage:
+        // required: PathHeader, MethodHeader
+        if (!m_varHeaders.hasStringHeader(Message::PathHeader)) {
+            return Error::MessagePath;
+        }
+        if (!m_varHeaders.hasStringHeader(Message::MethodHeader)) {
+            return Error::MessageMethod;
+        }
+        break;
+
+    case Message::ErrorMessage:
+        // required: ErrorNameHeader, ReplySerialHeader
+        if (!m_varHeaders.hasStringHeader(Message::ErrorNameHeader)) {
+            return Error::MessageErrorName;
+        }
+        [[fallthrough]];
+    case Message::MethodReturnMessage:
+        // required: ReplySerialHeader
+        if (!m_varHeaders.hasIntHeader(Message::ReplySerialHeader) ) {
+            return Error::MessageReplySerial;
+        }
+        break;
+
+    case Message::InvalidMessage:
+    default:
+        return Error::MessageType;
+    }
+
+    return Error::NoError;
+}
+
+bool MessagePrivate::deserializeFixedHeaders()
+{
+    assert(m_bufferPos >= s_extendedFixedHeaderLength);
+    byte *p = m_buffer.ptr;
+
+    byte endianness = *p++;
+    if (endianness != 'l' && endianness != 'B') {
+        return false;
+    }
+    m_isByteSwapped = endianness != s_thisMachineEndianness;
+
+    // TODO validate the values read here
+    m_messageType = static_cast<Message::Type>(*p++);
+    m_flags = *p++;
+    m_protocolVersion = *p++;
+
+    m_bodyLength = basic::readUint32(p, m_isByteSwapped);
+    m_serial = basic::readUint32(p + sizeof(uint32), m_isByteSwapped);
+    // peek into the var-length header and use knowledge about array serialization to infer the
+    // number of bytes still required for the header
+    uint32 varArrayLength = basic::readUint32(p + 2 * sizeof(uint32), m_isByteSwapped);
+    uint32 unpaddedHeaderLength = s_extendedFixedHeaderLength + varArrayLength;
+    m_headerLength = align(unpaddedHeaderLength, 8);
+    m_headerPadding = m_headerLength - unpaddedHeaderLength;
+
+    return m_headerLength + m_bodyLength <= Arguments::MaxMessageLength;
+}
+
+bool MessagePrivate::deserializeVariableHeaders()
+{
+    // use Arguments to parse the variable header fields
+    // HACK: the fake first int argument is there to start the Arguments's data 8 byte aligned
+    byte *base = m_buffer.ptr + s_properFixedHeaderLength - sizeof(int32);
+    chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
+    cstring varHeadersSig("ia(yv)");
+    Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
+
+    ArgumentsReader reader(argList);
+    assert(reader.isValid());
+
+    if (reader.state() != Arguments::Int32) {
+        return false;
+    }
+    reader.readInt32();
+    if (reader.state() != Arguments::BeginArray) {
+        return false;
+    }
+    reader.beginArray();
+
+    while (reader.state() == Arguments::BeginStruct) {
+        reader.beginStruct();
+        const byte headerField = reader.readByte();
+        if (headerField < Message::PathHeader || headerField > Message::UnixFdsHeader) {
+            return false;
+        }
+        const Message::VariableHeader eHeader = static_cast<Message::VariableHeader>(headerField);
+
+        reader.beginVariant();
+
+        bool ok = true; // short-circuit evaluation ftw
+        if (isStringHeader(headerField)) {
+            if (headerField == Message::PathHeader) {
+                ok = ok && reader.state() == Arguments::ObjectPath;
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readObjectPath());
+            } else if (headerField == Message::SignatureHeader) {
+                ok = ok && reader.state() == Arguments::Signature;
+                // The spec allows having no signature header, which means "empty signature". However...
+                // We do not drop empty signature headers when deserializing, in order to preserve
+                // the original message contents. This could be useful for debugging and testing.
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readSignature());
+            } else {
+                ok = ok && reader.state() == Arguments::String;
+                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readString());
+            }
+        } else {
+            ok = ok && reader.state() == Arguments::Uint32;
+            ok = ok && m_varHeaders.setIntHeader_deser(eHeader, reader.readUint32());
+        }
+
+        if (!ok) {
+            return false;
+        }
+        reader.endVariant();
+        reader.endStruct();
+    }
+    reader.endArray();
+
+    // check that header->body padding is in fact zero filled
+    base = m_buffer.ptr;
+    for (uint32 i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
+        if (base[i] != '\0') {
+            return false;
+        }
+    }
+
+    return reader.isFinished();
+}
+
+bool MessagePrivate::serialize(bool forceSingleBuffer)
+{
+    if ((m_state == Serialized || m_state == Sending) && !m_dirty) {
+        return true;
+    }
+    if (m_state >= FirstIoState) { // Marshalled data must not be touched while doing I/O
+        return false;
+    }
+
+    clearBuffer();
+
+    if (m_error.isError() || !requiredHeadersPresent()) {
+        return false;
+    }
+
+    Arguments headerArgs = serializeVariableHeaders();
+    if (headerArgs.data().length <= 0) {
+        return false;
+    }
+
+    // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
+    // the original dbus code aligns based on address in the final data stream
+    // (offset s_properFixedHeaderLength == 12), we align based on address in the Arguments's buffer
+    // (offset 0) - note that our modification keeps the stream valid because length is measured from end
+    // of padding
+
+    assert(headerArgs.data().length > 0); // if this fails the headerLength hack will break down
+
+    const uint32 unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
+    m_headerLength = align(unalignedHeaderLength, 8);
+    m_bodyLength = m_mainArguments.data().length;
+    const uint32 sendBufLength = m_headerLength + (forceSingleBuffer ? m_bodyLength : 0);
+
+    if (m_headerLength + m_bodyLength > Arguments::MaxMessageLength) {
+        m_error.setCode(Error::ArgumentsTooLong);
+        return false;
+    }
+
+    reserveBuffer(sendBufLength);
+
+    serializeFixedHeaders();
+
+    // copy header data: uint32 length...
+    memcpy(m_buffer.ptr + s_properFixedHeaderLength, headerArgs.data().ptr, sizeof(uint32));
+    // skip four bytes of padding and copy the rest
+    memcpy(m_buffer.ptr + s_properFixedHeaderLength + sizeof(uint32),
+           headerArgs.data().ptr + 2 * sizeof(uint32),
+           headerArgs.data().length - 2 * sizeof(uint32));
+    // zero padding between variable headers and message body
+    for (uint32 i = unalignedHeaderLength; i < m_headerLength; i++) {
+        m_buffer.ptr[i] = '\0';
+    }
+
+    m_serializedAsMultiBuffer = m_bodyLength > 0;
+    if (forceSingleBuffer && m_bodyLength) {
+        m_serializedAsMultiBuffer = false;
+        memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_bodyLength);
+    }
+
+    // for the upcoming message sending, "reuse" m_bufferPos for (total, including payload!) read position
+    // and m_buffer.length for length of the first buffer (whether there is a second one or not)
+    m_buffer.length = sendBufLength;
+    m_bufferPos = 0;
+
+    m_dirty = false;
+    m_state = Serialized;
+    return true;
+}
+
+void MessagePrivate::serializeFixedHeaders()
+{
+    assert(m_buffer.length >= s_extendedFixedHeaderLength);
+    byte *p = m_buffer.ptr;
+
+    *p++ = s_thisMachineEndianness;
+    *p++ = byte(m_messageType);
+    *p++ = m_flags;
+    *p++ = m_protocolVersion;
+
+    basic::writeUint32(p, m_bodyLength);
+    basic::writeUint32(p + sizeof(uint32), m_serial);
+}
+
+static void doVarHeaderPrologue(ArgumentsWriter *writer, Message::VariableHeader field)
+{
+    writer->beginStruct();
+    writer->writeByte(byte(field));
+}
+
+Arguments MessagePrivate::serializeVariableHeaders()
+{
+    ArgumentsWriter writer;
+
+    // note that we don't have to deal with empty arrays because all valid message types require
+    // at least one of the variable headers
+    writer.beginArray();
+
+    for (int i = 0; i < VarHeaderStorage::s_stringHeaderCount; i++) {
+        const Message::VariableHeader field = s_stringHeaderAtIndex[i];
+        if (m_varHeaders.hasHeader(field)) {
+            doVarHeaderPrologue(&writer, field);
+
+            const std::string &str = m_varHeaders.stringHeaders()[i];
+            if (field == Message::PathHeader) {
+                writer.writeVariantForMessageHeader('o');
+                writer.writeObjectPath(cstring(str.c_str(), str.length()));
+            } else if (field == Message::SignatureHeader) {
+                writer.writeVariantForMessageHeader('g');
+                writer.writeSignature(cstring(str.c_str(), str.length()));
+            } else {
+                writer.writeVariantForMessageHeader('s');
+                writer.writeString(cstring(str.c_str(), str.length()));
+            }
+
+            writer.fixupAfterWriteVariantForMessageHeader();
+            writer.endStruct();
+
+            if (unlikely(writer.error().isError())) {
+                static const Error::Code stringHeaderErrors[VarHeaderStorage::s_stringHeaderCount] = {
+                    Error::MessagePath,
+                    Error::MessageInterface,
+                    Error::MessageMethod,
+                    Error::MessageErrorName,
+                    Error::MessageDestination,
+                    Error::MessageSender,
+                    Error::MessageSignature
+                };
+                m_error.setCode(stringHeaderErrors[i]);
+                return Arguments();
+            }
+        }
+    }
+
+    for (int i = 0; i < VarHeaderStorage::s_intHeaderCount; i++) {
+        const Message::VariableHeader field = s_intHeaderAtIndex[i];
+        if (m_varHeaders.hasHeader(field)) {
+            doVarHeaderPrologue(&writer, field);
+            writer.writeVariantForMessageHeader('u');
+            writer.writeUint32(m_varHeaders.m_intHeaders[i]);
+            writer.fixupAfterWriteVariantForMessageHeader();
+            writer.endStruct();
+        }
+    }
+
+    writer.endArray();
+    return writer.finish();
+}
+
+void MessagePrivate::clearBuffer()
+{
+    if (m_buffer.ptr) {
+        free(m_buffer.ptr);
+        m_buffer = chunk();
+        m_bufferPos = 0;
+    } else {
+        assert(m_buffer.length == 0);
+        assert(m_bufferPos == 0);
+    }
+}
+
+void MessagePrivate::clear(bool onlyReleaseResources)
+{
+    clearBuffer();
+#ifdef __unix__
+    for (int fd : *argUnixFds()) {
+        ::close(fd);
+    }
+#endif
+    if (!onlyReleaseResources) { // get into a clean state again
+        m_state = Empty;
+        m_mainArguments = Arguments();
+        m_varHeaders = VarHeaderStorage();
+    }
+}
+
+static uint32 nextPowerOf2(uint32 x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return ++x;
+}
+
+void MessagePrivate::reserveBuffer(uint32 newLen)
+{
+    const uint32 oldLen = m_buffer.length;
+    if (newLen <= oldLen) {
+        return;
+    }
+    if (newLen <= 256) {
+        assert(oldLen == 0);
+        newLen = 256;
+        m_buffer.ptr = reinterpret_cast<byte *>(msgAllocCaches.msgBuffer.allocate());
+    } else {
+        newLen = nextPowerOf2(newLen);
+        if (oldLen == 256) {
+            byte *newAlloc = reinterpret_cast<byte *>(malloc(newLen));
+            memcpy(newAlloc, m_buffer.ptr, oldLen);
+
+            msgAllocCaches.msgBuffer.free(m_buffer.ptr);
+            m_buffer.ptr = newAlloc;
+        } else {
+            m_buffer.ptr = reinterpret_cast<byte *>(realloc(m_buffer.ptr, newLen));
+        }
+    }
+
+    m_buffer.length = newLen;
+}
+
+std::vector<int> *MessagePrivate::argUnixFds()
+{
+    return &Arguments::Private::of(&m_mainArguments)->m_fileDescriptors;
+}
+#endif // RUNNING_DOXYGEN
 
 /** \class Message
     DBus function call, reply, or signal.
@@ -746,220 +1326,15 @@ const Arguments &Message::arguments() const
     return d->m_mainArguments;
 }
 
-static const uint32 s_properFixedHeaderLength = 12;
-static const uint32 s_extendedFixedHeaderLength = 16;
-
 #ifndef DFERRY_SERDES_ONLY
-void MessagePrivate::receive(ITransport *transport)
-{
-    if (m_state >= FirstIoState) { // Can only do one I/O operation at a time
-        return;
-    }
-    transport->setReadListener(this);
-    m_state = MessagePrivate::Receiving;
-    m_headerLength = 0;
-    m_bodyLength = 0;
-}
-
 bool Message::isReceiving() const
 {
     return d->m_state == MessagePrivate::Receiving;
 }
 
-void MessagePrivate::send(ITransport *transport)
-{
-    if (!serialize(!transport->prefersMultiBufferSend())) {
-        m_state = Serialized;
-        assert(m_error.isError());
-        if (!m_error.isError()) {
-            // TODO This error code makes no sense here. We don't have a "generic error" code, and a specific
-            // error code should have been set by whatever code detected the error. Hence the assertion.
-            m_error = Error::MalformedReply;
-        }
-        // Note: We don't call notifyCompletionListener(); since all our timers are internal, we can
-        // expect them to check for errors after this returns. Specifically, Connection::send() has
-        // access to the timer in the PendingReply, so it can produce a deferred error notification
-        // just like success notifications are deferred.
-        return;
-    }
-    if (m_state != MessagePrivate::Sending) {
-        transport->setWriteListener(this);
-        m_state = MessagePrivate::Sending;
-    }
-}
-
 bool Message::isSending() const
 {
     return d->m_state == MessagePrivate::Sending;
-}
-
-void MessagePrivate::setCompletionListener(ICompletionListener *listener)
-{
-    m_completionListener = listener;
-}
-
-void MessagePrivate::notifyCompletionListener()
-{
-    if (m_completionListener) {
-        m_completionListener->handleCompletion(m_message);
-    }
-}
-
-IO::Status MessagePrivate::handleTransportCanRead()
-{
-    if (m_state != Receiving) {
-        return IO::Status::InternalError;
-    }
-    IO::Status ret = IO::Status::OK;
-    IO::Result ioRes;
-    do {
-        uint32 readMax = 0;
-        if (!m_headerLength) {
-            // the message might only consist of the header, so we must be careful to avoid reading
-            // data meant for the next message
-            readMax = s_extendedFixedHeaderLength - m_bufferPos;
-        } else {
-            // reading variable headers and/or body
-            readMax = m_headerLength + m_bodyLength - m_bufferPos;
-        }
-        reserveBuffer(m_bufferPos + readMax);
-
-        const bool headersDone = m_headerLength > 0 && m_bufferPos >= m_headerLength;
-
-
-        // According to the DBus spec, file descriptors can arrive anywhere in the message, but
-        // (assuming the message is written in one sendmsg() call) according to UNIX domain socket
-        // documentation, file descriptors will arrive in the first byte of the sent block they are
-        // attached to. We go with the UNIX domain socket documentation.
-        // TODO review and test this for very large messages that cannot be sent in one call
-        ioRes = readTransport()->read(m_buffer.ptr + m_bufferPos, readMax,
-                                      m_bufferPos == 0 ? argUnixFds() : nullptr);
-
-        m_bufferPos += ioRes.length;
-        assert(m_bufferPos <= m_buffer.length);
-
-        if (!headersDone) {
-            if (m_headerLength == 0 && m_bufferPos >= s_extendedFixedHeaderLength) {
-                if (!deserializeFixedHeaders()) {
-                    ret = IO::Status::RemoteClosed;
-                    m_error = Error::MalformedReply;
-                    break;
-                }
-            }
-            if (m_headerLength > 0 && m_bufferPos >= m_headerLength) {
-                // ### If we expected to receive the FDs at any point in the message (as opposed to just the
-                //     first byte), we'd have to verify FD count later. But we don't, so this is expedient.
-                if (!deserializeVariableHeaders() ||
-                        m_varHeaders.intHeader(Message::UnixFdsHeader) != argUnixFds()->size()) {
-                    ret = IO::Status::RemoteClosed;
-                    m_error = Error::MalformedReply;
-                    break;
-                }
-            }
-        }
-        if (m_headerLength > 0 && m_bufferPos >= m_headerLength + m_bodyLength) {
-            // all done!
-            assert(m_bufferPos == m_headerLength + m_bodyLength);
-            m_state = Serialized;
-            chunk bodyData(m_buffer.ptr + m_headerLength, m_bodyLength);
-            m_mainArguments = Arguments(nullptr, m_varHeaders.stringHeaderRaw(Message::SignatureHeader),
-                                        bodyData, std::move(*argUnixFds()), m_isByteSwapped);
-            assert(ioRes.status == IO::Status::OK && ret == IO::Status::OK);
-            readTransport()->setReadListener(nullptr);
-            notifyCompletionListener(); // do not access members after this because it might delete us!
-            break;
-        }
-        if (!readTransport()->isOpen()) {
-            ret = IO::Status::RemoteClosed;
-            break;
-        }
-    } while (ioRes.status == IO::Status::OK || ioRes.length != 0);
-
-    if (ret != IO::Status::OK) {
-        clear();
-        readTransport()->setReadListener(nullptr);
-        if (!m_error.isError()) {
-            // catch-all, we know that SOME error happened
-            m_error = Error::RemoteDisconnect;
-        }
-        notifyCompletionListener();
-    }
-    return ret;
-}
-
-IO::Status MessagePrivate::handleTransportCanWrite()
-{
-    if (m_state != Sending) {
-        return IO::Status::InternalError;
-    }
-
-    IO::Result ioRes;
-    do {
-        chunk bufs[2]{chunk(m_buffer.ptr + m_bufferPos, m_buffer.length - m_bufferPos), {}};
-        if (m_serializedAsMultiBuffer) {
-            bufs[1] = m_mainArguments.data();
-
-            // eliminate the second buffer and move the second buffer to first position in case we've
-            // completely written out the first one
-            if (m_bufferPos >= m_buffer.length) {
-                const uint32_t intoBuf2 = m_bufferPos - m_buffer.length;
-                bufs[0].ptr = bufs[1].ptr + intoBuf2;
-                bufs[0].length = bufs[1].length - intoBuf2;
-                bufs[1].length = 0;
-            }
-        }
-
-        if (bufs[0].length + bufs[1].length == 0) {
-            m_state = Serialized;
-            writeTransport()->setWriteListener(nullptr);
-            notifyCompletionListener();
-            break;
-        }
-        chunk* maybeBuf2 = bufs[1].length ? &bufs[1] : nullptr;
-
-        if (m_bufferPos == 0) {
-            const size_t sendFdsCount = m_mainArguments.fileDescriptors().size();
-            if (sendFdsCount == 0) {
-                ioRes = writeTransport()->write(bufs[0], maybeBuf2);
-            } else if (sendFdsCount > writeTransport()->supportedPassingUnixFdsCount()) {
-                m_error.setCode(Error::SendingTooManyUnixFds);
-                m_state = Serialized;
-                writeTransport()->setWriteListener(nullptr);
-                // ### Oh well, now we have a special Error value to pass through the stack
-                // (for error handling), but also notifyCompletionListener() for sucessful completion
-                // handling. Can we get rid of one or the other, or are there actually good reasons for
-                // the difference?
-                // Pro separation:
-                // - the arguments I came up with for not doing error handling through callbacks
-                // - the ...convenience?... of using callbacks
-                // - possibly better performance of happy path
-                //
-                // Contra separation:
-                // - two different mechanisms for similar things...
-                // - inconsistency - though is that really a problem? the situations are different.
-                // - suddenly IO code needs to ~know (at least pass through and be technically exposed to)
-                //   error values it doesn't know and can't handle itself; theoretically could use some
-                //   error value wrapping mechanism to pass through opaque errors).
-                return IO::Status::PayloadError; // the connection is fine, only this message has a problem
-            } else {
-                ioRes = writeTransport()->write(bufs[0], maybeBuf2, &m_mainArguments.fileDescriptors());
-            }
-        } else {
-            ioRes = writeTransport()->write(bufs[0], maybeBuf2);
-        }
-
-        m_bufferPos += ioRes.length;
-    } while (ioRes.status == IO::Status::OK && ioRes.length != 0);
-
-    if (ioRes.status != IO::Status::OK) {
-        m_error = Error::RemoteDisconnect;
-        m_state = Serialized;
-        writeTransport()->setWriteListener(nullptr);
-        notifyCompletionListener();
-        return IO::Status::RemoteClosed;
-    }
-
-    return IO::Status::OK;
 }
 #endif // !DFERRY_SERDES_ONLY
 
@@ -1031,375 +1406,4 @@ void Message::load(const std::vector<byte> &data)
     memcpy(buf.ptr, &data[0], buf.length);
 
     deserializeAndTake(buf);
-}
-
-bool MessagePrivate::requiredHeadersPresent()
-{
-    m_error = checkRequiredHeaders();
-    return !m_error.isError();
-}
-
-Error MessagePrivate::checkRequiredHeaders() const
-{
-    if (m_serial == 0) {
-        return Error::MessageSerial;
-    }
-    if (m_protocolVersion != 1) {
-        return Error::MessageProtocolVersion;
-    }
-
-    // might want to check for DestinationHeader if the transport is a bus (not peer-to-peer)
-    // very strange that this isn't in the spec!
-
-    switch (m_messageType) {
-    case Message::SignalMessage:
-        // required: PathHeader, InterfaceHeader, MethodHeader
-        if (!m_varHeaders.hasStringHeader(Message::InterfaceHeader)) {
-            return Error::MessageInterface;
-        }
-        [[fallthrough]];
-    case Message::MethodCallMessage:
-        // required: PathHeader, MethodHeader
-        if (!m_varHeaders.hasStringHeader(Message::PathHeader)) {
-            return Error::MessagePath;
-        }
-        if (!m_varHeaders.hasStringHeader(Message::MethodHeader)) {
-            return Error::MessageMethod;
-        }
-        break;
-
-    case Message::ErrorMessage:
-        // required: ErrorNameHeader, ReplySerialHeader
-        if (!m_varHeaders.hasStringHeader(Message::ErrorNameHeader)) {
-            return Error::MessageErrorName;
-        }
-        [[fallthrough]];
-    case Message::MethodReturnMessage:
-        // required: ReplySerialHeader
-        if (!m_varHeaders.hasIntHeader(Message::ReplySerialHeader) ) {
-            return Error::MessageReplySerial;
-        }
-        break;
-
-    case Message::InvalidMessage:
-    default:
-        return Error::MessageType;
-    }
-
-    return Error::NoError;
-}
-
-bool MessagePrivate::deserializeFixedHeaders()
-{
-    assert(m_bufferPos >= s_extendedFixedHeaderLength);
-    byte *p = m_buffer.ptr;
-
-    byte endianness = *p++;
-    if (endianness != 'l' && endianness != 'B') {
-        return false;
-    }
-    m_isByteSwapped = endianness != s_thisMachineEndianness;
-
-    // TODO validate the values read here
-    m_messageType = static_cast<Message::Type>(*p++);
-    m_flags = *p++;
-    m_protocolVersion = *p++;
-
-    m_bodyLength = basic::readUint32(p, m_isByteSwapped);
-    m_serial = basic::readUint32(p + sizeof(uint32), m_isByteSwapped);
-    // peek into the var-length header and use knowledge about array serialization to infer the
-    // number of bytes still required for the header
-    uint32 varArrayLength = basic::readUint32(p + 2 * sizeof(uint32), m_isByteSwapped);
-    uint32 unpaddedHeaderLength = s_extendedFixedHeaderLength + varArrayLength;
-    m_headerLength = align(unpaddedHeaderLength, 8);
-    m_headerPadding = m_headerLength - unpaddedHeaderLength;
-
-    return m_headerLength + m_bodyLength <= Arguments::MaxMessageLength;
-}
-
-bool MessagePrivate::deserializeVariableHeaders()
-{
-    // use Arguments to parse the variable header fields
-    // HACK: the fake first int argument is there to start the Arguments's data 8 byte aligned
-    byte *base = m_buffer.ptr + s_properFixedHeaderLength - sizeof(int32);
-    chunk headerData(base, m_headerLength - m_headerPadding - s_properFixedHeaderLength + sizeof(int32));
-    cstring varHeadersSig("ia(yv)");
-    Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
-
-    ArgumentsReader reader(argList);
-    assert(reader.isValid());
-
-    if (reader.state() != Arguments::Int32) {
-        return false;
-    }
-    reader.readInt32();
-    if (reader.state() != Arguments::BeginArray) {
-        return false;
-    }
-    reader.beginArray();
-
-    while (reader.state() == Arguments::BeginStruct) {
-        reader.beginStruct();
-        const byte headerField = reader.readByte();
-        if (headerField < Message::PathHeader || headerField > Message::UnixFdsHeader) {
-            return false;
-        }
-        const Message::VariableHeader eHeader = static_cast<Message::VariableHeader>(headerField);
-
-        reader.beginVariant();
-
-        bool ok = true; // short-circuit evaluation ftw
-        if (isStringHeader(headerField)) {
-            if (headerField == Message::PathHeader) {
-                ok = ok && reader.state() == Arguments::ObjectPath;
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readObjectPath());
-            } else if (headerField == Message::SignatureHeader) {
-                ok = ok && reader.state() == Arguments::Signature;
-                // The spec allows having no signature header, which means "empty signature". However...
-                // We do not drop empty signature headers when deserializing, in order to preserve
-                // the original message contents. This could be useful for debugging and testing.
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readSignature());
-            } else {
-                ok = ok && reader.state() == Arguments::String;
-                ok = ok && m_varHeaders.setStringHeader_deser(eHeader, reader.readString());
-            }
-        } else {
-            ok = ok && reader.state() == Arguments::Uint32;
-            ok = ok && m_varHeaders.setIntHeader_deser(eHeader, reader.readUint32());
-        }
-
-        if (!ok) {
-            return false;
-        }
-        reader.endVariant();
-        reader.endStruct();
-    }
-    reader.endArray();
-
-    // check that header->body padding is in fact zero filled
-    base = m_buffer.ptr;
-    for (uint32 i = m_headerLength - m_headerPadding; i < m_headerLength; i++) {
-        if (base[i] != '\0') {
-            return false;
-        }
-    }
-
-    return reader.isFinished();
-}
-
-bool MessagePrivate::serialize(bool forceSingleBuffer)
-{
-    if ((m_state == Serialized || m_state == Sending) && !m_dirty) {
-        return true;
-    }
-    if (m_state >= FirstIoState) { // Marshalled data must not be touched while doing I/O
-        return false;
-    }
-
-    clearBuffer();
-
-    if (m_error.isError() || !requiredHeadersPresent()) {
-        return false;
-    }
-
-    Arguments headerArgs = serializeVariableHeaders();
-    if (headerArgs.data().length <= 0) {
-        return false;
-    }
-
-    // we need to cut out alignment padding bytes 4 to 7 in the variable header data stream because
-    // the original dbus code aligns based on address in the final data stream
-    // (offset s_properFixedHeaderLength == 12), we align based on address in the Arguments's buffer
-    // (offset 0) - note that our modification keeps the stream valid because length is measured from end
-    // of padding
-
-    assert(headerArgs.data().length > 0); // if this fails the headerLength hack will break down
-
-    const uint32 unalignedHeaderLength = s_properFixedHeaderLength + headerArgs.data().length - sizeof(uint32);
-    m_headerLength = align(unalignedHeaderLength, 8);
-    m_bodyLength = m_mainArguments.data().length;
-    const uint32 sendBufLength = m_headerLength + (forceSingleBuffer ? m_bodyLength : 0);
-
-    if (m_headerLength + m_bodyLength > Arguments::MaxMessageLength) {
-        m_error.setCode(Error::ArgumentsTooLong);
-        return false;
-    }
-
-    reserveBuffer(sendBufLength);
-
-    serializeFixedHeaders();
-
-    // copy header data: uint32 length...
-    memcpy(m_buffer.ptr + s_properFixedHeaderLength, headerArgs.data().ptr, sizeof(uint32));
-    // skip four bytes of padding and copy the rest
-    memcpy(m_buffer.ptr + s_properFixedHeaderLength + sizeof(uint32),
-           headerArgs.data().ptr + 2 * sizeof(uint32),
-           headerArgs.data().length - 2 * sizeof(uint32));
-    // zero padding between variable headers and message body
-    for (uint32 i = unalignedHeaderLength; i < m_headerLength; i++) {
-        m_buffer.ptr[i] = '\0';
-    }
-
-    m_serializedAsMultiBuffer = m_bodyLength > 0;
-    if (forceSingleBuffer && m_bodyLength) {
-        m_serializedAsMultiBuffer = false;
-        memcpy(m_buffer.ptr + m_headerLength, m_mainArguments.data().ptr, m_bodyLength);
-    }
-
-    // for the upcoming message sending, "reuse" m_bufferPos for (total, including payload!) read position
-    // and m_buffer.length for length of the first buffer (whether there is a second one or not)
-    m_buffer.length = sendBufLength;
-    m_bufferPos = 0;
-
-    m_dirty = false;
-    m_state = Serialized;
-    return true;
-}
-
-void MessagePrivate::serializeFixedHeaders()
-{
-    assert(m_buffer.length >= s_extendedFixedHeaderLength);
-    byte *p = m_buffer.ptr;
-
-    *p++ = s_thisMachineEndianness;
-    *p++ = byte(m_messageType);
-    *p++ = m_flags;
-    *p++ = m_protocolVersion;
-
-    basic::writeUint32(p, m_bodyLength);
-    basic::writeUint32(p + sizeof(uint32), m_serial);
-}
-
-static void doVarHeaderPrologue(ArgumentsWriter *writer, Message::VariableHeader field)
-{
-    writer->beginStruct();
-    writer->writeByte(byte(field));
-}
-
-Arguments MessagePrivate::serializeVariableHeaders()
-{
-    ArgumentsWriter writer;
-
-    // note that we don't have to deal with empty arrays because all valid message types require
-    // at least one of the variable headers
-    writer.beginArray();
-
-    for (int i = 0; i < VarHeaderStorage::s_stringHeaderCount; i++) {
-        const Message::VariableHeader field = s_stringHeaderAtIndex[i];
-        if (m_varHeaders.hasHeader(field)) {
-            doVarHeaderPrologue(&writer, field);
-
-            const std::string &str = m_varHeaders.stringHeaders()[i];
-            if (field == Message::PathHeader) {
-                writer.writeVariantForMessageHeader('o');
-                writer.writeObjectPath(cstring(str.c_str(), str.length()));
-            } else if (field == Message::SignatureHeader) {
-                writer.writeVariantForMessageHeader('g');
-                writer.writeSignature(cstring(str.c_str(), str.length()));
-            } else {
-                writer.writeVariantForMessageHeader('s');
-                writer.writeString(cstring(str.c_str(), str.length()));
-            }
-
-            writer.fixupAfterWriteVariantForMessageHeader();
-            writer.endStruct();
-
-            if (unlikely(writer.error().isError())) {
-                static const Error::Code stringHeaderErrors[VarHeaderStorage::s_stringHeaderCount] = {
-                    Error::MessagePath,
-                    Error::MessageInterface,
-                    Error::MessageMethod,
-                    Error::MessageErrorName,
-                    Error::MessageDestination,
-                    Error::MessageSender,
-                    Error::MessageSignature
-                };
-                m_error.setCode(stringHeaderErrors[i]);
-                return Arguments();
-            }
-        }
-    }
-
-    for (int i = 0; i < VarHeaderStorage::s_intHeaderCount; i++) {
-        const Message::VariableHeader field = s_intHeaderAtIndex[i];
-        if (m_varHeaders.hasHeader(field)) {
-            doVarHeaderPrologue(&writer, field);
-            writer.writeVariantForMessageHeader('u');
-            writer.writeUint32(m_varHeaders.m_intHeaders[i]);
-            writer.fixupAfterWriteVariantForMessageHeader();
-            writer.endStruct();
-        }
-    }
-
-    writer.endArray();
-    return writer.finish();
-}
-
-void MessagePrivate::clearBuffer()
-{
-    if (m_buffer.ptr) {
-        free(m_buffer.ptr);
-        m_buffer = chunk();
-        m_bufferPos = 0;
-    } else {
-        assert(m_buffer.length == 0);
-        assert(m_bufferPos == 0);
-    }
-}
-
-void MessagePrivate::clear(bool onlyReleaseResources)
-{
-    clearBuffer();
-#ifdef __unix__
-    for (int fd : *argUnixFds()) {
-        ::close(fd);
-    }
-#endif
-    if (!onlyReleaseResources) { // get into a clean state again
-        m_state = Empty;
-        m_mainArguments = Arguments();
-        m_varHeaders = VarHeaderStorage();
-    }
-}
-
-static uint32 nextPowerOf2(uint32 x)
-{
-    --x;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    return ++x;
-}
-
-void MessagePrivate::reserveBuffer(uint32 newLen)
-{
-    const uint32 oldLen = m_buffer.length;
-    if (newLen <= oldLen) {
-        return;
-    }
-    if (newLen <= 256) {
-        assert(oldLen == 0);
-        newLen = 256;
-        m_buffer.ptr = reinterpret_cast<byte *>(msgAllocCaches.msgBuffer.allocate());
-    } else {
-        newLen = nextPowerOf2(newLen);
-        if (oldLen == 256) {
-            byte *newAlloc = reinterpret_cast<byte *>(malloc(newLen));
-            memcpy(newAlloc, m_buffer.ptr, oldLen);
-
-            msgAllocCaches.msgBuffer.free(m_buffer.ptr);
-            m_buffer.ptr = newAlloc;
-        } else {
-            m_buffer.ptr = reinterpret_cast<byte *>(realloc(m_buffer.ptr, newLen));
-        }
-    }
-
-    m_buffer.length = newLen;
-}
-
-std::vector<int> *MessagePrivate::argUnixFds()
-{
-    return &Arguments::Private::of(&m_mainArguments)->m_fileDescriptors;
 }
