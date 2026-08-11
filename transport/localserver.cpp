@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "localserver_p.h"
 
 #include "icompletionlistener.h"
@@ -119,3 +121,5 @@ FileDescriptor LocalServer::fileDescriptor() const
 {
     return m_listenFd;
 }
+
+#endif // RUNNING_DOXYGEN

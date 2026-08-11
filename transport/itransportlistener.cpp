@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "itransportlistener_p.h"
 
 #include "itransport_p.h"
@@ -62,3 +64,5 @@ IO::Status ITransportListener::handleTransportCanWrite()
 {
     return IO::Status::OK;
 }
+
+#endif // RUNNING_DOXYGEN

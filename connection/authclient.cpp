@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "authclient_p.h"
 
 #include "icompletionlistener.h"
@@ -202,3 +204,5 @@ void AuthClient::advanceState()
         break;
     }
 }
+
+#endif // RUNNING_DOXYGEN

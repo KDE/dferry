@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "iserver_p.h"
 
 #include "connectaddress.h"
@@ -168,3 +170,5 @@ void IServer::close()
     }
     platformClose();
 }
+
+#endif // RUNNING_DOXYGEN

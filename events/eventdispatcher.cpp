@@ -49,46 +49,7 @@
 
 //#define EVENTDISPATCHER_DEBUG
 
-/** \class EventDispatcher
-    Dispatches I/O and timer events to appropriate handlers.
-
-    EventDispatcher implements an event loop through repeated calls to poll(). Every call handles
-    the events available at the time. An event loop is required to maintain any
-    DBus connections to a message bus or direct peers.
-
-    \see Connection
-*/
-
-#ifndef DFERRY_NO_NATIVE_POLL
-
-/// Constructs an EventDispatcher with an appropriate platform-specific backend.
-EventDispatcher::EventDispatcher()
-   : d(new EventDispatcherPrivate)
-{
-#ifdef __linux__
-    d->m_poller = new EpollEventPoller(this);
-#else
-    // TODO high performance IO multiplexers for non-Linux platforms
-    d->m_poller = new SelectEventPoller(this);
-#endif
-}
-#endif
-
-/** Constructs an EventDispatcher that integrates with another event loop.
-
-    The instance will rely on a ForeignEventLoopIntegrator so that Dferry can send and receive
-    messages in an application whose main event loop is owned by another framework such as
-    libuv, libevent, Qt, or GLib/GTK.
-
-    The EventDispatcher does not take ownership of the ForeignEventLoopIntegrator.
- */
-EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
-   : d(new EventDispatcherPrivate)
-{
-    d->m_integrator = integrator;
-    d->m_poller = integrator->connectToDispatcher(this);
-}
-
+#ifndef RUNNING_DOXYGEN
 EventDispatcherPrivate::~EventDispatcherPrivate()
 {
     // removeIoListener is going to remove the current entry from m_ioListeners, so use this funny
@@ -113,43 +74,6 @@ EventDispatcherPrivate::~EventDispatcherPrivate()
     if (!m_integrator) {
         delete m_poller;
     }
-}
-
-EventDispatcher::~EventDispatcher()
-{
-    delete d;
-    d = nullptr;
-}
-
-// returns false if interrupted by interrupt()
-bool EventDispatcher::poll(int timeout)
-{
-    int nextDue = d->timeToFirstDueTimer();
-    if (timeout < 0) {
-        timeout = nextDue;
-    } else if (nextDue >= 0) {
-        timeout = std::min(timeout, nextDue);
-    }
-
-#ifdef EVENTDISPATCHER_DEBUG
-    printf("EventDispatcher::poll(): timeout=%d, nextDue=%d.\n", timeout, nextDue);
-#endif
-    IEventPoller::InterruptAction interrupAction = d->m_poller->poll(timeout);
-
-    if (interrupAction == IEventPoller::Stop) {
-        return false;
-    } else if (interrupAction == IEventPoller::ProcessAuxEvents && d->m_connectionToNotify) {
-        d->processAuxEvents();
-    }
-    d->triggerDueTimers();
-    return true;
-}
-
-// Asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
-// explicitly allowed to be called from any thread (including its own).
-void EventDispatcher::interrupt()
-{
-    d->m_poller->interrupt(IEventPoller::Stop);
 }
 
 void EventDispatcherPrivate::wakeForEvents()
@@ -425,4 +349,82 @@ void EventDispatcherPrivate::processAuxEvents()
             m_connectionToNotify->processEvent(evt.get());
         }
     }
+}
+#endif // RUNNING_DOXYGEN
+
+/** \class EventDispatcher
+    Dispatches I/O and timer events to appropriate handlers.
+
+    EventDispatcher implements an event loop through repeated calls to poll(). Every call handles
+    the events available at the time. An event loop is required to maintain any
+    DBus connections to a message bus or direct peers.
+
+    \see Connection
+*/
+
+#ifndef DFERRY_NO_NATIVE_POLL
+
+/// Constructs an EventDispatcher with an appropriate platform-specific backend.
+EventDispatcher::EventDispatcher()
+   : d(new EventDispatcherPrivate)
+{
+#ifdef __linux__
+    d->m_poller = new EpollEventPoller(this);
+#else
+    // TODO high performance IO multiplexers for non-Linux platforms
+    d->m_poller = new SelectEventPoller(this);
+#endif
+}
+#endif
+
+/** Constructs an EventDispatcher that integrates with another event loop.
+
+    The instance will rely on a ForeignEventLoopIntegrator so that Dferry can send and receive
+    messages in an application whose main event loop is owned by another framework such as
+    libuv, libevent, Qt, or GLib/GTK.
+
+    The EventDispatcher does not take ownership of the ForeignEventLoopIntegrator.
+ */
+EventDispatcher::EventDispatcher(ForeignEventLoopIntegrator *integrator)
+   : d(new EventDispatcherPrivate)
+{
+    d->m_integrator = integrator;
+    d->m_poller = integrator->connectToDispatcher(this);
+}
+
+EventDispatcher::~EventDispatcher()
+{
+    delete d;
+    d = nullptr;
+}
+
+// returns false if interrupted by interrupt()
+bool EventDispatcher::poll(int timeout)
+{
+    int nextDue = d->timeToFirstDueTimer();
+    if (timeout < 0) {
+        timeout = nextDue;
+    } else if (nextDue >= 0) {
+        timeout = std::min(timeout, nextDue);
+    }
+
+#ifdef EVENTDISPATCHER_DEBUG
+    printf("EventDispatcher::poll(): timeout=%d, nextDue=%d.\n", timeout, nextDue);
+#endif
+    IEventPoller::InterruptAction interrupAction = d->m_poller->poll(timeout);
+
+    if (interrupAction == IEventPoller::Stop) {
+        return false;
+    } else if (interrupAction == IEventPoller::ProcessAuxEvents && d->m_connectionToNotify) {
+        d->processAuxEvents();
+    }
+    d->triggerDueTimers();
+    return true;
+}
+
+// Asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
+// explicitly allowed to be called from any thread (including its own).
+void EventDispatcher::interrupt()
+{
+    d->m_poller->interrupt(IEventPoller::Stop);
 }

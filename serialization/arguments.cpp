@@ -249,6 +249,7 @@ void Arguments::copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer)
 
 thread_local static MallocCache<sizeof(Arguments::Private), 4> allocCache;
 
+#ifndef RUNNING_DOXYGEN
 Arguments::Private::Private(const Private &other)
 {
     initFrom(other);
@@ -310,7 +311,7 @@ Arguments::Private::~Private()
         free(m_memOwnership);
     }
 }
-
+#endif // RUNNING_DOXYGEN
 
 /** \class Arguments
     %Arguments of a DBus function call, reply, or signal.

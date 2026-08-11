@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "ipserver_p.h"
 
 #include "connectaddress.h"
@@ -124,3 +126,5 @@ FileDescriptor IpServer::fileDescriptor() const
 {
     return m_listenFd;
 }
+
+#endif // RUNNING_DOXYGEN

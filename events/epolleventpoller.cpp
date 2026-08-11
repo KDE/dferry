@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef RUNNING_DOXYGEN
+
 #include "epolleventpoller_p.h"
 
 #include "eventdispatcher_p.h"
@@ -140,3 +142,5 @@ void EpollEventPoller::setReadWriteInterest(FileDescriptor fd, uint32 ioRw)
     epevt.data.fd = fd;
     epoll_ctl(m_epollFd, EPOLL_CTL_MOD, fd, &epevt);
 }
+
+#endif // RUNNING_DOXYGEN
