@@ -85,10 +85,7 @@ public:
     std::string path() const; // only for Unix domain sockets
 
     void setHostname(const std::string &path);
-    std::string hostname() const; // Only for IP sockets. Only an IP address string ("192.168.0.10") is
-                                  // supported, hostname ("myhost.local") support might be added later.
-                                  // As an exception, hostname "localhost" or empty string will be
-                                  // understood as the loopback address.
+    std::string hostname() const;
 
     void setPort(int port);
     int port() const; // only for TcpSocket
@@ -103,7 +100,7 @@ public:
 
     bool isServerOnly() const;
 
-    // TODO comparison operators
+    // TODO comparison operators that disregard irrelevant data
 
 private:
     class Private;

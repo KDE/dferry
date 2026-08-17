@@ -56,10 +56,14 @@ typedef unsigned long long int uint64;
  */
 struct DFERRY_EXPORT chunk
 {
+    /// Constructs a null chunk.
     chunk() : ptr(nullptr), length(0) {}
+    /// Constructs a chunk with pointer and length.
     chunk(byte *b, uint32 l) : ptr(b), length(l) {}
+    /// Constructs a chunk with pointer and length.
+    /// Convenience constructor for char buffers.
     chunk(char *b, uint32 l) : ptr(reinterpret_cast<byte *>(b)), length(l) {}
-    chunk(const char *b, uint32 l) : ptr(reinterpret_cast<byte *>(const_cast<char *>(b))), length(l) {}
+
     byte *ptr;
     uint32 length;
 };
@@ -69,11 +73,21 @@ struct DFERRY_EXPORT chunk
  */
 struct DFERRY_EXPORT cstring
 {
+    /// Constructs a null string.
     cstring() : ptr(nullptr), length(0) {}
-    cstring(byte *b, uint32 l) : ptr(reinterpret_cast<char *>(b)), length(l) {}
+    /// Constructs a string with pointer and length.
     cstring(char *b, uint32 l) : ptr(b), length(l) {}
+    /// Constructs a string with pointer and length.
+    /// Convenience constructor for byte buffers.
+    cstring(byte *b, uint32 l) : ptr(reinterpret_cast<char *>(b)), length(l) {}
+
+    /// Constructs a string with pointer and length.
+    /// Convenience constructor for const char buffers. This is const-incorrect, be careful.
     cstring(const char *b, uint32 l) : ptr(const_cast<char *>(b)), length(l) {}
+    /// Constructs a cstring from a null-terminated C-style string.
+    /// This is const-incorrect, be careful.
     cstring(const char *b);
+
     char *ptr;
     // length does not include terminating null! (this is okay because cstring does not
     // own the memory, so the accounting usually doesn't get screwed up)

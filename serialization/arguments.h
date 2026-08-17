@@ -48,22 +48,25 @@ class MessagePrivate;
 class DFERRY_EXPORT Arguments
 {
 public:
+    /// Type of a type signature
     enum SignatureType
     {
-        MethodSignature = 0,
-        VariantSignature
+        MethodSignature = 0, ///< Signature of a method, may contain 0 or more single complete types
+                             // (TODO link to DBus spec?)
+        VariantSignature ///< Signature of a variant, must contain exactly one single complete type
     };
 
     enum
     {
-        MaxSignatureLength = 255,
-        MaxArrayLength = 1 << 26, // 64 MiB
-        MaxMessageLength = 1 << 27 // 128 MiB
+        MaxSignatureLength = 255, ///< Maximum length of a DBus type signature according to spec
+        MaxArrayLength = 1 << 26, ///< Maximum length of a DBus array according to spec (64 MiB)
+        MaxMessageLength = 1 << 27 ///< Maximum length of a DBus message according to spec (128 MiB)
         // MaxMessageLength applies to a full Message (and it IS checked in Message when the message is
         // complete), which also implies a max size for Arguments. Instead of working out the exact minimum
         // size of the header part of a Message (which depends on too many variables), just allow the max
         // Message length as max Arguments length.
-        // The way the limit is defined in the spec seems tied a bit too closely to the design of libdbus-1...
+        // The way the limit is defined in the spec seems tied a bit too closely to the design of
+        // libdbus-1, which conflates Arguments and Message.
     };
 
     /// State of serialization or deserialization

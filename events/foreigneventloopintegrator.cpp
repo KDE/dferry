@@ -121,6 +121,8 @@ void ForeignEventLoopIntegratorPrivate::setReadWriteInterest(FileDescriptor fd, 
     \see EventDispatcher
 */
 
+/// Default constructor.
+/// \see ~ForeignEventLoopIntegrator(), removeAllWatches()
 ForeignEventLoopIntegrator::ForeignEventLoopIntegrator()
    : d(nullptr)
 {
@@ -133,16 +135,18 @@ IEventPoller *ForeignEventLoopIntegrator::connectToDispatcher(EventDispatcher *d
     return d;
 }
 
+/// Destructor.
+/// Note: removeAllWatches() must be called from the derived class's destructor. When this destructor
+/// runs, the subclass data has already been destroyed and the vtable is the one of this class,
+/// so calling removeAllWatches() from this destructor would not work.
 ForeignEventLoopIntegrator::~ForeignEventLoopIntegrator()
 {
     d->exiting = true; // try to prevent surprising states during shutdown, including of d->m_fds
-
-    // removeAllWatches() must be called from a derived class that implements the in this class pure
-    // virtual methods setWatchRead(), setWatchWrite(), and watchTimeout(). During destruction, the
-    // subclass data has already been destroyed and the vtable is the one of this class.
-    //removeAllWatches();
 }
 
+/// Call this in the destructor or other shutdown / reset code of your implementation.
+/// It calls setWatchRead(fd, false), setWatchWrite(fd, false) and watchTimeout(-1) so as to
+/// stop watching everything that was being watched.
 void ForeignEventLoopIntegrator::removeAllWatches()
 {
     for (auto it = d->m_fds.begin(); it != d->m_fds.end(); ++it) {
@@ -162,11 +166,35 @@ void ForeignEventLoopIntegrator::removeAllWatches()
     }
 }
 
+/// \returns whether the event loop is exiting.
+/// This is sometimes useful because some actions are neither necessary nor possible during
+/// shutdown.
 bool ForeignEventLoopIntegrator::exiting() const
 {
     return d->exiting;
 }
 
+/// \fn virtual void ForeignEventLoopIntegrator::watchTimeout(int msecs) = 0;
+/// Timer integration.
+/// The implementation should set up a timeout that expires after \p mescs milliseconds
+/// and call handleTimout() upon expiration.
+
+/// \fn virtual void ForeignEventLoopIntegrator::setWatchRead(int fd, bool doWatch) = 0;
+/// Read notification integration.
+/// The implementation should watch or stop watching (depending on \p doWatch)
+/// file descriptor \p fd for read availability and call handleReadyRead() when it is
+/// available. The model is level-triggered: Every time the foreign event loop runs and
+/// there is still data available for reading, handleReadyRead() should be called.
+
+/// \fn virtual void ForeignEventLoopIntegrator::setWatchWrite(int fd, bool doWatch) = 0;
+/// Write notification integration.
+/// The implementation should watch or stop watching (depending on \p doWatch)
+/// file descriptor \p fd for write availability and call handleReadyWrite() when it is
+/// available. The model is level-triggered: Every time the foreign/ event loop runs and
+/// it is still possible to write data, handleReadyWrite() should be called.
+
+/// Call this when the timeout set by watchTimeout() has expired.
+/// \see \link watchTimeout() \endlink
 void ForeignEventLoopIntegrator::handleTimeout()
 {
     if (!d->exiting) {
@@ -174,6 +202,8 @@ void ForeignEventLoopIntegrator::handleTimeout()
     }
 }
 
+/// Call this when watched file descriptor \p fd is available for reading.
+/// \see \link setWatchRead() \endlink
 void ForeignEventLoopIntegrator::handleReadyRead(int fd)
 {
     if (!d->exiting) {
@@ -181,6 +211,8 @@ void ForeignEventLoopIntegrator::handleReadyRead(int fd)
     }
 }
 
+/// Call this when watched file descriptor \p fd is available for writing.
+/// \see \link setWatchWrite() \endlink
 void ForeignEventLoopIntegrator::handleReadyWrite(int fd)
 {
     if (!d->exiting) {

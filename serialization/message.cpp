@@ -561,7 +561,7 @@ Error MessagePrivate::checkRequiredHeaders() const
             return Error::MessageErrorName;
         }
         [[fallthrough]];
-    case Message::MethodReturnMessage:
+    case Message::MethodReplyMessage:
         // required: ReplySerialHeader
         if (!m_varHeaders.hasIntHeader(Message::ReplySerialHeader) ) {
             return Error::MessageReplySerial;
@@ -987,7 +987,7 @@ void Message::setCall(const std::string &path, const std::string &method)
 
 void Message::setReplyTo(const Message &call)
 {
-    setType(MethodReturnMessage);
+    setType(MethodReplyMessage);
     setDestination(call.sender());
     setReplySerial(call.serial());
 }
@@ -1070,8 +1070,8 @@ static const int messageTypeCount = 5;
 static const char *printableMessageTypes[messageTypeCount] = {
     "", // handled in code
     "Method call",
-    "Method return",
-    "Method error return",
+    "Method reply",
+    "Method error reply",
     "Signal"
 };
 
@@ -1145,81 +1145,97 @@ uint32 Message::serial() const
     return d->m_serial;
 }
 
+/// \see \link stringHeader() \endlink, Message::PathHeader
 std::string Message::path() const
 {
     return stringHeader(PathHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::PathHeader
 void Message::setPath(const std::string &path)
 {
     setStringHeader(PathHeader, path);
 }
 
+/// \see \link stringHeader() \endlink, Message::InterfaceHeader
 std::string Message::interface() const
 {
     return stringHeader(InterfaceHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::InterfaceHeader
 void Message::setInterface(const std::string &interface)
 {
     setStringHeader(InterfaceHeader, interface);
 }
 
+/// \see \link stringHeader() \endlink, Message::MethodHeader
 std::string Message::method() const
 {
     return stringHeader(MethodHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::MethodHeader
 void Message::setMethod(const std::string &method)
 {
     setStringHeader(MethodHeader, method);
 }
 
+/// \see \link stringHeader() \endlink, Message::ErrorNameHeader
 std::string Message::errorName() const
 {
     return stringHeader(ErrorNameHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::ErrorNameHeader
 void Message::setErrorName(const std::string &errorName)
 {
     setStringHeader(ErrorNameHeader, errorName);
 }
 
+/// \see \link intHeader() \endlink, Message::ReplySerialHeader
 uint32 Message::replySerial() const
 {
     return intHeader(ReplySerialHeader, nullptr);
 }
 
+/// \see \link setIntHeader() \endlink, Message::ReplySerialHeader
 void Message::setReplySerial(uint32 replySerial)
 {
     setIntHeader(ReplySerialHeader, replySerial);
 }
 
+/// \see \link stringHeader() \endlink, Message::DestinationHeader
 std::string Message::destination() const
 {
     return stringHeader(DestinationHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::DestinationHeader
 void Message::setDestination(const std::string &destination)
 {
     setStringHeader(DestinationHeader, destination);
 }
 
+/// \see \link stringHeader() \endlink, Message::SenderHeader
 std::string Message::sender() const
 {
     return stringHeader(SenderHeader, nullptr);
 }
 
+/// \see \link setStringHeader() \endlink, Message::SenderHeader
 void Message::setSender(const std::string &sender)
 {
     setStringHeader(SenderHeader, sender);
 }
 
+/// \see \link stringHeader() \endlink, Message::SignatureHeader
 std::string Message::signature() const
 {
     return stringHeader(SignatureHeader, nullptr);
 }
 
+/// \see \link intHeader() \endlink, Message::UnixFdsHeader
 uint32 Message::unixFdCount() const
 {
     return intHeader(UnixFdsHeader, nullptr);
@@ -1259,11 +1275,16 @@ void Message::setIntHeader(VariableHeader header, uint32 value)
     d->m_varHeaders.setIntHeader(header, value);
 }
 
+/// \returns whether this message expects a reply.
+/// This is a flag that tells the receiver whether it should send a reply. Note that the receiver or
+/// bus may disregard the flag, especially in error cases e.g. when the message is not deliverable.
 bool Message::expectsReply() const
 {
     return (d->m_flags & MessagePrivate::NoReplyExpectedFlag) == 0;
 }
 
+/// Sets whether this message expects a reply.
+/// \see \link expectsReply() \endlink
 void Message::setExpectsReply(bool expectsReply)
 {
     if (expectsReply) {

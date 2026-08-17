@@ -57,8 +57,8 @@ QString MessageRecord::type() const
     switch (message->type()) {
     case Message::MethodCallMessage:
         return QObject::tr("Call");
-    case Message::MethodReturnMessage:
-        return QObject::tr("Return");
+    case Message::MethodReplyMessage:
+        return QObject::tr("Reply");
     case Message::ErrorMessage:
         return QObject::tr("Error");
     case Message::SignalMessage:
@@ -78,13 +78,13 @@ bool MessageRecord::isAwaitingReply() const
 
 bool MessageRecord::isReplyToKnownCall() const
 {
-    return otherMessageIndex >= 0 && (message->type() == Message::MethodReturnMessage ||
+    return otherMessageIndex >= 0 && (message->type() == Message::MethodReplyMessage ||
                                       message->type() == Message::ErrorMessage);
 }
 
 uint32 MessageRecord::conversationSerial() const
 {
-    if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
+    if (message->type() == Message::MethodReplyMessage || message->type() == Message::ErrorMessage) {
         return message->replySerial();
     }
     return message->serial();
@@ -197,7 +197,7 @@ void EavesdropperModel::addMessage(Message *message, qint64 timestamp)
         //     memory that is not freed before shutdown left and right so it doesn't make much of
         //     a difference. it does make a difference when serials overflow.
         m_callsAwaitingResponse[Call(message->serial(), message->sender())] = currentMessageIndex;
-    } else if (message->type() == Message::MethodReturnMessage || message->type() == Message::ErrorMessage) {
+    } else if (message->type() == Message::MethodReplyMessage || message->type() == Message::ErrorMessage) {
         Call key(message->replySerial(), message->destination());
         std::map<Call, uint32>::iterator it = m_callsAwaitingResponse.find(key);
         // we could have missed the initial call because it happened before we connected to the bus...

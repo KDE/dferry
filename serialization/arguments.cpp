@@ -319,11 +319,20 @@ Arguments::Private::~Private()
     \see ArgumentsReader, ArgumentsWriter, Message
 */
 
+
+/// Constructs an empty Arguments instance.
 Arguments::Arguments()
    : d(new(allocCache.allocate()) Private)
 {
 }
 
+/// Constructs an Arguments instance from serialized data.
+/// \param memOwnership If this is non-null, the Arguments "owns" that memory and will delete it
+///                     in its destructor. It is assumed but not checked that signature and data
+///                     point to memory inside \p memOwnership.
+/// \param signature The type signature for the arguments
+/// \param data The payload data buffer for the arguments
+/// \param isByteSwapped Whether the payload data is byte-swapped relative to the current platform
 Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped)
    : d(new(allocCache.allocate()) Private)
 {
@@ -333,6 +342,14 @@ Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isB
     d->m_data = data;
 }
 
+/// Constructs an Arguments instance from serialized data.
+/// \param memOwnership If this is non-null, this %Arguments instance owns that memory and will
+///                     delete it in its destructor. It is assumed but not checked that signature
+///                     and data point to memory inside \p memOwnership.
+/// \param signature The type signature for the arguments
+/// \param data The payload data buffer for the arguments
+/// \param fileDescriptors File descriptors array belonging to the arguments
+/// \param isByteSwapped Whether the payload data is byte-swapped relative to the current platform
 Arguments::Arguments(byte *memOwnership, cstring signature, chunk data,
                      std::vector<int> fileDescriptors, bool isByteSwapped)
    : d(new(allocCache.allocate()) Private)
@@ -344,12 +361,14 @@ Arguments::Arguments(byte *memOwnership, cstring signature, chunk data,
     d->m_fileDescriptors = std::move(fileDescriptors);
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Arguments::Arguments(Arguments &&other)
    : d(other.d)
 {
     other.d = nullptr;
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 Arguments &Arguments::operator=(Arguments &&other)
 {
     Arguments temp(std::move(other));
@@ -357,6 +376,7 @@ Arguments &Arguments::operator=(Arguments &&other)
     return *this;
 }
 
+/// Makes a deep copy of \p other with all of its state.
 Arguments::Arguments(const Arguments &other)
    : d(nullptr)
 {
@@ -365,6 +385,7 @@ Arguments::Arguments(const Arguments &other)
     }
 }
 
+/// Deep-copies \p other with all of its state into \p this.
 Arguments &Arguments::operator=(const Arguments &other)
 {
     if (d && other.d) {
@@ -390,21 +411,25 @@ Error Arguments::error() const
     return d->m_error;
 }
 
+/// \returns The type signature for the arguments
 cstring Arguments::signature() const
 {
     return d->m_signature;
 }
 
+/// \returns The payload data buffer for the arguments
 chunk Arguments::data() const
 {
     return d->m_data;
 }
 
+/// \returns File descriptors array belonging to the arguments
 const std::vector<int> &Arguments::fileDescriptors() const
 {
     return d->m_fileDescriptors;
 }
 
+/// \returns Whether the payload data is byte-swapped relative to the current platform
 bool Arguments::isByteSwapped() const
 {
     return d->m_isByteSwapped;
@@ -448,6 +473,7 @@ static bool strEndsWith(const std::string &str, const std::string &ending)
     }
 }
 
+/// \returns A "pretty-printed" (with indentation) representation of the payload data of this instance
 std::string Arguments::prettyPrint() const
 {
     ArgumentsReader reader(*this);
@@ -609,6 +635,8 @@ static void chopFirst(cstring *s)
     s->length--;
 }
 
+/// \returns whether \p string is a valid DBus string
+/// Validation criteria are: Valid UTF-8, no embedded nulls, limited length.
 // static
 bool Arguments::isStringValid(cstring string)
 {
@@ -624,6 +652,7 @@ static inline bool isObjectNameLetter(char c)
     return likely((c >= 'a' && c <= 'z') || c == '_' || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'));
 }
 
+/// \returns whether \p path is a valid DBus object path.
 // static
 bool Arguments::isObjectPathValid(cstring path)
 {

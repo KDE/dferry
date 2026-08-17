@@ -41,6 +41,7 @@
     \see EventDispatcher
 */
 
+/// Constructs a Timer using EventDispatcher \p dispatcher.
 Timer::Timer(EventDispatcher *dispatcher)
    : m_eventDispatcher(dispatcher),
      m_completionListener(nullptr),
@@ -67,10 +68,12 @@ Timer::~Timer()
     }
 }
 
+/// Starts the timer to trigger in \p msec milliseconds.
 void Timer::start(int msec)
 {
     if (msec < 0) {
         std::cerr << "Timer::start(): interval cannot be negative!\n";
+        return;
     }
     // restart if already running
     if (!m_reentrancyGuard && m_isRunning) {
@@ -83,11 +86,14 @@ void Timer::start(int msec)
     }
 }
 
+/// Stops the timer.
 void Timer::stop()
 {
     setRunning(false);
 }
 
+/// Starts or stops the timer.
+/// This will not restart the timer if it is already running and \p run is true.
 void Timer::setRunning(bool run)
 {
     if (m_isRunning == run) {
@@ -104,17 +110,18 @@ void Timer::setRunning(bool run)
     }
 }
 
+/// \returns whether the timer is running.
 bool Timer::isRunning() const
 {
     return m_isRunning;
 }
 
+/// Sets the interval of the timer in milliseconds.
+/// This will restart the timer with the new interval if it is already running.
 void Timer::setInterval(int msec)
 {
     if (msec < 0) {
         std::cerr << "Timer::setInterval(): interval cannot be negative!\n";
-    }
-    if (m_interval == msec) {
         return;
     }
     m_interval = msec;
@@ -125,21 +132,27 @@ void Timer::setInterval(int msec)
     }
 }
 
+/// \returns the interval of the timer in milliseconds.
 int Timer::interval() const
 {
     return m_interval;
 }
 
+/// Sets whether this timmer will trigger repeatedly.
+/// Otherwise, it will trigger only once and then stop.
 void Timer::setRepeating(bool repeating)
 {
     m_isRepeating = repeating;
 }
 
+/// \returns whether this timmer will trigger repeatedly.
+/// Otherwise, it will trigger only once and then stop.
 bool Timer::isRepeating() const
 {
     return m_isRepeating;
 }
 
+/// \returns The number of milliseconds left until the timer triggers.
 int Timer::remainingTime() const
 {
     if (!m_isRunning) {
@@ -177,7 +190,7 @@ void Timer::trigger()
     if (m_completionListener) {
         m_completionListener->handleCompletion(this);
     }
-    // if we we've been destroyed, we don't touch the member variable
+    // if we've been destroyed, don't touch any member variables
     if (alive) {
         assert(m_reentrancyGuard);
         m_reentrancyGuard = nullptr;
@@ -187,16 +200,19 @@ void Timer::trigger()
 #pragma GCC diagnostic pop
 #endif
 
+/// Sets the listener that will be invoked when the timer triggers.
 void Timer::setCompletionListener(ICompletionListener *client)
 {
     m_completionListener = client;
 }
 
-ICompletionListener *Timer::completionClient() const
+/// \returns the listener that will be invoked when the timer triggers.
+ICompletionListener *Timer::completionListener() const
 {
     return m_completionListener;
 }
 
+/// \returns the EventDispatcher that was set in the constructor.
 EventDispatcher *Timer::eventDispatcher() const
 {
     return m_eventDispatcher;
