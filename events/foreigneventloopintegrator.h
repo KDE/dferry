@@ -38,20 +38,14 @@ public:
 
     bool exiting() const;
 
-    // Implement these to do what their names say; watched events are assumed to be level-triggered,
-    // i.e. a file descriptor that is still ready after reading some part of the incoming data should
-    // be considered immediately ready again in the next event loop iteration.
     virtual void watchTimeout(int msecs) = 0; // -1 means disable timeout
     virtual void setWatchRead(int fd, bool doWatch) = 0;
     virtual void setWatchWrite(int fd, bool doWatch) = 0;
 
-    // Call these when the watched event occurs
     void handleTimeout();
     void handleReadyRead(int fd);
     void handleReadyWrite(int fd);
 
-    // Call this in the destructor or other shutdown / reset code of the class that implements the pure
-    // virtuals. They will be called as necessary to remove all existing watches (read, write, time).
     void removeAllWatches();
 
 private:

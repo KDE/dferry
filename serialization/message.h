@@ -70,28 +70,30 @@ public:
 
     std::string prettyPrint() const;
 
+    /// DBus message type
     enum Type {
-        InvalidMessage = 0,
-        MethodCallMessage,
-        MethodReturnMessage,
-        ErrorMessage,
-        SignalMessage
+        InvalidMessage = 0, ///< Invalid message
+        MethodCallMessage, ///< Method call message
+        MethodReplyMessage, ///< Method reply message (in response to a method call)
+        ErrorMessage, ///< Error message (usually in response to a method call)
+        SignalMessage  ///< DBus signal message
     };
 
     Type type() const;
     void setType(Type type);
     uint32 protocolVersion() const;
 
+    /// Type of optional message header. Some of these are mandatory for certain message types.
     enum VariableHeader {
-        PathHeader = 1,
-        InterfaceHeader,
-        MethodHeader, // called "member" in the spec
-        ErrorNameHeader,
-        ReplySerialHeader,
-        DestinationHeader,
-        SenderHeader,
-        SignatureHeader,
-        UnixFdsHeader // TODO UnixFdCountHeader
+        PathHeader = 1, ///< Object path
+        InterfaceHeader, ///< Interface name
+        MethodHeader, ///< Interface name
+        ErrorNameHeader, ///< TODO
+        ReplySerialHeader, ///< Replies only: Serial number of the corresponding call. \sa Message::serial()
+        DestinationHeader, ///< Bus name of destination
+        SenderHeader, ///< Bus name of sender
+        SignatureHeader, ///< Type signature of message arguments
+        UnixFdsHeader ///< Number of Unix file descriptors attached to the message
     };
 
     // enum-based access to headers

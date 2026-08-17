@@ -24,9 +24,10 @@
 #include "pendingreply.h"
 #include "pendingreply_p.h"
 
-#include "imessagereceiver.h"
 #include "connection.h"
 #include "connection_p.h"
+#include "imessagereceiver.h"
+#include "message_p.h"
 
 #include <cassert>
 #include <iostream>
@@ -63,6 +64,7 @@ void PendingReplyPrivate::handleError(Error error)
     // zero seconds instead of calling the callback right away, in order to provide more consistent behavior
     // to API clients. In that case, the timeout itself is not the error.
     if (!m_error.isError()) {
+        assert(error.isError());
         m_error = error;
     }
     m_isFinished = true;
@@ -113,6 +115,7 @@ PendingReply::PendingReply(PendingReplyPrivate *priv)
     d->m_owner = this;
 }
 
+/// Move-constructs a pending reply from \p other.
 PendingReply::PendingReply(PendingReply &&other)
    : d(other.d)
 {
@@ -122,6 +125,7 @@ PendingReply::PendingReply(PendingReply &&other)
     }
 }
 
+/// Move-assigns a pending reply from \p other.
 PendingReply &PendingReply::operator=(PendingReply &&other)
 {
     if (this == &other) {
@@ -138,30 +142,21 @@ PendingReply &PendingReply::operator=(PendingReply &&other)
     return *this;
 }
 
-void PendingReply::dumpState()
-{
-    std::cerr << "PendingReply::dumpState() " << d << '\n';
-    if (d) {
-        std::cerr << d->m_owner << " " << d->m_connectionOrReply.reply << " " << d->m_serial << " "
-                  << int(d->m_error.code()) << " " /* << d->m_reply->type() */ << '\n';
-    }
-}
-
-/// Returns whether this %PendingReply is null.
+/// \returns whether this %PendingReply is null.
 /// A null %PendingReply is a default-constructed or moved-from one.
 bool PendingReply::isNull() const
 {
     return !d;
 }
 
-/// Returns whether this %PendingReply is in a final state.
+/// \returns whether this %PendingReply is in a final state.
 /// A final state is either successful completion or definite failure.
 bool PendingReply::isFinished() const
 {
     return !d || d->m_isFinished;
 }
 
-/// Returns whether this %PendingReply has received a non-error reply message.
+/// \returns whether this %PendingReply has received a non-error reply message.
 bool PendingReply::hasNonErrorReply() const
 {
     return d && d->m_isFinished && !d->m_error.isError();
@@ -187,18 +182,15 @@ void PendingReply::setCookie(void *cookie)
     d->m_cookie = cookie;
 }
 
-/// Returns auxiliary data for application purposes ("cookie").
+/// \returns auxiliary data for application purposes ("cookie").
 void *PendingReply::cookie() const
 {
     return d->m_cookie;
 }
 
-/** Sets a receiver for a reply message or error arriving for this %PendingReply.
-
-    The receiver will also be notified if an error occurred while trying to send the request message.
-
-    \see IMessageReceiver
-*/
+/// Sets a receiver for a reply message or error arriving for this %PendingReply.
+/// The receiver will also be notified if an error occurred while trying to send the request message.
+/// \see IMessageReceiver
 void PendingReply::setReceiver(IMessageReceiver *receiver)
 {
     if (d) {
@@ -209,16 +201,22 @@ void PendingReply::setReceiver(IMessageReceiver *receiver)
     }
 }
 
+/// \returns the receiver for a reply message or error arriving for this %PendingReply.
+/// \see setReceiver
 IMessageReceiver *PendingReply::receiver() const
 {
     return d ? d->m_receiver : nullptr;
 }
 
+/// \returns pointer to reply message if any, nullptr otherwise
 const Message *PendingReply::reply() const
 {
     return d->m_isFinished ? d->m_connectionOrReply.reply : nullptr;
 }
 
+/// \returns the received reply message if any, an empty Message otherwise.
+/// If there is a reply, it is moved out of this %PendingReply.
+// TODO? error chaining link
 Message PendingReply::takeReply()
 {
     Message reply;

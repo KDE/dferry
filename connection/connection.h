@@ -44,17 +44,18 @@ class Server;
 class DFERRY_EXPORT Connection
 {
 public:
+    /// Connection state
     enum State
     {
-        Unconnected = 0,
-        Connecting,
-        Connected
+        Unconnected = 0, ///< Not connected
+        Connecting, ///< Connecting / trying to connect
+        Connected, ///< // Connected
     };
 
     enum ThreadAffinity
     {
         MainConnection = 0,
-        ThreadLocalConnection
+        ThreadLocalConnection,
     };
 
     // Reference for passing to another thread; it guarantees that the target Connection
@@ -80,6 +81,7 @@ public:
     Connection &operator=(Connection &other) = delete;
 
     State state() const;
+
     void close();
 
     CommRef createCommRef();
@@ -109,10 +111,6 @@ public:
     bool isConnected() const;
 
     EventDispatcher *eventDispatcher() const;
-
-    // TODO matching patterns for subscription; note that a signal requires path, interface and
-    //      "method" (signal name) of sender
-    void subscribeToSignal();
 
     IMessageReceiver *spontaneousMessageReceiver() const;
     void setSpontaneousMessageReceiver(IMessageReceiver *receiver);

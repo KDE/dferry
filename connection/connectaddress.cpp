@@ -268,11 +268,13 @@ public:
     \see Connection
 */
 
+/// Constructs an invalid ConnectAddress.
 ConnectAddress::ConnectAddress()
    : d(new Private)
 {
 }
 
+/// Constructs a ConnectAddress to connect to a standard bus.
 ConnectAddress::ConnectAddress(StandardBus bus)
    : d(new Private)
 {
@@ -293,11 +295,13 @@ ConnectAddress::ConnectAddress(StandardBus bus)
     }
 }
 
+/// Copy constructor.
 ConnectAddress::ConnectAddress(const ConnectAddress &other)
    : d(new Private(*other.d))
 {
 }
 
+/// Copy assignment operator.
 ConnectAddress &ConnectAddress::operator=(const ConnectAddress &other)
 {
     if (this != &other) {
@@ -312,6 +316,7 @@ ConnectAddress::~ConnectAddress()
     d = nullptr;
 }
 
+/// Equality comparison operator.
 bool ConnectAddress::operator==(const ConnectAddress &other) const
 {
     // first, check everything that doesn't depend on address type
@@ -328,61 +333,79 @@ bool ConnectAddress::operator==(const ConnectAddress &other) const
     }
 }
 
+/// \fn bool ConnectAddress::operator!=(const ConnectAddress &other) const
+/// Inequality comparison operator.
+
+/// Sets the address type.
 void ConnectAddress::setType(Type addrType)
 {
     d->m_addrType = addrType;
 }
 
+/// \returns the address type.
 ConnectAddress::Type ConnectAddress::type() const
 {
     return d->m_addrType;
 }
 
+/// Sets the role of the connection.
 void ConnectAddress::setRole(Role role)
 {
     d->m_role = role;
 }
 
+/// \returns the role of the connection.
 ConnectAddress::Role ConnectAddress::role() const
 {
     return d->m_role;
 }
 
+/// Sets the path of the connection. This only makes sense for address types with a path.
 void ConnectAddress::setPath(const std::string &path)
 {
     d->m_path = path;
 }
 
+/// \returns the path of the connection. This only makes sense for address types with a path.
 std::string ConnectAddress::path() const
 {
     return d->m_path;
 }
 
+/// Sets the hostname of the connection. This only makes sense for network address types.
 void ConnectAddress::setHostname(const std::string &hostname)
 {
     d->m_hostname = hostname;
 }
 
+/// \returns the hostname of the connection. This only makes sense for network address types.
 std::string ConnectAddress::hostname() const
 {
     return d->m_hostname;
 }
 
+/// Sets the port number of the connection. This only makes sense for network address types.
 void ConnectAddress::setPort(int port)
 {
     d->m_port = port;
 }
 
+/// \returns the port number of the connection. This only makes sense for network address types.
 int ConnectAddress::port() const
 {
     return d->m_port;
 }
 
+/// Sets the GUID of the connection.
+/// \see ConnectAddress::guid()
 void ConnectAddress::setGuid(const std::string &guid)
 {
     d->m_guid = guid;
 }
 
+/// \returns the GUID of the connection. This serves to distinguish buses or peers that may
+/// otherwise be considered identical, for example when a new bus was started on the same
+/// address as a previous one.
 std::string ConnectAddress::guid() const
 {
     return d->m_guid;
@@ -411,6 +434,8 @@ private:
     uint32_t m_claimed = 0;
 };
 
+/// Sets the address from a DBus address string.
+/// Examples: "unix:path=/var/run/dbus/system_bus_socket", "tcp:host=127.0.0.1,port=4242"
 bool ConnectAddress::setAddressFromString(const std::string &addr)
 {
     d->m_addrType = Type::None;
@@ -585,6 +610,7 @@ std::vector<ConnectAddress> ConnectAddress::parseAddressList(const std::string &
 }
 #endif
 
+/// \returns a DBus address string for this address. \see ConnectAddress::setAddressFromString()
 std::string ConnectAddress::toString() const
 {
     std::string ret;
@@ -635,6 +661,8 @@ std::string ConnectAddress::toString() const
     return ret;
 }
 
+/// \returns whether the address is only usable for a server.
+// TODO actually explain...
 bool ConnectAddress::isServerOnly() const
 {
     switch (d->m_addrType) {

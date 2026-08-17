@@ -135,7 +135,7 @@ void AuthClient::sendNextAuthMethod()
         uidEncoded << geteuid();
 #endif
         std::string extLine = "AUTH EXTERNAL " + hexEncode(uidEncoded.str()) + "\r\n";
-        readTransport()->write(chunk(extLine.c_str(), extLine.length()));
+        readTransport()->write(chunk(const_cast<char* >(extLine.c_str()), extLine.length()));
 
         m_nextAuthMethod++;
         m_state = ExpectOkState;

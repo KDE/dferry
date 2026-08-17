@@ -398,7 +398,10 @@ EventDispatcher::~EventDispatcher()
     d = nullptr;
 }
 
-// returns false if interrupted by interrupt()
+/// Waits until an event arrives or \p timeout milliseconds have passed.
+/// Possible events are I/O, an attached Timer timed out, or \link interrupt() \endlink
+/// was called (which may happen from another thread).
+/// \returns false if polling was interrupted by an \link interrupt() \endlink call, true otherwise.
 bool EventDispatcher::poll(int timeout)
 {
     int nextDue = d->timeToFirstDueTimer();
@@ -422,8 +425,9 @@ bool EventDispatcher::poll(int timeout)
     return true;
 }
 
-// Asynchronously interrupt the waiting for events, i.e. at the current (if any) or next poll - this is
-// explicitly allowed to be called from any thread (including its own).
+/// Asynchronously interrupts waiting for events.
+/// The interruption takes effect at the current (if any) or next \link poll() \endlink call.
+/// It is explicitly allowed to call this from any thread.
 void EventDispatcher::interrupt()
 {
     d->m_poller->interrupt(IEventPoller::Stop);

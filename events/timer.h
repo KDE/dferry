@@ -54,7 +54,7 @@ public:
     int remainingTime() const;
 
     void setCompletionListener(ICompletionListener *client);
-    ICompletionListener *completionClient() const;
+    ICompletionListener *completionListener() const;
 
     EventDispatcher *eventDispatcher() const;
 

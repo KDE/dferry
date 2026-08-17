@@ -47,7 +47,6 @@ class ReplyCheck : public IMessageReceiver
 public:
     void handlePendingReplyFinished(PendingReply *pr, Connection *connection) override
     {
-        pr->dumpState();
         TEST(pr->isFinished());
         TEST(!pr->isError());
 

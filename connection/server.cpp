@@ -87,6 +87,8 @@ void ServerPrivate::handleCompletion(void *task)
     \see EventDispatcher, Connection
 */
 
+/// Constructs a server using event dispatcher \p dispatcher to listen on address \p listenAddress.
+/// \see \link concreteAddress() \endlink
 Server::Server(EventDispatcher *dispatcher, const ConnectAddress &listenAddress)
    : d(new ServerPrivate(dispatcher))
 {
@@ -120,16 +122,22 @@ Server::~Server()
     d = nullptr;
 }
 
+/// Sets the listener for new connections being made to this server.
+/// \see INewConnectionListener
 void Server::setNewConnectionListener(INewConnectionListener *listener)
 {
     d->newConnectionListener = listener;
 }
 
+/// \returns the listener for new connections being made to this server.
+/// \see INewConnectionListener
 INewConnectionListener *Server::newConnectionListener() const
 {
     return d->newConnectionListener;
 }
 
+/// Takes ownership of and returns the next queued client connection.
+/// \returns the next queued client connection or nullptr if the queue is empty.
 Connection *Server::takeNextClient()
 {
     // TODO proper error handling / propagation
@@ -144,16 +152,25 @@ Connection *Server::takeNextClient()
     return new Connection(newTransport, d->eventDispatcher, d->concreteAddress);
 }
 
+/// \returns whether the server is listening for new client connections
 bool Server::isListening() const
 {
     return d->transportServer ? d->transportServer->isListening() : false;
 }
 
+/// \returns The listening address of this server.
+/// This is the same address that was passed to the constructor.
+/// \see \link concreteAddress() \endlink
 ConnectAddress Server::listenAddress() const
 {
     return d->listenAddress;
 }
 
+/// \returns The concrete listening address of this server.
+/// This may be different from the address that was passed to the constructor. An
+/// address may leave parts unspecified that the server needs to fill in to make it
+/// usable. For example, the address may specifiy a directory in which the server needs
+/// to choose a randome filename, or the address may specify an IP address but no port.
 ConnectAddress Server::concreteAddress() const
 {
     return d->concreteAddress;

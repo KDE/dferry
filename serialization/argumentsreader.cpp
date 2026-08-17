@@ -112,7 +112,7 @@ ArgumentsReader::ArgumentsReader(const ArgumentsReader &other)
     }
 }
 
-/// Copies \p other with all of its state, including read position.
+/// Assigns \p other with all of its state, including read position, to \p this.
 void ArgumentsReader::operator=(const ArgumentsReader &other)
 {
     if (&other == this) {
@@ -965,6 +965,10 @@ void ArgumentsReader::skipCurrentElement()
     }
 }
 
+/// \returns a vector containing all currently entered aggregates.
+/// The vector is ordered least nested...most nested aggregate.
+/// Possible values are Arguments::BeginStruct, Arguments::BeginArray, Arguments::BeginDict,
+/// Arguments::BeginVariant.
 std::vector<Arguments::IoState> ArgumentsReader::aggregateStack() const
 {
     std::vector<Arguments::IoState> ret;
@@ -975,14 +979,14 @@ std::vector<Arguments::IoState> ArgumentsReader::aggregateStack() const
     return ret;
 }
 
-/// Returns what aggregateStack().size() would return, but faster.
+/// \returns what aggregateStack().size() would return, but faster.
 uint32 ArgumentsReader::aggregateDepth() const
 {
     return d->m_aggregateStack.size();
 }
 
-/// Returns what aggregateStack().back() would return, but faster.
-/// If the aggregate stack is empty, returns IoState::NotStarted.
+/// \returns what aggregateStack().back() would return, but faster.
+/// If the aggregate stack is empty, returns Arguments::NotStarted.
 Arguments::IoState ArgumentsReader::currentAggregate() const
 {
     if (d->m_aggregateStack.empty()) {
@@ -1043,4 +1047,3 @@ Arguments::IoState ArgumentsReader::currentAggregate() const
 /// Reads a file descriptor. The numeric value will usually not be the same as on the sending
 /// side, but it will refer to the same file. Required state: Arguments::UnixFd.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
-

@@ -442,7 +442,7 @@ void ConnectionPrivate::handleCompletion(void *task)
 
 bool ConnectionPrivate::maybeDispatchToPendingReply(Message *receivedMessage)
 {
-    if (receivedMessage->type() != Message::MethodReturnMessage &&
+    if (receivedMessage->type() != Message::MethodReplyMessage &&
         receivedMessage->type() != Message::ErrorMessage) {
         return false;
     }
@@ -660,6 +660,11 @@ void ConnectionPrivate::processEvent(Event *evt)
     \see ConnectAddress, EventDispatcher
 */
 
+/// Constructs a connection using event dispatcher \p dispatcher which connects
+/// to address \p ca.
+/// The connection will not be connected immediately. You must either run the event
+/// dispatcher (EventDispatcher::poll()) or, in exceptional cases, call
+/// \link waitForConnectionEstablished() \endlink.
 Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
    : d(new ConnectionPrivate(this, dispatcher))
 {
@@ -708,6 +713,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     }
 }
 
+/// \internal
 Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
    : d(new ConnectionPrivate(this, dispatcher))
 {
@@ -806,26 +812,40 @@ Connection::~Connection()
     d = nullptr;
 }
 
+/// \returns the (connectedness) state of this connection.
 Connection::State Connection::state() const
 {
     return userState(d->m_state);
 }
 
+/// Closes this connection.
 void Connection::close()
 {
     d->close(Error::LocalDisconnect);
 }
 
+/// Sets the default for how long this connection waits for replies.
+/// If a reply doesn't arrive in \p msecs milliseconds, the connection emits an error through
+/// the corresponding PendingReply (if any).
+/// \see Connection::send()
 void Connection::setDefaultReplyTimeout(int msecs)
 {
     d->m_defaultTimeout = msecs;
 }
 
+/// \returns the default for how many milliseconds this connection waits for replies.
 int Connection::defaultReplyTimeout() const
 {
     return d->m_defaultTimeout;
 }
 
+/// Sends a message.
+/// \p timeoutMsecs allows to override the default timeout for a reply. Note that it is possible
+/// to send a message with Message::expectsReply() false - it is almost guaranteed to result in a
+/// reply timeout on success, but could be used to watch for any errors with getting the message
+//  to its destination.
+/// \returns a PendingReply to watch for a reply on any errors that prevented receiving a reply.
+/// \see \link setDefaultReplyTimeout() \endlink
 PendingReply Connection::send(Message m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
@@ -873,6 +893,8 @@ PendingReply Connection::send(Message m, int timeoutMsecs)
     return PendingReply(pendingPriv);
 }
 
+/// Sends a message without waiting for a reply.
+/// If there is a reply anyway, the connection will treat it as a spontaneous message.
 Error Connection::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?
@@ -902,11 +924,17 @@ Error Connection::sendNoReply(Message m)
     return Error::NoError;
 }
 
+/// \returns The number of messages queued up for sending on this connection.
 size_t Connection::sendQueueLength() const
 {
     return d->m_sendQueue.size();
 }
 
+/// Tries to synchronously establish the connection.
+/// This method blocks and does not require the connection's event dispatcher to be running.
+/// It is not usually necessary to call this - one can enqueue messages for sending on a not
+/// yet fully connected connection. If the event dispatcher is running, the connection will
+/// be established and the queued messages will be sent automatically.
 void Connection::waitForConnectionEstablished()
 {
     if (d->m_state != ConnectionPrivate::Authenticating) {
@@ -929,49 +957,56 @@ void Connection::waitForConnectionEstablished()
     }
 }
 
+/// \returns the address that this connection connects to.
 ConnectAddress Connection::connectAddress() const
 {
     return d->m_connectAddress;
 }
 
-std::string Connection::uniqueName() const
+/// \returns the unique name assigned to this connection by the message bus.
+/// A unique bus name looks like ":1.272".
+/// This is typically empty for peer-to-peer connections.
+std::string Connection::uniqueName() const // TODO uniqueBusName?
 {
     return d->m_uniqueName;
 }
 
+//TODO? This should probably just query state(), and if state() disagrees with isConnected(),
+//      then the maintenance of that state variable should be fixed.
 bool Connection::isConnected() const
 {
     return d->m_transport && d->m_transport->isOpen();
 }
 
+/// \returns the event dispatcher that this connection uses.
 EventDispatcher *Connection::eventDispatcher() const
 {
     return d->m_eventDispatcher;
 }
 
+/// \returns the receiver for all messages arriving on this connection.
+/// \see IMessageReceiver
 IMessageReceiver *Connection::spontaneousMessageReceiver() const
 {
     return d->m_client;
 }
 
-/** Set a receiver for all messages arriving on this connection.
-
-    \see IMessageReceiver
-*/
+/// Sets the receiver for all messages arriving on this connection.
+/// \see IMessageReceiver
 void Connection::setSpontaneousMessageReceiver(IMessageReceiver *receiver)
 {
     d->m_client = receiver;
 }
 
-/** Set a listener for state changes of this connection.
-
-    \see IConnectionStateListener
-*/
+/// \returns the listener for state changes of this connection.
+/// \see IConnectionStateListener
 IConnectionStateListener *Connection::connectionStateListener() const
 {
     return d->m_connectionStateListener;
 }
 
+/// Sets the listener for state changes of this connection.
+/// \see IConnectionStateListener
 void Connection::setConnectionStateListener(IConnectionStateListener *listener)
 {
     d->m_connectionStateListener = listener;
@@ -992,6 +1027,10 @@ Connection::CommRef Connection::createCommRef()
     return ret;
 }
 
+/// \returns how many file descriptors this connection allows to send per message.
+/// This is zero on any connection that is not using some kind of Unix local socket and is
+/// usually a small (order of magnitude 10) non-zero number on a connection that \e is
+/// using such a socket.
 uint32 Connection::supportedFileDescriptorsPerMessage() const
 {
     return (d->m_transport && d->m_unixFdPassingEnabled) ?

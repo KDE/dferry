@@ -313,6 +313,9 @@ bool ArgumentsBcReader::beginArray(EmptyArrayOption option)
     return beginArrayInternal(option);
 }
 
+/// Ends reading an array.
+/// Required state: Arguments::EndArray.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endArray()
 {
     VALID_IF_STATE(Arguments::EndArray);
@@ -329,30 +332,45 @@ bool ArgumentsBcReader::beginDict(EmptyArrayOption option)
     return beginArrayInternal(option);
 }
 
+/// Ends reading a dict.
+/// Leaves the dict. Required state: Arguments::EndDict.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endDict()
 {
     VALID_IF_STATE(Arguments::EndDict);
     advanceState();
 }
 
+/// Begins reading a struct.
+/// Required state: Arguments::BeginStruct.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginStruct()
 {
     VALID_IF_STATE(Arguments::BeginStruct);
     advanceState();
 }
 
+/// Ends reading a struct.
+/// Required state: Arguments::EndStruct.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endStruct()
 {
     VALID_IF_STATE(Arguments::EndStruct);
     advanceState();
 }
 
+/// Begins reading a variant.
+/// Required state:  Arguments::BeginVariant.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginVariant()
 {
     VALID_IF_STATE(Arguments::BeginVariant);
     advanceState();
 }
 
+/// Ends reading a variant.
+/// Required state: Arguments::EndVariant.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endVariant()
 {
     VALID_IF_STATE(Arguments::EndVariant);
@@ -594,3 +612,57 @@ const void *ArgumentsBcReader::advanceState()
     d->m_dataPtr = newPtr;
     return ret;
 }
+
+/// \fn byte ArgumentsBcReader::readByte()
+/// Reads a byte (8 bit unsigned int). Required state: Arguments::Byte.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn bool ArgumentsBcReader::readBoolean()
+/// Reads a boolean value. Required state: Arguments::Boolean.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int16 ArgumentsBcReader::readInt16()
+/// Reads a 16 bit signed int value. Required state: Arguments::Int16.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint16 ArgumentsBcReader::readUint16()
+/// Reads a 16 bit unsigned int value. Required state: Arguments::Uint16.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int32 ArgumentsBcReader::readInt32()
+/// Reads a 32 bit signed int value. Required state: Arguments::Int32.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint32 ArgumentsBcReader::readUint32()
+/// Reads a 32 bit unsigned int value. Required state: Arguments::Uint32.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int64 ArgumentsBcReader::readInt64()
+/// Reads a 64 bit signed int value. Required state: Arguments::Int64.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn uint64 ArgumentsBcReader::readUint64()
+/// Reads a 64 bit unsigned int value. Required state: Arguments::Uint64.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn double ArgumentsBcReader::readDouble()
+/// Reads a double-precision floating point value. Required state: Arguments::Double.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsBcReader::readString()
+/// Reads a string. Required state: Arguments::String.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsBcReader::readObjectPath()
+/// Reads a DBus object path. Required state: Arguments::ObjectPath.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn cstring ArgumentsBcReader::readSignature()
+/// Reads a DBus type signature. Required state: Arguments::Signature.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn int32 ArgumentsBcReader::readUnixFd()
+/// Reads a file descriptor. The numeric value will usually not be the same as on the sending
+/// side, but it will refer to the same file. Required state: Arguments::UnixFd.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+

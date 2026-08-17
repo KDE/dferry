@@ -70,8 +70,6 @@ public:
     const Message *reply() const;
     Message takeReply();
 
-    void dumpState(); // H4X
-
 private:
     friend class Connection;
     PendingReply(PendingReplyPrivate *priv); // PendingReplies make no sense to construct "free-standing"
