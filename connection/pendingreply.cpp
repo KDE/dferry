@@ -219,11 +219,24 @@ const Message *PendingReply::reply() const
 // TODO? error chaining link
 Message PendingReply::takeReply()
 {
-    Message reply;
-    if (d->m_isFinished) {
-        reply = std::move(*d->m_connectionOrReply.reply);
+    if (d && d->m_isFinished && d->m_connectionOrReply.reply) {
+        // success or error already contained in reply, makes no difference here
+        Message reply(std::move(*d->m_connectionOrReply.reply));
         delete d->m_connectionOrReply.reply;
         d->m_connectionOrReply.reply = nullptr;
+        return reply;
+    }
+
+    Message reply;
+    if (!d) {
+        MessagePrivate::of(&reply)->m_error.setCode(Error::DetachedPendingReply);
+    } else if (d->m_error.isError()) {
+        MessagePrivate::of(&reply)->m_error = d->m_error;
+    } else if (!d->m_isFinished) {
+        MessagePrivate::of(&reply)->m_error.setCode(Error::PendingReplyNotFinished);
+    } else {
+        assert(!d->m_connectionOrReply.reply); // should have covered all other error cases before
+        MessagePrivate::of(&reply)->m_error.setCode(Error::DetachedPendingReply);
     }
     return reply;
 }

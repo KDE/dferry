@@ -89,6 +89,7 @@ public:
 
         // Message  / PendingReply
         DetachedPendingReply,
+        PendingReplyNotFinished,
         Timeout,
         MalformedReply, // Catch-all for failed reply validation - can't be corrected locally anyway.
                         // Since the reply isn't fully pre-validated for performance reasons,
