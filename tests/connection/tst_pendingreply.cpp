@@ -116,6 +116,10 @@ static void testTimeout()
     msg.setDestination(conn.uniqueName());
 
     PendingReply neverGonnaGetReply = conn.send(std::move(msg), 200);
+
+    Message tooEarlyReply = neverGonnaGetReply.takeReply();
+    TEST(tooEarlyReply.error().code() == Error::PendingReplyNotFinished);
+
     TimeoutCheck timeoutCheck;
     neverGonnaGetReply.setReceiver(&timeoutCheck);
 
@@ -123,11 +127,51 @@ static void testTimeout()
     }
 }
 
+static void testNotConnected()
+{
+    EventDispatcher eventDispatcher;
+    Connection conn(&eventDispatcher, ConnectAddress());
+
+    Message msg = Message::createCall("/some/dummy/path", "org.no_interface", "non_existent_method");
+    msg.setDestination(":1.23456789");
+
+    PendingReply reply = conn.send(std::move(msg), 2000 /*won't actually wait that long*/);
+    TEST(!reply.isFinished());
+    Message replyMsg = reply.takeReply();
+    TEST(replyMsg.error().code() == Error::LocalDisconnect);
+
+    // For compatibility with the non-error case, the transition to Finished is only made at the next
+    // event loop iteration.
+    eventDispatcher.poll();
+    TEST(reply.isFinished());
+}
+
+static void testErrorInRequest()
+{
+    EventDispatcher eventDispatcher;
+    Connection conn(&eventDispatcher, ConnectAddress());
+
+    Message msg = Message::createCall("invalid_path", "org.no_interface", "non_existent_method");
+    msg.setDestination(":1.23456789");
+
+    PendingReply reply = conn.send(std::move(msg), 20);
+    TEST(!reply.isFinished());
+
+    Message replyMsg = reply.takeReply();
+    TEST(replyMsg.error().code() == Error::MessagePath);
+
+    // For compatibility with the non-error case, the transition to Tinished is only made at the next
+    // event loop iteration.
+    eventDispatcher.poll();
+    TEST(reply.isFinished());
+}
+
 int main(int, char *[])
 {
     testBusAddress(false);
     testBusAddress(true);
     testTimeout();
-    // TODO testBadCall
+    testNotConnected();
+    testErrorInRequest();
     std::cout << "Passed!\n";
 }
