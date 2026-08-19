@@ -558,7 +558,7 @@ Error MessagePrivate::checkRequiredHeaders() const
     case Message::ErrorMessage:
         // required: ErrorNameHeader, ReplySerialHeader
         if (!m_varHeaders.hasStringHeader(Message::ErrorNameHeader)) {
-            return Error::MessageErrorName;
+            return Error::MessageErrorNameMissing;
         }
         [[fallthrough]];
     case Message::MethodReplyMessage:
@@ -796,7 +796,7 @@ Arguments MessagePrivate::serializeVariableHeaders()
                     Error::MessagePath,
                     Error::MessageInterface,
                     Error::MessageMethod,
-                    Error::MessageErrorName,
+                    Error::MessageErrorNameMissing,
                     Error::MessageDestination,
                     Error::MessageSender,
                     Error::MessageSignature
