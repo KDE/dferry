@@ -41,41 +41,41 @@
 
 class DFERRY_EXPORT Error {
 public:
+    /// Error codes
     enum Code : uint32 {
-        // Error error ;)
-        NoError = 0,
+        NoError = 0, ///< No error
 
         // Arguments errors
-        NotAttachedToArguments,
-        InvalidSignature,
-        TruncatedMessageData,
-        MalformedMessageData,
-        ReadWrongType,
-        NotPrimitiveType,
-        InvalidType,
-        InvalidString,
-        InvalidObjectPath,
-        SignatureTooLong,
-        ExcessiveNesting,
-        CannotEndArgumentsHere,
-        ArgumentsTooLong,
+        NotAttachedToArguments, ///< ArgumentsReader not attached to Arguments instance
+        InvalidSignature, ///< Invalid type signature
+        TruncatedMessageData, ///< Serialized data is truncated (too short)
+        MalformedMessageData, ///< Serialized data is malformed
+        ReadWrongType, ///< Tried to read a type that is not the actual current type
+        NotPrimitiveType, // TODO same as InvalidKeyTypeInDict? - other is more specific, so remove this?
+        InvalidType, ///<
+        InvalidString, ///< A string is invalid (e.g. invalid UTF-8 or embedded null bytes)
+        InvalidObjectPath, ///< An DBus object path is invalid
+        SignatureTooLong, ///< A type signature is invalid
+        ExcessiveNesting, ///< Arguments nested too deeply
+        CannotEndArgumentsHere, ///< Tried to end writing arguments with unclosed aggregates
+        ArgumentsTooLong, ///< Arguments too long to fit into a Message (max 128 MiB)
 
-        NotSingleCompleteTypeInVariant,
-        EmptyVariant,
+        NotSingleCompleteTypeInVariant, ///< Type in variant is not a single complete type
         CannotEndVariantHere,
 
         EmptyStruct,
         CannotEndStructHere,
 
-        NotSingleCompleteTypeInArray,
-        TypeMismatchInSubsequentArrayIteration,
-        CannotEndArrayHere,
+        NotSingleCompleteTypeInArray, ///< Type in array is not a single complete type
+        TypeMismatchInSubsequentArrayIteration, ///< On a pass through an array after the first, tried to
+                                                ///  write a different type than in the first pass which
+                                                ///  defined the type
         CannotEndArrayOrDictHere,
         TooFewTypesInArrayOrDict,
         InvalidStateToRestartEmptyArray,
         InvalidKeyTypeInDict,
         GreaterTwoTypesInDict,
-        ArrayOrDictTooLong,
+        ArrayOrDictTooLong, ///< Array or dict too long (max 64 MiB)
         StateNotSkippable,
 
         MissingBeginDictEntry = 1019,
@@ -88,26 +88,28 @@ public:
         // end Arguments errors
 
         // Message  / PendingReply
-        DetachedPendingReply,
-        PendingReplyNotFinished,
+        DetachedPendingReply, ///< PendingReply is default-constructed or has its result already taken out
+        PendingReplyNotFinished, ///< PendingReply has not finished yet
         Timeout,
         MalformedReply, // Catch-all for failed reply validation - can't be corrected locally anyway.
                         // Since the reply isn't fully pre-validated for performance reasons,
                         // absence of this error is no guarantee of well-formedness.
 
-        MessageType,        // ||| all of these may potentially mean missing for the type of message
-        MessageSender,      // vvv or locally found to be invalid (invalid object path for example)
-        MessageDestination,
-        MessagePath,
-        MessageInterface,
-        MessageSignature,
-        MessageMethod,
-        MessageErrorName,
-        MessageSerial,
-        MessageReplySerial,
-        MessageProtocolVersion,
+        // ||| all of these may potentially mean missing for the type of message
+        // vvv or locally found to be invalid (invalid object path for example)
+        MessageType, ///< Message type is unsuitable
+        MessageSender, ///< Message sender is invalid
+        MessageDestination, ///< Message destination is invalid
+        MessagePath, ///< Message (DBus object) path is invalid
+        MessageInterface, ///< Message interface is invalid
+        MessageSignature, ///< Message (DBus type) signature is invalid
+        MessageMethod, ///< Message method name is invalid
+        MessageErrorNameMissing, ///< DBus error-type Message is missing error name
+        MessageSerial, ///< Message serial number is invalid
+        MessageReplySerial, ///< Message reply serial number is invalid
+        MessageProtocolVersion, ///< Message protocol version is not supported
 
-
+#if 0
         PeerNoSuchReceiver,
         PeerNoSuchPath,
         PeerNoSuchInterface,
@@ -117,16 +119,17 @@ public:
         PeerInvalidProperty,
         PeerNoSuchProperty,
         AccessDenied, // for now(?) only properties: writing to read-only / reading from write-only
+#endif
         MaxMessageError = 2047,
         // end Message / PendingReply errors
 
         // Connection
-        AuthenticationFailed,
-        RemoteDisconnect,
-        LocalDisconnect,
-        SendingTooManyUnixFds, // The FD capacity varies by transport, so this error is only produced
-                               // when trying to send a message with too many FDs. It is fine to pass
-                               // around a message with lots of file descriptors locally.
+        AuthenticationFailed, ///< Could not authenticate to message bus
+        RemoteDisconnect, ///< Remote side disconnected
+        LocalDisconnect, ///< Local side disconnected or never connected
+        SendingTooManyUnixFds, ///< Tried to send a message containing more file descriptors
+                               ///  than the connection supports.
+                               ///  \see Connection::supportedFileDescriptorsPerMessage()
         MaxConnectionError = 3071,
 
         // errors for other occasions go here

@@ -143,7 +143,7 @@ Malformed reply arguments?
 
         static const Error::Code expectedErrors[StepsCount] = {
             Error::NoError,
-            Error::EmptyVariant,
+            Error::NotSingleCompleteTypeInVariant,
             Error::SendingTooManyUnixFds,
             Error::MessageType,
             Error::NoError, // TODO: probably wrong, message with no destination?!

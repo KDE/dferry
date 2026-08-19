@@ -701,7 +701,7 @@ void ArgumentsWriter::advanceState(cstring signatureFragment, Arguments::IoState
             // Empty variants are not allowed. As an exception, in nil arrays they are
             // allowed for writing a type signature like "av" in the shortest possible way.
             // No use adding stuff when it's not required or even possible.
-            VALID_IF(d->m_signaturePosition > 0, Error::EmptyVariant);
+            VALID_IF(d->m_signaturePosition > 0, Error::NotSingleCompleteTypeInVariant);
             assert(d->m_signaturePosition <= Arguments::MaxSignatureLength); // should have been caught earlier
         }
         d->m_signature.ptr[-1] = byte(d->m_signaturePosition);
@@ -752,7 +752,7 @@ void ArgumentsWriter::advanceState(cstring signatureFragment, Arguments::IoState
     case Arguments::EndArray: {
         const bool isDict = newState == Arguments::EndDict;
 
-        VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndArrayHere);
+        VALID_IF(!d->m_aggregateStack.empty(), Error::CannotEndArrayOrDictHere);
         aggregateInfo = d->m_aggregateStack.back();
         VALID_IF(aggregateInfo.aggregateType == (isDict ? Arguments::BeginDict : Arguments::BeginArray),
                  Error::CannotEndArrayOrDictHere);
