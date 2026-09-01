@@ -231,7 +231,7 @@ void testFileDescriptorsForDataTransfer()
     EventDispatcher eventDispatcher;
     Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
     conn.waitForConnectionEstablished();
-    TEST(conn.isConnected());
+    TEST(conn.state() == Connection::Connected);
 
     int pipeFds[2 * FdCountToSend];
 

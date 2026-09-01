@@ -47,41 +47,47 @@ public:
 
         // Arguments errors
         NotAttachedToArguments, ///< ArgumentsReader not attached to Arguments instance
-        InvalidSignature, ///< Invalid type signature
+        InvalidSignature, ///< Type signature is invalid (error when reading Arguments)
         TruncatedMessageData, ///< Serialized data is truncated (too short)
         MalformedMessageData, ///< Serialized data is malformed
         ReadWrongType, ///< Tried to read a type that is not the actual current type
-        NotPrimitiveType, // TODO same as InvalidKeyTypeInDict? - other is more specific, so remove this?
-        InvalidType, ///<
-        InvalidString, ///< A string is invalid (e.g. invalid UTF-8 or embedded null bytes)
-        InvalidObjectPath, ///< An DBus object path is invalid
-        SignatureTooLong, ///< A type signature is invalid
+        InvalidString, ///< String is invalid (e.g. invalid UTF-8 or embedded null bytes)
+        InvalidObjectPath, ///< DBus object path is invalid
+        SignatureTooLong, ///< Type signature is too long (error when writing Arguments)
         ExcessiveNesting, ///< Arguments nested too deeply
-        CannotEndArgumentsHere, ///< Tried to end writing arguments with unclosed aggregates
+        CannotEndArgumentsWithOpenAggregates, ///< Tried to end writing arguments with unclosed aggregate(s)
         ArgumentsTooLong, ///< Arguments too long to fit into a Message (max 128 MiB)
 
+        NotDirectlyInVariant, ///< Variant is not the current ("top of stack") aggregate
         NotSingleCompleteTypeInVariant, ///< Type in variant is not a single complete type
-        CannotEndVariantHere,
 
-        EmptyStruct,
-        CannotEndStructHere,
+        NotDirectlyInStruct, ///< Struct is not the current ("top of stack") aggregate
+        EmptyStruct, ///< Struct does not contain any types
 
+        NotDirectlyInArray, ///< Array is not the current ("top of stack") aggregate
         NotSingleCompleteTypeInArray, ///< Type in array is not a single complete type
-        TypeMismatchInSubsequentArrayIteration, ///< On a pass through an array after the first, tried to
-                                                ///  write a different type than in the first pass which
-                                                ///  defined the type
-        CannotEndArrayOrDictHere,
-        TooFewTypesInArrayOrDict,
-        InvalidStateToRestartEmptyArray,
-        InvalidKeyTypeInDict,
-        GreaterTwoTypesInDict,
-        ArrayOrDictTooLong, ///< Array or dict too long (max 64 MiB)
-        StateNotSkippable,
 
+        NotPrimitiveType, ///< Writing array of primitives: element type is not a primitive type
+        DataLengthNotMultipleOfElementLength, ///< Writing array of primitives: input data length is not an
+                                              ///  integer multiple of element length
+        InvalidStateToRestartEmptyArray, // TODO? remove or make it a Qt special
+
+        NotDirectlyInDict, ///< Dict is not the current ("top of stack") aggregate
+        DictKeyNotBasicType, ///< Dict key is not a numeric, boolean or string type
+        NotKeyAndValueTypesInDict, ///< Dict does not contain exactly two types: key and value
+
+        TypeMismatchInArrayOrDictRepetition, ///< On a pass through an array or dict after the first, tried
+                                             ///  to write a different type than in the first pass which
+                                             ///  defined the type.
+        ArrayOrDictTooLong, ///< Array or dict too long (max 64 MiB)
+
+        StateNotSkippable, ///< Tried to skip an argument type that cannot be skipped
+#ifdef WITH_DICT_ENTRY
         MissingBeginDictEntry = 1019,
         MisplacedBeginDictEntry,
         MissingEndDictEntry,
         MisplacedEndDictEntry,
+#endif
         // we have a lot of error codes at our disposal, so reserve some for easy classification
         // by range
         MaxArgumentsError = 1023,
@@ -90,10 +96,11 @@ public:
         // Message  / PendingReply
         DetachedPendingReply, ///< PendingReply is default-constructed or has its result already taken out
         PendingReplyNotFinished, ///< PendingReply has not finished yet
-        Timeout,
-        MalformedReply, // Catch-all for failed reply validation - can't be corrected locally anyway.
-                        // Since the reply isn't fully pre-validated for performance reasons,
-                        // absence of this error is no guarantee of well-formedness.
+        Timeout, ///< No reply received before timeout
+        MalformedReply, ///< Received a reply that is somehow invalid (bad encoding, missing fields etc).
+                        ///  Absence of this error does not guarantee that the reply is fully valid -
+                        ///  in particular, its Arguments (if any) are only validated while deserializing
+                        ///  them.
 
         // ||| all of these may potentially mean missing for the type of message
         // vvv or locally found to be invalid (invalid object path for example)

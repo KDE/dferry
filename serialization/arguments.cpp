@@ -682,6 +682,8 @@ bool Arguments::isObjectPathValid(cstring path)
     return prevLetter != '/';
 }
 
+/// \returns whether \p pathElement is a valid DBus object path element.
+/// Path elements are the parts that are separated by '/' delimiters.
 // static
 bool Arguments::isObjectPathElementValid(cstring pathElement)
 {
@@ -802,6 +804,8 @@ bool parseSingleCompleteType(cstring *s, Nesting *nest)
     }
 }
 
+/// \returns whether \p signature is a valid DBus signature of \p type
+/// Note that an empty string is a valid method signature.
 //static
 bool Arguments::isSignatureValid(cstring signature, SignatureType type)
 {
