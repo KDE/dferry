@@ -51,17 +51,18 @@ public:
     Arguments::IoState state() const { return m_state; }
     cstring stateString() const;
     bool isInsideEmptyArray() const;
-    cstring currentSignature() const; // current signature, either main signature or current variant
+    cstring currentSignature() const;
     uint32 currentSignaturePosition() const;
     cstring currentSingleCompleteTypeSignature() const;
 
     bool isFinished() const { return m_state == Arguments::Finished; }
     bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove
 
+    /// What to do when opening an empty array
     enum EmptyArrayOption
     {
-        SkipIfEmpty = 0,
-        ReadTypesOnlyIfEmpty
+        SkipIfEmpty = 0, ///< Skip the array
+        ReadTypesOnlyIfEmpty ///< Do one pass through the array to get the types
     };
 
     // Start reading an array. @p option changes behavior in case the array is empty, i.e. it has

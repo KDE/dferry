@@ -49,11 +49,13 @@ public:
     cstring currentSignature() const; // current signature, either main signature or current variant
     uint32 currentSignaturePosition() const;
 
+    /// How to write an array
     enum ArrayOption
     {
-        NonEmptyArray = 0,
-        WriteTypesOfEmptyArray,
-        RestartEmptyArrayToWriteTypes
+        NonEmptyArray = 0, ///< Normal array with contents
+        WriteTypesOfEmptyArray, ///< Empty array (do one pass to specify contained type)
+        RestartEmptyArrayToWriteTypes ///< Rarely needed option to switch to WriteTypesOfEmptyArray after
+                                      ///  beginArray() has already been called
     };
 
     void beginArray(ArrayOption option = NonEmptyArray);

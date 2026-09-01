@@ -108,7 +108,6 @@ public:
     void waitForConnectionEstablished();
     ConnectAddress connectAddress() const;
     std::string uniqueName() const;
-    bool isConnected() const;
 
     EventDispatcher *eventDispatcher() const;
 

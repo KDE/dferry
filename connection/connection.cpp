@@ -971,13 +971,6 @@ std::string Connection::uniqueName() const // TODO uniqueBusName?
     return d->m_uniqueName;
 }
 
-//TODO? This should probably just query state(), and if state() disagrees with isConnected(),
-//      then the maintenance of that state variable should be fixed.
-bool Connection::isConnected() const
-{
-    return d->m_transport && d->m_transport->isOpen();
-}
-
 /// \returns the event dispatcher that this connection uses.
 EventDispatcher *Connection::eventDispatcher() const
 {

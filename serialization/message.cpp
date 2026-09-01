@@ -930,6 +930,7 @@ Message &Message::operator=(Message &&other)
     return *this;
 }
 
+/// Makes a deep copy of \p other.
 Message::Message(const Message &other)
    : d(nullptr)
 {
@@ -939,6 +940,7 @@ Message::Message(const Message &other)
     d = new(msgAllocCaches.msgPrivate.allocate()) MessagePrivate(*other.d, this);
 }
 
+/// Deep-copies \p other with all of its state into \p this.
 Message &Message::operator=(const Message &other)
 {
     if (this != &other) {
@@ -970,6 +972,7 @@ Error Message::error() const
     return d->m_error;
 }
 
+/// Makes this a method call message which calls \p method on \p interface at \p path.
 void Message::setCall(const std::string &path, const std::string &interface, const std::string &method)
 {
     setType(MethodCallMessage);
@@ -978,6 +981,7 @@ void Message::setCall(const std::string &path, const std::string &interface, con
     setMethod(method);
 }
 
+/// Makes this a method call message which calls \p method at \p path.
 void Message::setCall(const std::string &path, const std::string &method)
 {
     setType(MethodCallMessage);
@@ -985,6 +989,7 @@ void Message::setCall(const std::string &path, const std::string &method)
     setMethod(method);
 }
 
+/// Makes this a reply message to \p call.
 void Message::setReplyTo(const Message &call)
 {
     setType(MethodReplyMessage);
@@ -992,6 +997,7 @@ void Message::setReplyTo(const Message &call)
     setReplySerial(call.serial());
 }
 
+/// Makes this an error reply message to \p call with error name \p errorName.
 void Message::setErrorReplyTo(const Message &call, const std::string &errorName)
 {
     setType(ErrorMessage);
@@ -1000,6 +1006,8 @@ void Message::setErrorReplyTo(const Message &call, const std::string &errorName)
     setReplySerial(call.serial());
 }
 
+// TODO rename method -> name?
+/// Makes this a signal message named \p method from \p path and \p interface.
 void Message::setSignal(const std::string &path, const std::string &interface, const std::string &method)
 {
     setType(SignalMessage);
@@ -1008,6 +1016,7 @@ void Message::setSignal(const std::string &path, const std::string &interface, c
     setMethod(method);
 }
 
+/// Creates a method call message which calls \p method on \p interface at \p path.
 Message Message::createCall(const std::string &path, const std::string &interface, const std::string &method)
 {
     Message ret;
@@ -1015,6 +1024,7 @@ Message Message::createCall(const std::string &path, const std::string &interfac
     return ret;
 }
 
+/// Creates a method call message which calls \p method at \p path.
 Message Message::createCall(const std::string &path, const std::string &method)
 {
     Message ret;
@@ -1022,6 +1032,7 @@ Message Message::createCall(const std::string &path, const std::string &method)
     return ret;
 }
 
+/// Creates a reply message to \p call.
 Message Message::createReplyTo(const Message &call)
 {
     Message ret;
@@ -1029,6 +1040,7 @@ Message Message::createReplyTo(const Message &call)
     return ret;
 }
 
+/// Creates an error reply message to \p call with error name \p errorName.
 Message Message::createErrorReplyTo(const Message &call, const std::string &errorName)
 {
     Message ret;
@@ -1036,6 +1048,8 @@ Message Message::createErrorReplyTo(const Message &call, const std::string &erro
     return ret;
 }
 
+// TODO rename method -> name?
+/// Creates a signal message named \p method from \p path and \p interface.
 Message Message::createSignal(const std::string &path, const std::string &interface, const std::string &method)
 {
     Message ret;
@@ -1075,6 +1089,9 @@ static const char *printableMessageTypes[messageTypeCount] = {
     "Signal"
 };
 
+/// Pretty-prints the message into a string.
+/// This prints message type, variable headers and payload arguments.
+// TODO? also print other message flags such as NO_REPLY_EXPECTED etc?
 std::string Message::prettyPrint() const
 {
     std::string ret;
@@ -1107,11 +1124,17 @@ std::string Message::prettyPrint() const
     return ret;
 }
 
+/// \returns the type of the message (call, reply etc).
+/// This also determines which headers are required. For example, a reply needs
+/// to have a ReplySerialHeader and an error message needs to have an ErrorNameHeader.
 Message::Type Message::type() const
 {
     return d->m_messageType;
 }
 
+/// Sets the type of the message (call, reply etc).
+/// This also determines which headers are required. For example, a reply needs
+/// to have a ReplySerialHeader and an error message needs to have an ErrorNameHeader.
 void Message::setType(Type type)
 {
     if (d->m_messageType == type) {
@@ -1122,11 +1145,15 @@ void Message::setType(Type type)
     setExpectsReply(d->m_messageType == MethodCallMessage);
 }
 
+/// \returns the DBus protocol version of this message
 uint32 Message::protocolVersion() const
 {
     return d->m_protocolVersion;
 }
 
+/// Sets the serial number of the message.
+/// This is generally not needed and even wrong when sending the message over a Connection.
+/// The Connection will set an appropriate serial number in that case.
 void Message::setSerial(uint32 serial)
 {
     d->m_serial = serial;
@@ -1140,6 +1167,7 @@ void Message::setSerial(uint32 serial)
     d->m_dirty = true;
 }
 
+/// \returns the serial number of the message
 uint32 Message::serial() const
 {
     return d->m_serial;
@@ -1241,6 +1269,10 @@ uint32 Message::unixFdCount() const
     return intHeader(UnixFdsHeader, nullptr);
 }
 
+/// \returns a string-valued variable header.
+/// This deals with headers that are either entirely optional or only required in certain
+/// message types. If \p isPresent is non-null, its pointee will be set to true or false
+/// if the header is present / not present.
 std::string Message::stringHeader(VariableHeader header, bool *isPresent) const
 {
     const bool exists = d->m_varHeaders.hasStringHeader(header);
@@ -1250,6 +1282,9 @@ std::string Message::stringHeader(VariableHeader header, bool *isPresent) const
     return exists ? d->m_varHeaders.stringHeader(header) : std::string();
 }
 
+/// Sets a string-valued variable header.
+/// This deals with headers that are either entirely optional or only required in certain
+/// message types.
 void Message::setStringHeader(VariableHeader header, const std::string &value)
 {
     if (header == SignatureHeader) {
@@ -1260,6 +1295,10 @@ void Message::setStringHeader(VariableHeader header, const std::string &value)
     d->m_varHeaders.setStringHeader(header, value);
 }
 
+/// \returns an integer-valued variable header.
+/// This deals with headers that are either entirely optional or only required in certain
+/// message types. If \p isPresent is non-null, its pointee will be set to true or false
+/// if the header is present / not present.
 uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
 {
     const bool exists = d->m_varHeaders.hasIntHeader(header);
@@ -1269,6 +1308,9 @@ uint32 Message::intHeader(VariableHeader header, bool *isPresent) const
     return d->m_varHeaders.intHeader(header);
 }
 
+/// Sets an integer-valued variable header.
+/// This deals with headers that are either entirely optional or only required in certain
+/// message types.
 void Message::setIntHeader(VariableHeader header, uint32 value)
 {
     d->m_dirty = true;
@@ -1294,12 +1336,15 @@ void Message::setExpectsReply(bool expectsReply)
     }
 }
 
-bool Message::autoStartService() const
+/// \returns whether the receiver may be started by the bus if it isn't running yet.
+/// The default value is true.
+bool Message::autoStartService() const // TODO? isAutoStartService
 {
     return (d->m_flags & MessagePrivate::NoAutoStartServiceFlag) == 0;
 }
 
-void Message::setAutoStartService(bool autoStart) const
+/// Sets whether the receiver may be started by the bus if it isn't running yet.
+void Message::setAutoStartService(bool autoStart)
 {
     if (autoStart) {
         d->m_flags &= ~MessagePrivate::NoAutoStartServiceFlag;
@@ -1308,11 +1353,15 @@ void Message::setAutoStartService(bool autoStart) const
     }
 }
 
+/// \returns whether the DBus ALLOW_INTERACTIVE_AUTHORIZATION flag is set on the message.
+/// Please refer to the DBus specification for details.
 bool Message::interactiveAuthorizationAllowed() const
 {
     return (d->m_flags & MessagePrivate::NoAllowInteractiveAuthorizationFlag) == 0;
 }
 
+/// Sets whether the DBus ALLOW_INTERACTIVE_AUTHORIZATION flag is set on the message.
+/// Please refer to the DBus specification for details.
 void Message::setInteractiveAuthorizationAllowed(bool allowInteractive) const
 {
     if (allowInteractive) {
@@ -1322,6 +1371,7 @@ void Message::setInteractiveAuthorizationAllowed(bool allowInteractive) const
     }
 }
 
+/// Sets the "payload" arguments of the message.
 void Message::setArguments(Arguments arguments)
 {
     d->m_dirty = true;
@@ -1342,23 +1392,29 @@ void Message::setArguments(Arguments arguments)
     d->m_mainArguments = std::move(arguments);
 }
 
+/// \returns the "payload" arguments of the message.
 const Arguments &Message::arguments() const
 {
     return d->m_mainArguments;
 }
 
 #ifndef DFERRY_SERDES_ONLY
+/// \returns whether the message is currently being received through a Connection.
+/// The message must not be changed while being received.
 bool Message::isReceiving() const
 {
     return d->m_state == MessagePrivate::Receiving;
 }
 
+/// \returns whether the message is currently being sent through a Connection.
+/// The message must not be changed while being sent.
 bool Message::isSending() const
 {
     return d->m_state == MessagePrivate::Sending;
 }
 #endif // !DFERRY_SERDES_ONLY
 
+/// Serializes and saves the message into a vector of bytes.
 std::vector<byte> Message::save()
 {
     std::vector<byte> ret;
@@ -1380,6 +1436,9 @@ std::vector<byte> Message::save()
     return ret;
 }
 
+/// Deserializes the message from \p memOwnership and takes ownership of memOwnership.ptr.
+/// memOwnership.ptr must  point to the beginning of a malloc()ed block of data.
+/// memOwnership.length is the length  of the serialized data - the allocated block may be larger.
 void Message::deserializeAndTake(chunk memOwnership)
 {
     if (d->m_state >= MessagePrivate::FirstIoState) {
@@ -1414,8 +1473,8 @@ void Message::deserializeAndTake(chunk memOwnership)
     d->m_serializedAsMultiBuffer = false;
 }
 
-// This does not return bool because full validation of the main arguments would take quite
-// a few cycles. Validating only the header of the message doesn't seem to be worth it.
+/// Loads and deserializes the message from a vector of bytes.
+/// This only validates the message header, not the Arguments data.
 void Message::load(const std::vector<byte> &data)
 {
     if (d->m_state >= MessagePrivate::FirstIoState || data.empty()) {

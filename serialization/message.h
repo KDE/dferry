@@ -70,6 +70,7 @@ public:
 
     std::string prettyPrint() const;
 
+    // TODO document message type -> required variable headers
     /// DBus message type
     enum Type {
         InvalidMessage = 0, ///< Invalid message
@@ -88,7 +89,7 @@ public:
         PathHeader = 1, ///< Object path
         InterfaceHeader, ///< Interface name
         MethodHeader, ///< Interface name
-        ErrorNameHeader, ///< TODO
+        ErrorNameHeader, ///< The name of the error, for error messages (type ErrorMessage)
         ReplySerialHeader, ///< Replies only: Serial number of the corresponding call. \sa Message::serial()
         DestinationHeader, ///< Bus name of destination
         SenderHeader, ///< Bus name of sender
@@ -128,8 +129,8 @@ public:
     bool expectsReply() const; // default true (except for signals, I guess? TODO clarify)
     void setExpectsReply(bool);
 
-    bool autoStartService() const; // default true
-    void setAutoStartService(bool) const;
+    bool autoStartService() const;
+    void setAutoStartService(bool);
 
     bool interactiveAuthorizationAllowed() const; // default true
     void setInteractiveAuthorizationAllowed(bool) const;
@@ -140,10 +141,6 @@ public:
 
     std::vector<byte> save();
     void load(const std::vector<byte> &data);
-
-    // Deserialize the message from chunk memOwnership and take ownership. memOwnership.ptr must
-    // point to the beginning of a malloc() ed block of data. memOwnership.length is the length
-    // of the serialized data, but the malloc()ed chunk may be larger.
     void deserializeAndTake(chunk memOwnership);
 
     // The rest of public methods is low-level API that should only be used in very special situations

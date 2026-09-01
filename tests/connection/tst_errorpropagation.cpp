@@ -64,7 +64,7 @@ void test_errorPropagation()
         Connection conn(&eventDispatcher, ConnectAddress::StandardBus::Session);
         conn.setDefaultReplyTimeout(500);
         conn.waitForConnectionEstablished();
-        TEST(conn.isConnected());
+        TEST(conn.state() == Connection::Connected);
 
         ReplierReceiver replier;
         conn.setSpontaneousMessageReceiver(&replier);

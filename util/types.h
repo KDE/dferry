@@ -64,7 +64,9 @@ struct DFERRY_EXPORT chunk
     /// Convenience constructor for char buffers.
     chunk(char *b, uint32 l) : ptr(reinterpret_cast<byte *>(b)), length(l) {}
 
+    /// Pointer to beginning of data
     byte *ptr;
+    /// Length of data
     uint32 length;
 };
 
@@ -88,9 +90,9 @@ struct DFERRY_EXPORT cstring
     /// This is const-incorrect, be careful.
     cstring(const char *b);
 
+    /// Pointer to beginning of string
     char *ptr;
-    // length does not include terminating null! (this is okay because cstring does not
-    // own the memory, so the accounting usually doesn't get screwed up)
+    /// Length of string, not including null terminator
     uint32 length;
 };
 

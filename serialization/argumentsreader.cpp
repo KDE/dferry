@@ -149,9 +149,15 @@ void ArgumentsReader::beginRead()
     advanceState();
 }
 
+/// \returns whether this %ArgumentsReader is connected to an Arguments instance.
+/// A moved-from %ArgumentsReader, for example, is not.
 bool ArgumentsReader::isValid() const
 {
-    return d->m_argsPriv;
+    if (d) {
+        // None of the constructors should allow construction without Arguments
+        assert(d->m_argsPriv);
+    }
+    return d;
 }
 
 Error ArgumentsReader::error() const
@@ -159,26 +165,43 @@ Error ArgumentsReader::error() const
     return d->m_error;
 }
 
+/// \fn Arguments::IoState ArgumentsReader::state() const
+/// \returns the type of the next element. In case of error or end of data, the return
+///          value will indicate that instead.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \returns the current state() as a string
 cstring ArgumentsReader::stateString() const
 {
     return printableState(m_state);
 }
 
+/// \returns whether the reader is currently reading the types of an empty array.
+/// \see ArgumentsReader::EmptyArrayOption
 bool ArgumentsReader::isInsideEmptyArray() const
 {
     return d->m_nilArrayNesting > 0;
 }
 
+/// \returns the current type signature.
+/// This is the main signature unless currently reading the contents of a variant, in which case
+/// it's the signature of that variant.
 cstring ArgumentsReader::currentSignature() const
 {
     return d->m_signature;
 }
 
+/// \returns the current position in the current signature
+/// \see currentSignature()
 uint32 ArgumentsReader::currentSignaturePosition() const
 {
     return d->m_signaturePosition;
 }
 
+/// \returns the signature of the current single complete type.
+/// This is perhaps best explained with examples. Asterisk marks the current parsing position:
+/// "*u(dai)" -> "u", "u*(dai)" -> "(dai)", "u(*dai)" -> "d",  "u(d*ai)" -> "ai", "u(da*i)" -> "i",
+/// "u(dai*)" -> "", "u(dai)*" -> "".
 cstring ArgumentsReader::currentSingleCompleteTypeSignature() const
 {
     const uint32 startingLength = d->m_signature.length - d->m_signaturePosition;
@@ -192,6 +215,10 @@ cstring ArgumentsReader::currentSingleCompleteTypeSignature() const
     sigCopy.length = startingLength - sigCopy.length;
     return sigCopy;
 }
+
+/// \fn bool ArgumentsReader::isFinished() const
+/// \returns whether this ArgumentsReader has reached the end - either due to end of data
+///          or due to an error.
 
 void ArgumentsReader::doReadPrimitiveType()
 {
@@ -585,6 +612,10 @@ void ArgumentsReader::endArray()
     advanceState();
 }
 
+/// \returns an array of primitives as one block of memory.
+/// The reader must be in BeginArray state for this to work and the array must contain just one
+/// type which is primitive (fixed length numeric / byte / boolean).
+/// Otherwise, returns (InvalidData, chunk()).
 std::pair<Arguments::IoState, chunk> ArgumentsReader::readPrimitiveArray()
 {
     auto ret = std::make_pair(Arguments::InvalidData, chunk());
@@ -709,6 +740,8 @@ void ArgumentsReader::skipDict()
     }
 }
 
+/// \returns whether the next element is the key of a dict.
+/// This is currently used internally for pretty-printing and is probably not often useful.
 bool ArgumentsReader::isDictKey() const
 {
     if (!d->m_aggregateStack.empty()) {

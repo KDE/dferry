@@ -136,7 +136,7 @@ static void testFindBuses()
     {
         Connection conn(&eventDispatcher, systemAddr);
         conn.waitForConnectionEstablished();
-        TEST(conn.isConnected());
+        TEST(conn.state() == Connection::Connected);
     }
 #endif
 
@@ -147,7 +147,7 @@ static void testFindBuses()
     {
         Connection conn(&eventDispatcher, sessionAddr);
         conn.waitForConnectionEstablished();
-        TEST(conn.isConnected());
+        TEST(conn.state() == Connection::Connected);
     }
 
     // also a few trivial tests of operator==...
