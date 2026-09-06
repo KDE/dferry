@@ -242,6 +242,7 @@ void EventDispatcherPrivate::tryCompactTimerSerials()
     }
 
     assert(numDeadEntries <= 1);
+    (void)numDeadEntries; // avoid -Werror=unused-but-set-variable
 
     m_serialsCompacted = true;
     m_currentTimerSerial = timersCount;
