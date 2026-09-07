@@ -21,6 +21,9 @@
    http://www.mozilla.org/MPL/
 */
 
+#ifndef TESTUTIL_H
+#define TESTUTIL_H
+
 #include <cstdio>
 #include <cstdlib>
 
@@ -46,3 +49,5 @@ static inline void test_no_op() {}
 void TESTUTIL_EXPORT test_fail(const char *cond, const char *file, int line);
 
 #define TEST(cond) (!(cond) ? test_fail(#cond, __FILE__, __LINE__) : test_no_op())
+
+#endif // TESTUTIL_H

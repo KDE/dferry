@@ -22,6 +22,7 @@
 */
 
 // _TsnipBegin_TopDecl
+// _TsnipBegin_Includes
 #include "arguments_p.h"
 
 #include "fercode_p.h"
@@ -29,6 +30,9 @@
 #include "types.h"
 
 #include <vector>
+// _TsnipEnd_Includes
+// _Tinsert_Includes
+// _Tinsert_TestIncludes
 
 /*
 Methods that Consumer needs to implement:
@@ -83,7 +87,7 @@ private:
 #endif
 };
 
-
+// _TsnipBegin_Utilities
 #undef VALID_IF
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     assert(false); m_state = InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
@@ -115,6 +119,9 @@ static inline bool isPaddingZero(const byte *data, const byte *end)
 }
 
 static const char s_nullBuffer[16] {}; // inert fake data for callers when reading bad or nonexistent data
+// _TsnipEnd_Utilities
+// _Tinsert_Utilities
+// _Tinsert_TestHelpers
 
 template <class Consumer>
 _Tvar_CgReader<Consumer>::_Tvar_CgReader(const Arguments &args)
@@ -274,7 +281,7 @@ errorReturn:
     return false;
 }
 // _Tinsert_DefHelperMethods
-
+// _Tinsert_CgReadTester
 // _TsnipEnd_TopDecl
 
 // _TsnipBegin_ParseArray
