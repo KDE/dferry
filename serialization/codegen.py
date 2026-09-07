@@ -44,8 +44,8 @@ class TextTemplate:
 # Template contents are a list of "nodes", where a node can be:
 # - literal string; note, may contain "variables" (specific strings) to be replaced
 # - insertion point, just a string starting with _Tinsert_
-def parse_templates() -> Dict[str, TextTemplate]:
-    tp_filename = os.path.dirname(os.path.realpath(__file__)) + '/argumentscgreader_t.cpp'
+def parse_templates(file_name: str) -> Dict[str, TextTemplate]:
+    tp_filename = os.path.dirname(os.path.realpath(__file__)) + '/' + file_name
 
     ret: Dict[str, TextTemplate] = {}
     tp_name = ''
@@ -101,6 +101,32 @@ def c_primitive_type(ios: IoState) -> str:
         IoState.UNIX_FD: "uint32",  # It's a uint32 index into an array of int32s
     }
     return table[ios]
+
+def reader_name(ios: IoState) -> str: # TODO rename a lot
+    table = {
+        IoState.BYTE: "Byte",
+        IoState.BOOLEAN: "Boolean",
+        IoState.INT16: "Int16",
+        IoState.UINT16: "Uint16",
+        IoState.INT32: "Int32",
+        IoState.UINT32: "Uint32",
+        IoState.INT64: "Int64",
+        IoState.UINT64: "Uint64",
+        IoState.DOUBLE: "Double",
+        IoState.UNIX_FD: "UnixFd",
+        IoState.STRING: "String",
+        IoState.OBJECT_PATH: "ObjectPath",
+        IoState.SIGNATURE: "Signature",
+    }
+    return table[ios]
+
+def reader_name_for_opcode(opcode: FerOpcode) -> str: # TODO rename a lot
+    table = {
+        FerOpcode.STRING: "String",
+        FerOpcode.OBJECT_PATH: "ObjectPath",
+        FerOpcode.SIGNATURE: "Signature",
+    }
+    return table[opcode]
 
 def alignment_padding_length(addr_bit_before: int, addr_bit_after: int) -> int:
     # Handling wraparound is not necessary here because applying alignment may only move bits in
@@ -305,25 +331,16 @@ def addr_set_shift_distance(before: int, shifted: int) -> int:
             return i
     return -1
 
-def main():
-    if len(sys.argv) != 4:
-        print("Usage: codedegn.py <type signature> <class name> <file name>")
-        return -1
-
-    signature = sys.argv[1]
-    class_name = sys.argv[2]
-    out_filename = sys.argv[3]
+def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[str, TextTemplate],
+                       signature: str, class_name: str,
+                       out_filename: str, append: bool = False):
 
     fer_code = ferCode.fer_encode_signature(signature)
+    #print(fer_code)
 
     array_alignments: Dict[int, ArrayAlignments] = ferCode.optimize_fer_ops(fer_code)
 
     span_addrs: Dict[int, SpanItem] = calculate_span_addrs(fer_code, array_alignments)
-
-    #print(fer_code)
-
-    templates = parse_templates()
-    #print(templates)
 
     assert isinstance(fer_code[0], FerOp)
     assert fer_code[0].opcode == FerOpcode.BEGIN_METHOD_SIGNATURE
@@ -332,6 +349,7 @@ def main():
 
     decl_helper_methods = []
     def_helper_methods = []
+    test_process_arg_defs = []
 
     arg_reader_blocks_stack = [[]]
     arg_reader_blocks = arg_reader_blocks_stack[0]
@@ -408,6 +426,13 @@ def main():
                     {'ReadType': data_type},
                     insertions))
 
+                if test_templates:
+                    parg_def = test_templates['ProcessArgPrimitive'].render(
+                        {'ReceiverName': receiver_name,
+                         'ArgParameterType': receiver_type,
+                         'ArgReadType': reader_name(data_state)}, {})
+                    test_process_arg_defs.append(parg_def)
+
             case FerOpcode.STRING | FerOpcode.OBJECT_PATH | FerOpcode.SIGNATURE:
                 length_type = 'uint32' if fer_op.opcode == FerOpcode.STRING else 'byte'
 
@@ -430,6 +455,12 @@ def main():
                 arg_reader_blocks.append(templates['ReadString'].render(
                     {'LengthType': length_type, 'ProcessArgFunc': receiver_name},
                     insertions))
+
+                if test_templates:
+                    parg_def = test_templates['ProcessArgString'].render(
+                        {'ReceiverName': receiver_name,
+                         'ArgReadType': reader_name_for_opcode(fer_op.opcode)}, {})
+                    test_process_arg_defs.append(parg_def)
 
             case FerOpcode.BEGIN_ARRAY:
                 parse_array_name = 'readArray' + str(array_num)
@@ -545,18 +576,44 @@ def main():
     assert len(array_stack) == 0
     assert len(arg_reader_blocks_stack) == 1
 
-    top_template = templates['TopDecl']
+    top_insertions = {'ArgReaders': arg_reader_blocks,
+                      'DeclHelperMethods': decl_helper_methods,
+                      'DefHelperMethods': def_helper_methods,
+                      'ProcessArgCallbacks': reader_callback_decls}
+    if test_templates:
+        top_insertions['CgReadTester'] = test_templates['CgReadTester'].render(
+            {'TestConsumer': class_name.replace('CgReader', 'CgConsumer')},
+            {'ProcessArgDefinitions': test_process_arg_defs})
+
+    if not append:
+        # Write things that need to be in the output file exactly once
+        top_insertions['Includes'] = templates['Includes'].render({}, {})
+        top_insertions['Utilities'] = templates['Utilities'].render({}, {})
+        if test_templates:
+            top_insertions['TestIncludes'] = test_templates['TestIncludes'].render({}, {})
+            top_insertions['TestHelpers'] = test_templates['TestHelpers'].render({}, {})
+
     ret = templates['TopDecl'].render(
         {'CgReader': class_name},
-        {'ArgReaders': arg_reader_blocks,
-         'DeclHelperMethods': decl_helper_methods,
-         'DefHelperMethods': def_helper_methods,
-         'ProcessArgCallbacks': reader_callback_decls})
+        top_insertions)
 
     #print(ret)
-    with open (out_filename, 'w') as f:
+    with open (out_filename, 'a' if append else 'w') as f:
         f.write(ret)
 
+def generate_test_read_func(test_templates: Dict[str, TextTemplate], sigs_classes: Dict[str, str],
+                            out_filename: str):
+    map_entries = []
+    for sig, c in sigs_classes.items():
+        map_vars = {'TesterSignature': sig,
+                    'CgReader': c,
+                    'TestConsumer': c.replace('CgReader', 'CgConsumer')}
+        map_entries.append(test_templates['TesterMapEntry'].render(map_vars, {}))
+
+    ret = test_templates['TestReadFunc'].render({}, {'TesterMapEntries': map_entries})
+
+    with open (out_filename, 'a' if append else 'w') as f:
+        f.write(ret)
 
 if __name__ == "__main__":
     # Work around Python's lame import system to import ferCode.py from current dir
@@ -565,4 +622,40 @@ if __name__ == "__main__":
     from ferCode import apply_alignment, apply_addition, apply_addition_direct, is_basic_addition_op, \
          is_var_length_op, IoState, FerOpcode, FerOp, FerRepeatArray, FerNesting
 
-    main()
+    gen_tests = False
+    argv = sys.argv.copy()
+    if len(argv) > 4 and argv[1] == '-t':
+        gen_tests = True
+        argv.pop(1)
+
+    if len(argv) != 4:
+        print("Usage 1: codegen.py [-t] <type signature> <class name> <output file>\n"
+              "Usage 2: codegen.py [-t] <output file> -i <input file>")
+        sys.exit(-1)
+
+    templates = parse_templates('argumentscgreader_t.cpp')
+    test_templates = parse_templates('argumentscgtester_t.cpp') if gen_tests else {}
+
+    sigs_classes = {}
+
+    if argv[2] == '-i':
+        append = False
+        output_file = argv[1]
+        with open (argv[3], 'r') as input_file:
+            for line in input_file:
+                signature, class_name = line.strip('\n').split(' ', 2)
+                # ### empty signatures and variants are not supported for now; empty signatures should
+                #     perhaps be made to work for convenience in "automated situations" such as this one,
+                #     variant support is planned but takes more work.
+                if len(signature) > 0 and not 'v' in signature:
+                    sigs_classes[signature] = class_name
+                    generate_cg_reader(templates, test_templates, signature, class_name, output_file, append)
+                    append = True
+    else:
+        output_file = argv[3]
+        sigs_classes[argv[1]] = argv[2]
+        generate_cg_reader(templates, test_templates, argv[1], argv[2], output_file)
+
+    if test_templates:
+        # TODO skip the same classes that are skipped in
+        generate_test_read_func(test_templates, sigs_classes, output_file)

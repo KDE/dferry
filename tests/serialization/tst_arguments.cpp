@@ -26,15 +26,26 @@
 #include "argumentsreader_p.h"
 #include "argumentswriter.h"
 #include "error.h"
+#ifndef COLLECT_SIGNATURES
+#include "cgreader.h"
+#endif
 
 #include "../testutil.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 
 // Handy helpers
+
+#ifdef COLLECT_SIGNATURES
+#include <unordered_set>
+#define DOES_NOT_COLLECT_SIGNATURES() return
+#else
+#define DOES_NOT_COLLECT_SIGNATURES()
+#endif
 
 static void printChunk(chunk a)
 {
@@ -627,14 +638,39 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataInc
     }
 }
 
+const char* s_signaturesFilename = nullptr;
+
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 {
+#ifdef COLLECT_SIGNATURES
+    static std::unordered_set<std::string> seenSignatures;
+
+    const cstring sig = arg.signature();
+    const std::string sigAsStr(sig.ptr, sig.length);
+    //std::cerr << "doRoundtrip with signature: " << sigAsStr << '\n';
+
+    if (!seenSignatures.insert(sigAsStr).second) {
+        return;
+    }
+
+    const std::string readerClassname = "CgReader" + std::to_string(seenSignatures.size());
+    std::ofstream out;
+    out.open(s_signaturesFilename,
+             std::ios::out | (seenSignatures.size() == 1 ? std::ios::trunc : std::ios::app));
+    out << sigAsStr << ' ' << readerClassname << '\n';
+    return;
+#endif
+
     const uint32 maxIncrement = arg.data().length;
     for (uint32 i = 1; i <= maxIncrement; i++) {
         doRoundtripWithCopyAssignEtc(arg, i, debugPrint);
     }
 
     testReadWithSkip(arg, debugPrint);
+
+#ifndef COLLECT_SIGNATURES
+    testCgReader(arg);
+#endif
 }
 
 
@@ -645,6 +681,7 @@ static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
 
 static void test_stringValidation()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     {
         cstring emptyWithNull("");
         cstring emptyWithoutNull;
@@ -739,6 +776,7 @@ static void test_stringValidation()
 
 static void test_nesting()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     {
         ArgumentsWriter writer;
         for (int i = 0; i < 32; i++) {
@@ -891,6 +929,7 @@ static void test_roundtrip()
 
 static void test_writerMisuse()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     // Array
     {
         ArgumentsWriter writer;
@@ -1161,6 +1200,7 @@ static void test_alignment()
 
 static void test_repeatArrayReaderState()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     // These tests are probably redundant - their purpose is to be explicit about this particular behavior:
     // the state at the point where the array repeats
     for (int i = 0; i < 2; i++) {
@@ -1308,6 +1348,7 @@ static void test_realMessage()
 
 static void test_isWritingSignatureBug()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     {
         // This was the original test, so it's the one with the comments :)
         ArgumentsWriter writer;
@@ -1973,13 +2014,13 @@ static void test_fileDescriptors()
         TEST(reader.state() == Arguments::UnixFd);
         TEST(reader.readUnixFd() == 400);
         TEST(reader.state() == Arguments::Finished);
-
     }
 #endif
 }
 
 static void test_closeWrongAggregate()
 {
+    DOES_NOT_COLLECT_SIGNATURES();
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 4; j++) {
             ArgumentsWriter writer;
@@ -2016,8 +2057,14 @@ static void test_closeWrongAggregate()
 
 // TODO test empty dicts, too
 
-int main(int, char *[])
+int main([[maybe_unused]]int argc, [[maybe_unused]]char *argv[])
 {
+#ifdef COLLECT_SIGNATURES
+    if (argc >= 2) {
+        s_signaturesFilename = argv[1];
+    }
+#endif
+
     test_stringValidation();
     test_nesting();
     test_roundtrip();
