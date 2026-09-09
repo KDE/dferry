@@ -29,6 +29,7 @@
 #include "message.h"
 #include "fercode_p.h"
 #include "types.h"
+#include "platform_p.h"
 
 #ifdef HAVE_BOOST
 #include <boost/container/small_vector.hpp>
@@ -99,6 +100,7 @@ public:
     std::vector<const byte *> m_arrayLengthStack;
 #endif
     std::vector<VariantInfo> m_variantStack;
+    std::vector<int> m_fileDescriptors;
 };
 
 static const char s_nullBuffer[16] {}; // inert fake data for callers when reading bad or nonexistent data
@@ -118,6 +120,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncode
 {
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
     d->m_data = Arguments::Private::of(&args)->m_data;
+    d->m_fileDescriptors = args.fileDescriptors();
     beginRead();
 }
 
@@ -127,6 +130,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, Arguments::FerEncodeOpt
     const Arguments &args = msg.arguments();
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
     d->m_data = Arguments::Private::of(&args)->m_data;
+    d->m_fileDescriptors = args.fileDescriptors();
     beginRead();
 }
 
@@ -139,6 +143,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, std::shared_ptr<std:
 {
     d->m_ops = ferCode;
     d->m_data = Arguments::Private::of(&args)->m_data;
+    d->m_fileDescriptors = args.fileDescriptors();
     beginRead();
 }
 
@@ -151,6 +156,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, std::shared_ptr<std::ve
     const Arguments &args = msg.arguments();
     d->m_ops = ferCode;
     d->m_data = Arguments::Private::of(&args)->m_data;
+    d->m_fileDescriptors = args.fileDescriptors();
     beginRead();
 }
 
@@ -661,8 +667,14 @@ const void *ArgumentsBcReader::advanceState()
 /// Reads a DBus type signature. Required state: Arguments::Signature.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 
-/// \fn int32 ArgumentsBcReader::readUnixFd()
 /// Reads a file descriptor. The numeric value will usually not be the same as on the sending
 /// side, but it will refer to the same file. Required state: Arguments::UnixFd.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
-
+int ArgumentsBcReader::readUnixFd()
+{
+    const uint32 index = readUint32();
+    if (index < d->m_fileDescriptors.size()) {
+        return d->m_fileDescriptors[index];
+    }
+    return InvalidFileDescriptor;
+}
