@@ -137,8 +137,7 @@ public:
                        *reinterpret_cast<const byte *>(retPtr));
     }
     cstring readSignature() { return readObjectPath(); }
-    int32 readUnixFd() { return readInt32(); }  // TODO I think it doesn't work like that, needs a lookup
-                                                // into the table of received file descriptors
+    int readUnixFd();
 
     // Returns primitive type and the raw array data if in BeginArray state of an array containing only a
     // primitive type. You must copy the data before destroying the BcReader or changing its backing store
