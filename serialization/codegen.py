@@ -371,11 +371,13 @@ def main():
                 data_type = c_primitive_type(data_state)
 
                 receiver_name = 'processArg' + str(arg_num)
+                receiver_type = data_type
+                if data_state == IoState.BOOLEAN:
+                    receiver_type = 'bool'
+                elif data_state == IoState.UNIX_FD:
+                    receiver_type = 'int'
                 arg_num += 1
-                if data_state != IoState.BOOLEAN:
-                    reader_callback_decls.append(f'    void {receiver_name}({data_type} arg);\n')
-                else:
-                    reader_callback_decls.append(f'    void {receiver_name}(bool arg);\n')
+                reader_callback_decls.append(f'    void {receiver_name}({receiver_type} arg);\n')
 
                 insertions = {}
                 if fer_op.post_align_exponent != 0:
@@ -398,9 +400,12 @@ def main():
                 else:
                     insertions['CheckLength'] = templates['CheckLength'].render({}, {})
 
+                retTemplateName = 'ReturnUnixFd' if data_state == IoState.UNIX_FD else 'ReturnPrimitive'
+                insertions['ReturnPrimitive'] = templates[retTemplateName].render(
+                                                {'ProcessArgFunc': receiver_name}, {})
 
                 arg_reader_blocks.append(templates['ReadPrimitive'].render(
-                    {'ReadType': data_type, 'ProcessArgFunc': receiver_name},
+                    {'ReadType': data_type},
                     insertions))
 
             case FerOpcode.STRING | FerOpcode.OBJECT_PATH | FerOpcode.SIGNATURE:

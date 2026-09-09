@@ -28,6 +28,8 @@
 #include "message.h"
 #include "types.h"
 
+#include <vector>
+
 /*
 Methods that Consumer needs to implement:
 
@@ -63,6 +65,8 @@ private:
 
     chunk m_data;
     Error m_error; // TODO use
+
+    const std::vector<int> &m_fileDescriptors;
 
 #if 0 // no variant support for now!
     struct VariantInfo
@@ -115,12 +119,14 @@ static const char s_nullBuffer[16] {}; // inert fake data for callers when readi
 template <class Consumer>
 _Tvar_CgReader<Consumer>::_Tvar_CgReader(const Arguments &args)
     : m_data(Arguments::Private::of(&args)->m_data)
+    , m_fileDescriptors(args.fileDescriptors())
 {
 }
 
 template <class Consumer>
 _Tvar_CgReader<Consumer>::_Tvar_CgReader(const Message &msg)
     : m_data(Arguments::Private::of(&msg.arguments())->m_data)
+    , m_fileDescriptors(msg.arguments().fileDescriptors())
 {
 }
 
@@ -182,7 +188,19 @@ bool _Tvar_CgReader<Consumer>::readAll()
 
         const _Tvar_ReadType *ret = reinterpret_cast<const _Tvar_ReadType *>(m_dataPtr);
         m_dataPtr = newPtr;
+        // _TsnipBegin_ReturnPrimitive
         Consumer::_Tvar_ProcessArgFunc(*ret);
+        // _TsnipEnd_ReturnPrimitive
+        // _TsnipBegin_ReturnUnixFd
+        const uint32 fdIndex = *ret;
+        const std::vector<int> &fdVector = m_fileDescriptors;
+        int fd = -1;
+        if (fdIndex < fdVector.size()) {
+            fd = fdVector[fdIndex];
+        }
+        Consumer::_Tvar_ProcessArgFunc(fd);
+        // _TsnipEnd_ReturnUnixFd
+        // _Tinsert_ReturnPrimitive
     }
     // _TsnipEnd_ReadPrimitive
     // _TsnipBegin_ReadString
