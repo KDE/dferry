@@ -35,6 +35,7 @@
 struct TestConsumerBase
 {
     TestConsumerBase() : m_parallelReader(Arguments()) {}
+    virtual ~TestConsumerBase() = default;
 
     void virtualReadAll();
     void handleAggregates();
