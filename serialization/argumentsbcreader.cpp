@@ -400,7 +400,7 @@ void ArgumentsBcReader::doReadString(uint32 lengthPrefixSize)
 
 void ArgumentsBcReader::beginRead()
 {
-    //std::cout << "BcBegin " << printableFerOps(d->m_ops) << '\n';
+    //std::cout << "BcBegin " << printableFerOps(*d->m_ops) << '\n';
 
     d->m_opsPtr = &(*d->m_ops)[0];
     m_state = d->m_opsPtr->op.ioState;
@@ -423,7 +423,7 @@ const void *ArgumentsBcReader::advanceState()
 
     FerOp ferOp = d->m_opsPtr->op;
 #if 0
-    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &d->m_ops[0])
+    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &(*d->m_ops)[0])
               << ", op: " << ferOp.op
               << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
               << '\n';

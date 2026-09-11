@@ -493,8 +493,10 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
 
             go_back_idx = begin_arr_idx + 1
 
+            i += 1 # now at FerRepeatArray!
+            loop_back_align = ops[i].go_back_align_exponent
+
             # Can we skip alignment on loopback?
-            loop_back_align = ops[begin_arr_idx].post_align_exponent
             if loop_back_align:
                 after_contents_aligned = apply_alignment(arr_align.after, loop_back_align)
                 if after_contents_aligned == arr_align.after:
@@ -502,7 +504,6 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
 
             addr_set = arr_align.after
 
-            i += 1
             ops[i] = FerRepeatArray(go_back_align_exponent=loop_back_align, go_back_op_index=go_back_idx)
 
         else:
@@ -562,6 +563,9 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
             else:
                 # First pass: initial alignment = after alignment?
                 no_more_addr_set_changes = arr_data.before == addr_set
+
+                # Preserve this information before optimizeFerOps possibly optimizes it away
+                ops[i + 1].go_back_align_exponent = ops[begin_array_index + 1].post_align_exponent
 
             arr_data.after = addr_set
 

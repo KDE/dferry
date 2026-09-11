@@ -444,7 +444,8 @@ boost::local_shared_ptr<std::vector<FerCode>>
 #else
 std::shared_ptr<std::vector<FerCode>>
 #endif
-ferCodeForSignature(cstring signature, Arguments::SignatureType sigType, Arguments::FerEncodeOptions encodeOptions)
+ferCodeForSignature(cstring signature, Arguments::SignatureType sigType,
+                    Arguments::FerEncodeOptions encodeOptions)
 {
     // TODO
     // - Also cache "invalid signature" results?
@@ -509,12 +510,12 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType, Argumen
     return it->second;
 }
 
-static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
+static uint32 applyAlignment(uint32 addrSet, uint alignExponent)
 {
     assert(addrSet <= 0b11111111); // allowed values are just 1-8
     assert(addrSet != 0); // there must be some value (1 << 7 is the canonical representation of 8 ~= 0)
 
-    switch (alignOp.postAlignExponent) {
+    switch (alignExponent) {
     case 0:
         return addrSet;
     case 1:
@@ -530,6 +531,11 @@ static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
         assert(false);
         return 0;
     }
+}
+
+static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
+{
+    return applyAlignment(addrSet, alignOp.postAlignExponent);
 }
 
 static uint32 applyAddition(uint32 addrSet, FerOpcode addOp)
@@ -640,8 +646,10 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
         }
         (*ops)[prevIoStateIndex].op.ioState = ferOp.ioState;
 
+        // These have now been left-shifted to the next appropriate op. Mark them as inert / invalid -
+        // they will (ioState) or might (postAlignExponent) be filled in again by further left-shifting.
         (*ops)[i].op.postAlignExponent = 0;
-        (*ops)[i].op.ioState = Arguments::InvalidData; // ### or something more inert maybe? Let's see in the tests
+        (*ops)[i].op.ioState = Arguments::InvalidData;
 
 
         // == Payload data
@@ -705,11 +713,13 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
             // If alignment is needed after the array length field, but not for any other elements
             // (i.e. after the first), *skip* the alignment when going back!
             // No alignment req'd only for first element can happen, but is probably not worth handling.
-            const FerCode beginArrayOp = (*ops)[beginArrayIndex];
-            byte loopBackAlignExponent = beginArrayOp.op.postAlignExponent;
+            i++; // now at FerRepeatArray!
+            byte loopBackAlignExponent = (*ops)[i].repeatArray.goBackAlignExponent;
+
             if (loopBackAlignExponent) {
                 const uint32 afterContentsAlignedAddrs = applyAlignment(arrayAlign.afterContentsAddrSet,
-                                                                        beginArrayOp.op);
+                                                                        loopBackAlignExponent);
+
                 if (afterContentsAlignedAddrs == arrayAlign.afterContentsAddrSet) {
                     // alignment did nothing -> is not necessary -> remove it
                     loopBackAlignExponent = 0;
@@ -718,7 +728,7 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
 
             addrSet = arrayAlign.afterContentsAddrSet;
 
-            (*ops)[++i] = FerRepeatArray{loopBackAlignExponent, static_cast<uint16>(goBackIndex)};
+            (*ops)[i] = FerRepeatArray{loopBackAlignExponent, static_cast<uint16>(goBackIndex)};
 
             if (beginArrayIndexes.empty()) {
                 // leaving the outermost level of nested array, we won't need that anymore
@@ -792,6 +802,13 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
                 // This *is* our first pass through that array. If the alignment before and after the first
                 // element is the same, we're already done.
                 noMoreAddrSetChanges = arrayAlign.beforeContentsAddrSet == addrSet;
+
+                // Preserve this information before optimizeFerOps possibly optimizes it away based on
+                // a linear scan. In the case of e.g. an "aay" type signature, upon repeating the outer
+                // array after a nonempty inner array, the data address is usually not 4-aligned and the
+                // second "a" needs a 4-alignment for its length field that isn't preserved in any other way.
+                (*ops)[i + 1].repeatArray.goBackAlignExponent =
+                                                        (*ops)[beginArrayIndex + 1].op.postAlignExponent;
             }
 
             arrayAlign.afterContentsAddrSet = addrSet;
