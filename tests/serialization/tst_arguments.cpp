@@ -1985,6 +1985,27 @@ static void test_emptyArrayAndDict()
     }
 }
 
+static void test_arrayBugs()
+{
+    // Tests for now fixed ArgumentsBcReader and ArgumentsCgReader bugs regarding arrays and alignment
+    {
+        ArgumentsWriter writer;
+        writer.beginArray(ArgumentsWriter::NonEmptyArray);
+            writer.beginArray(ArgumentsWriter::NonEmptyArray);
+                writer.writeByte(123);
+            writer.endArray();
+            writer.beginArray(ArgumentsWriter::NonEmptyArray);
+                writer.writeByte(45);
+            writer.endArray();
+        writer.endArray();
+
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+}
+
 static void test_fileDescriptors()
 {
 #ifdef __unix__
@@ -2080,6 +2101,7 @@ int main([[maybe_unused]]int argc, [[maybe_unused]]char *argv[])
     test_primitiveArray();
     test_signatureLengths();
     test_emptyArrayAndDict();
+    test_arrayBugs();
     test_fileDescriptors();
 
     // TODO (maybe): specific tests for begin/endDictEntry() for both Reader and Writer.
