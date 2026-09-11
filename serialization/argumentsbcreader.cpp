@@ -266,7 +266,11 @@ bool ArgumentsBcReader::beginArrayInternal(EmptyArrayOption option)
         return true;
 
     } else {
-        m_state = Arguments::EndArray;
+        if (m_state == Arguments::BeginArray) {
+            m_state = Arguments::EndArray;
+        } else {
+            m_state = Arguments::EndDict;
+        }
 
         // Skip d->m_opsPtr to the end of the array (TODO? add skip-to-end-index data to FerCode?)
         // We need to special-case opcodes that are followed by data that doesn't *have* opcodes so that
