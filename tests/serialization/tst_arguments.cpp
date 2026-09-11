@@ -22,6 +22,7 @@
 */
 
 #include "arguments.h"
+#include "argumentsbcreader.h"
 #include "argumentsreader.h"
 #include "argumentsreader_p.h"
 #include "argumentswriter.h"
@@ -333,6 +334,8 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
 
             TEST(reader.state() == Arguments::Finished);
             TEST(skippingReader.state() == Arguments::Finished);
+            TEST(!reader.isError());
+            TEST(!skippingReader.isError());
         }
     }
 }
@@ -638,6 +641,127 @@ static void doRoundtripWithCopyAssignEtc(const Arguments &arg_in, uint32 dataInc
     }
 }
 
+static void testBcReader(const Arguments &arg)
+{
+    const cstring sig = arg.signature();
+    const std::string sigStr(sig.ptr, sig.length);
+    if (/*sigStr.empty() ||*/ sigStr.find('v') != std::string::npos) {
+        std::cerr << "Warning: testBcReader: cannot handle signature \"" << sig.ptr
+                  << "\", will skip testing for it.\n";
+        return;
+
+    }
+
+    ArgumentsReader reader(arg);
+    ArgumentsBcReader bcReader(arg);
+
+    bool isDone = false;
+    while (!isDone) {
+
+        TEST(reader.state() == bcReader.state());
+
+        switch(reader.state()) {
+        case Arguments::Finished:
+            isDone = true;
+            break;
+        case Arguments::BeginStruct:
+            //std::cerr << "Beginning struct\n";
+            reader.beginStruct();
+            bcReader.beginStruct();
+            break;
+        case Arguments::EndStruct:
+            reader.endStruct();
+            bcReader.endStruct();
+            break;
+        case Arguments::BeginVariant:
+            //std::cerr << "Beginning variant\n";
+            //reader.beginVariant();
+            //bcReader.beginVariant();
+            TEST(false);
+            break;
+        case Arguments::EndVariant:
+            //reader.endVariant();
+            //bcReader.endVariant();
+            TEST(false);
+            break;
+        case Arguments::BeginArray:
+            reader.beginArray();
+            bcReader.beginArray();
+            break;
+        case Arguments::EndArray:
+            reader.endArray();
+            bcReader.endArray();
+            break;
+        case Arguments::BeginDict:
+            reader.beginDict();
+            bcReader.beginDict();
+            break;
+#ifdef WITH_DICT_ENTRY
+        case Arguments::BeginDictEntry:
+            reader.beginDictEntry();
+            bcReader.beginDictEntry();
+            break;
+        case Arguments::EndDictEntry:
+            reader.endDictEntry();
+            bcReader.endDictEntry();
+            break;
+#endif
+        case Arguments::EndDict:
+            reader.endDict();
+            bcReader.endDict();
+            break;
+        case Arguments::Byte:
+            TEST(reader.readByte() == bcReader.readByte());
+            break;
+        case Arguments::Boolean:
+            TEST(reader.readBoolean() == bcReader.readBoolean());
+            break;
+        case Arguments::Int16:
+            TEST(reader.readInt16() == bcReader.readInt16());
+            break;
+        case Arguments::Uint16:
+            TEST(reader.readUint16() == bcReader.readUint16());
+            break;
+        case Arguments::Int32:
+            TEST(reader.readInt32() == bcReader.readInt32());
+            break;
+        case Arguments::Uint32:
+            TEST(reader.readUint32() == bcReader.readUint32());
+            break;
+        case Arguments::Int64:
+            TEST(reader.readInt64() == bcReader.readInt64());
+            break;
+        case Arguments::Uint64:
+            TEST(reader.readUint64() == bcReader.readUint64());
+            break;
+        case Arguments::Double:
+            TEST(reader.readDouble() == bcReader.readDouble());
+            break;
+        case Arguments::String:
+            TEST(stringsEqual(reader.readString(), bcReader.readString()));
+            break;
+        case Arguments::ObjectPath:
+            TEST(stringsEqual(reader.readObjectPath(), bcReader.readObjectPath()));
+            break;
+        case Arguments::Signature:
+            TEST(stringsEqual(reader.readSignature(), bcReader.readSignature()));
+            break;
+        case Arguments::UnixFd:
+            TEST(reader.readUnixFd() == bcReader.readUnixFd());
+            break;
+
+        default:
+            TEST(false);
+            break;
+        }
+    }
+
+    TEST(reader.state() == Arguments::Finished);
+    TEST(bcReader.state() == Arguments::Finished);
+    TEST(!reader.isError());
+    TEST(!bcReader.isError());
+}
+
 const char* s_signaturesFilename = nullptr;
 
 static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
@@ -667,6 +791,8 @@ static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
     }
 
     testReadWithSkip(arg, debugPrint);
+
+    testBcReader(arg);
 
 #ifndef COLLECT_SIGNATURES
     testCgReader(arg);
