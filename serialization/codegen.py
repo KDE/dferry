@@ -283,7 +283,7 @@ def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, Arr
             # Start and end a span on the current element if it has a length field followed by alignment;
             # this at least allows to merge length field and length field post padding size checks and to
             # simplify fixed padding length. As it turns out, only an array can have padding after its
-            # length field :D
+            # length field: strings contain one-byte items, so no alignment padding.
             if fer_op.post_align_exponent != 0 and fer_op.opcode == FerOpcode.BEGIN_ARRAY:
                 span_start_index = i
                 before_span_addr_set = prev_addr_set
@@ -302,7 +302,10 @@ def calculate_span_addrs(ops: List[FerCodeItem], array_alignments: Dict[int, Arr
             begin_array_indexes.append(i)
             arr_align = array_alignments[i]
 
-            addr_set = arr_align.before
+            # Our position is now before an arbitrary element of the array. .before is only before the
+            # *first* element of the array. After is after an arbitrary element of the array, which is
+            # also before the next element after that. So we need to merge the two address sets.
+            addr_set = arr_align.before | arr_align.after
 
         elif fer_op.opcode == FerOpcode.END_ARRAY:
             begin_arr_idx = begin_array_indexes.pop()
