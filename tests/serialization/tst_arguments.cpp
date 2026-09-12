@@ -2118,6 +2118,22 @@ static void test_arrayBugs()
         ArgumentsWriter writer;
         writer.beginArray(ArgumentsWriter::NonEmptyArray);
             writer.beginArray(ArgumentsWriter::NonEmptyArray);
+                writer.writeUint64(1111111111111);
+            writer.endArray();
+            writer.beginArray(ArgumentsWriter::NonEmptyArray);
+                writer.writeUint64(2222222222222);
+            writer.endArray();
+        writer.endArray();
+
+        TEST(writer.state() != Arguments::InvalidData);
+        Arguments arg = writer.finish();
+        TEST(writer.state() == Arguments::Finished);
+        doRoundtrip(arg, false);
+    }
+    {
+        ArgumentsWriter writer;
+        writer.beginArray(ArgumentsWriter::NonEmptyArray);
+            writer.beginArray(ArgumentsWriter::NonEmptyArray);
                 writer.writeByte(123);
             writer.endArray();
             writer.beginArray(ArgumentsWriter::NonEmptyArray);
