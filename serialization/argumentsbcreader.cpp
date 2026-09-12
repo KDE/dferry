@@ -55,7 +55,7 @@ static inline const byte *align(const byte *index, uintptr_t alignment)
 
 static inline bool isPaddingZero(const byte *data, const byte *end)
 {
-    if (data + 7 > end) {
+    if (end - data > 7) {
         unreachable();
     }
     for (; data < end; data++) {

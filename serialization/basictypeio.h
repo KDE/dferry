@@ -36,6 +36,9 @@ static inline uint32 align(uint32 index, uint32 alignment)
 
 static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 padEnd)
 {
+    if (padEnd - padStart > 7) {
+        unreachable();
+    }
     padEnd = std::min(padEnd, buffer.length);
     for (; padStart < padEnd; padStart++) {
         if (unlikely(buffer.ptr[padStart] != '\0')) {
