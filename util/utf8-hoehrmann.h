@@ -40,23 +40,18 @@ static const uint8_t utf8d[] = {
 };
 
 uint32_t inline
-decode(uint32_t* state, uint32_t* codep, uint32_t byte) {
+decode(uint32_t* state, uint32_t byte) {
   uint32_t type = utf8d[byte];
-
-  *codep = (*state != UTF8_ACCEPT) ?
-    (byte & 0x3fu) | (*codep << 6) :
-    (0xff >> type) & (byte);
-
   *state = utf8d[256 + *state + type];
   return *state;
 }
 
 int inline
 IsUTF8(uint8_t* s) {
-  uint32_t codepoint, state = 0;
+  uint32_t state = 0;
 
   while (*s)
-    decode(&state, &codepoint, *s++);
+    decode(&state, *s++);
 
   return state == UTF8_ACCEPT;
 }
