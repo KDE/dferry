@@ -15,10 +15,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include <cstdint>
 
-#define UTF8_ACCEPT 0
-#define UTF8_REJECT 12
+static constexpr uint32_t UTF8_ACCEPT = 0;
+static constexpr uint32_t UTF8_REJECT = 12;
 
-static const uint8_t utf8d[] = {
+static constexpr uint8_t utf8d[] = {
   // The first part of the table maps bytes to character classes that
   // to reduce the size of the transition table and create bitmasks.
    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -39,17 +39,16 @@ static const uint8_t utf8d[] = {
   12,36,12,12,12,12,12,12,12,12,12,12,
 };
 
-uint32_t inline
-decode(uint32_t* state, uint32_t byte) {
+inline
+void decode(uint32_t* state, uint32_t byte) {
   uint32_t type = utf8d[byte];
   *state = utf8d[256 + *state + type];
-  return *state;
 }
 
 int inline
 IsUTF8(uint8_t* s, uint32_t length) {
   uint8_t* begin = s;
-  uint32_t state = 0;
+  uint32_t state = UTF8_ACCEPT;
 
   while (*s)
     decode(&state, *s++);
