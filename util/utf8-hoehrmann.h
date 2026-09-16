@@ -47,11 +47,12 @@ decode(uint32_t* state, uint32_t byte) {
 }
 
 int inline
-IsUTF8(uint8_t* s) {
+IsUTF8(uint8_t* s, uint32_t length) {
+  uint8_t* begin = s;
   uint32_t state = 0;
 
   while (*s)
     decode(&state, *s++);
 
-  return state == UTF8_ACCEPT;
+  return state == UTF8_ACCEPT && (begin + length == s);
 }
