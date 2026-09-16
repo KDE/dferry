@@ -55,6 +55,7 @@ public:
     uint32 m_nilArrayNesting = 0; // this keeps track of how many nil arrays we are in
     Error m_error;
     Nesting m_nesting;
+    bool m_validateUtf8 = true;
 
     struct ArrayInfo
     {

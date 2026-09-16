@@ -49,7 +49,8 @@ public:
          m_data(reinterpret_cast<byte *>(malloc(InitialDataCapacity))),
          m_dataCapacity(InitialDataCapacity),
          m_dataPosition(SignatureReservedSpace),
-         m_nilArrayNesting(0)
+         m_nilArrayNesting(0),
+         m_validateUtf8(true)
     {
         m_signature.ptr = reinterpret_cast<char *>(m_data + 1); // reserve a byte for length prefix
         m_signature.length = 0;
@@ -166,6 +167,7 @@ public:
     int m_nilArrayNesting;
     std::vector<int> m_fileDescriptors;
     Error m_error;
+    bool m_validateUtf8;
 
     enum {
         InitialDataCapacity = 512,
@@ -374,6 +376,24 @@ Error ArgumentsWriter::error() const
     return d->m_error;
 }
 
+/// Sets whether the writer fully validates the UTF-8 encoding of strings.
+/// \sa validatesUtf8
+void ArgumentsWriter::setValidatesUtf8(bool validate)
+{
+    d->m_validateUtf8 = validate;
+}
+
+/// \returns whether the writer fully validates the UTF-8 encoding of strings.
+/// The writer always validates that strings do note exceeed maximum allowed Length and have a null
+/// terminator. This property controls whether string are also checked to be valid UTF-8 and not
+/// contain null bytes before the end. The default value is \c true.
+/// Disabling UTF-8 validation is faster, but insecure if the sender is not trusted.
+/// \sa setValidatesUtf8
+bool ArgumentsWriter::validatesUtf8() const
+{
+    return d->m_validateUtf8;
+}
+
 /// \returns the current state() as a string
 cstring ArgumentsWriter::stateString() const
 {
@@ -457,7 +477,7 @@ void ArgumentsWriter::doWritePrimitiveType(Arguments::IoState type, uint32 align
 void ArgumentsWriter::doWriteString(Arguments::IoState type, uint32 lengthPrefixSize)
 {
     if (type == Arguments::String) {
-        VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length)),
+        VALID_IF(Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length), d->m_validateUtf8),
                  Error::InvalidString);
     } else if (type == Arguments::ObjectPath) {
         VALID_IF(Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length)),

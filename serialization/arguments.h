@@ -162,7 +162,7 @@ public:
     const std::vector<int> &fileDescriptors() const;
     bool isByteSwapped() const;
 
-    static bool isStringValid(cstring string);
+    static bool isStringValid(cstring string, bool checkUtf8 = true);
     static bool isObjectPathValid(cstring objectPath);
     static bool isObjectPathElementValid(cstring pathElement);
     static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);

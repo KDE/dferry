@@ -165,6 +165,24 @@ Error ArgumentsReader::error() const
     return d->m_error;
 }
 
+/// Sets whether the reader fully validates the UTF-8 encoding of strings.
+/// \sa validatesUtf8
+void ArgumentsReader::setValidatesUtf8(bool validate)
+{
+    d->m_validateUtf8 = validate;
+}
+
+/// \returns whether the reader fully validates the UTF-8 encoding of strings.
+/// The reader always validates that strings do note exceeed maximum allowed Length and have a null
+/// terminator. This property controls whether string are also checked to be valid UTF-8 and not
+/// contain null bytes before the end. The default value is \c true.
+/// Disabling UTF-8 validation is faster, but insecure if the sender is not trusted.
+/// \sa setValidatesUtf8
+bool ArgumentsReader::validatesUtf8() const
+{
+    return d->m_validateUtf8;
+}
+
 /// \fn Arguments::IoState ArgumentsReader::state() const
 /// \returns the type of the next element. In case of error or end of data, the return
 ///          value will indicate that instead.
@@ -285,7 +303,8 @@ void ArgumentsReader::doReadString(uint32 lengthPrefixSize)
     d->m_dataPosition += stringLength;
     bool isValidString = false;
     if (m_state == Arguments::String) {
-        isValidString = Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length));
+        isValidString = Arguments::isStringValid(cstring(m_u.String.ptr, m_u.String.length),
+                                                 d->m_validateUtf8);
     } else if (m_state == Arguments::ObjectPath) {
         isValidString = Arguments::isObjectPathValid(cstring(m_u.String.ptr, m_u.String.length));
     } else if (m_state == Arguments::Signature) {

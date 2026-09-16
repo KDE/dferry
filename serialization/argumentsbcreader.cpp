@@ -93,6 +93,7 @@ public:
                   // ... or just store a pointer to args and use its data in the rare cases that we need it
     Nesting m_nesting;
     Error m_error;
+    bool m_validateUtf8 = true;
     // this keeps track of the limits of the current array
 #ifdef HAVE_BOOST
     boost::container::small_vector<const byte *, 8> m_arrayLengthStack;
@@ -219,6 +220,24 @@ bool ArgumentsBcReader::isValid() const
 Error ArgumentsBcReader::error() const
 {
     return d->m_error;
+}
+
+/// Sets whether the reader fully validates the UTF-8 encoding of strings.
+/// \sa validatesUtf8
+void ArgumentsBcReader::setValidatesUtf8(bool validate)
+{
+    d->m_validateUtf8 = validate;
+}
+
+/// \returns whether the reader fully validates the UTF-8 encoding of strings.
+/// The reader always validates that strings do note exceeed maximum allowed Length and have a null
+/// terminator. This property controls whether string are also checked to be valid UTF-8 and not
+/// contain null bytes before the end. The default value is \c true.
+/// Disabling UTF-8 validation is faster, but insecure if the sender is not trusted.
+/// \sa setValidatesUtf8
+bool ArgumentsBcReader::validatesUtf8() const
+{
+    return d->m_validateUtf8;
 }
 
 bool ArgumentsBcReader::beginArrayInternal(EmptyArrayOption option)
@@ -456,27 +475,29 @@ const void *ArgumentsBcReader::advanceState()
         newPtr += 8;
         break;
     case FerOpcode::String: {
-        // TODO validate: utf8, trailing nul;
-        // maybe do content validation after alignment to next element and data length check to avoid
+        // ### maybe do content validation after alignment to next element and data length check to avoid
         // length-checking twice. But we do need to check max string length, for String only though!
         newPtr += sizeof(uint32);
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
         uint32 len = *reinterpret_cast<const uint32 *>(ret);
-        VALID_IF(len + 1 < Arguments::MaxArrayLength, Error::MalformedMessageData);
+        VALID_IF(Arguments::isStringValid(cstring(const_cast<byte*>(newPtr), len), d->m_validateUtf8),
+                 Error::InvalidString);
         newPtr += len + 1 /* trailing nul */;
         break; }
     case FerOpcode::ObjectPath: {
-        // TODO validate: utf8, trailing nul, valid object path
         newPtr += sizeof(byte);
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
         byte len = *reinterpret_cast<const byte *>(ret);
+        VALID_IF(Arguments::isObjectPathValid(cstring(const_cast<byte*>(newPtr), len)),
+                 Error::InvalidObjectPath);
         newPtr += len + 1 /* trailing nul */;
         break; }
     case FerOpcode::Signature: {
-        // TODO validate: utf8, trailing nul, valid signature
         newPtr += sizeof(byte);
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
         byte len = *reinterpret_cast<const byte *>(ret);
+        VALID_IF(Arguments::isSignatureValid(cstring(const_cast<byte*>(newPtr), len)),
+                 Error::InvalidSignature);
         newPtr += len + 1 /* trailing nul */;
         break; }
 
