@@ -811,15 +811,23 @@ static void test_stringValidation()
     {
         cstring emptyWithNull("");
         cstring emptyWithoutNull;
+        cstring embeddedNull("i\0i", 3);
+        cstring trailingNull("ii\0", 3);
 
         TEST(!Arguments::isStringValid(emptyWithoutNull));
         TEST(Arguments::isStringValid(emptyWithNull));
+        TEST(!Arguments::isStringValid(embeddedNull));
+        TEST(!Arguments::isStringValid(trailingNull));
 
         TEST(!Arguments::isObjectPathValid(emptyWithoutNull));
         TEST(!Arguments::isObjectPathValid(emptyWithNull));
+        TEST(!Arguments::isObjectPathValid(cstring("/a\0/b", 5)));
+        TEST(!Arguments::isObjectPathValid(cstring("/a/b\0", 5)));
 
         TEST(Arguments::isSignatureValid(emptyWithNull));
         TEST(!Arguments::isSignatureValid(emptyWithoutNull));
+        TEST(!Arguments::isSignatureValid(embeddedNull));
+        TEST(!Arguments::isSignatureValid(trailingNull));
         TEST(!Arguments::isSignatureValid(emptyWithNull, Arguments::VariantSignature));
         TEST(!Arguments::isSignatureValid(emptyWithoutNull, Arguments::VariantSignature));
     }
@@ -897,6 +905,48 @@ static void test_stringValidation()
         cstring array33("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai");
         TEST(!Arguments::isSignatureValid(array33));
         TEST(!Arguments::isSignatureValid(array33, Arguments::VariantSignature));
+    }
+
+    {
+        // UTF-8 validation checks (not thorough, just checking some stuff that seems
+        // somewhat obscure and possibly forgotten)
+
+        // Just a quick check that disabling UTF-8 validation works...
+        TEST(Arguments::isStringValid(cstring("\xfe"), false));
+
+        TEST(!Arguments::isStringValid(cstring("\xfe")));
+        TEST(!Arguments::isStringValid(cstring("\xff")));
+        TEST(!Arguments::isStringValid(cstring("\xfe\xfe\xff\xff")));
+
+        // trivially overlong sequences
+        TEST(!Arguments::isStringValid(cstring("\xc0\x80")));  // '\0'
+        TEST(!Arguments::isStringValid(cstring("\xc0\xaf")));  // '/'
+
+        // just overlong sequences (last character that could still be represented shorter)
+        TEST(!Arguments::isStringValid(cstring("\xc1\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xe0\x9f\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xf0\x8f\xbf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xf8\x87\xbf\xbf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xfc\x83\xbf\xbf\xbf\xbf")));
+
+        // Single UTF-16 surrogate
+        TEST(!Arguments::isStringValid(cstring("\xed\xa0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xad\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xae\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xaf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xb0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xbe\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xbf\xbf")));
+
+        // Paired UTF-16 surrogates
+        TEST(!Arguments::isStringValid(cstring("\xed\xa0\x80\xed\xb0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xa0\x80\xed\xbf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xad\xbf\xed\xb0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xad\xbf\xed\xbf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xae\x80\xed\xb0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xae\x80\xed\xbf\xbf")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xaf\xbf\xed\xb0\x80")));
+        TEST(!Arguments::isStringValid(cstring("\xed\xaf\xbf\xed\xbf\xbf")));
     }
 }
 

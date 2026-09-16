@@ -646,7 +646,7 @@ bool Arguments::isStringValid(cstring string, bool checkUtf8)
     if (!string.ptr || string.length + 1 > MaxArrayLength || string.ptr[string.length] != 0) {
         return false;
     }
-    return !checkUtf8 || IsUTF8(reinterpret_cast<byte*>(string.ptr));
+    return !checkUtf8 || IsUTF8(reinterpret_cast<byte*>(string.ptr), string.length);
 }
 
 static inline bool isObjectNameLetter(char c)
