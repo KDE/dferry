@@ -225,7 +225,22 @@ bool _Tvar_CgReader<Consumer>::readAll()
         }
         // _Tinsert_CheckPaddingAfterString
 
-        // TODO? UTF-8 and object path / signature validation?
+        // _TsnipBegin_ValidateString
+        if (!Arguments::isStringValid(cstring(retPtr, len), _Tvar_ValidateUtf8)) {
+            goto errorReturn;
+        }
+        // _TsnipEnd_ValidateString
+        // _TsnipBegin_ValidateObjectPath
+        if (!Arguments::isObjectPathValid(cstring(retPtr, len))) {
+            goto errorReturn;
+        }
+        // _TsnipEnd_ValidateObjectPath
+        // _TsnipBegin_ValidateSignature
+        if (!Arguments::isSignatureValid(cstring(retPtr, len))) {
+            goto errorReturn;
+        }
+        // _TsnipEnd_ValidateSignature
+        // _Tinsert_ValidateString
 
         m_dataPtr = newPtr;
 

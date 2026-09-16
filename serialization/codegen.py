@@ -336,7 +336,7 @@ def addr_set_shift_distance(before: int, shifted: int) -> int:
 
 def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[str, TextTemplate],
                        signature: str, class_name: str,
-                       out_filename: str, append: bool = False):
+                       out_filename: str, validate_utf8: bool, append: bool = False):
 
     fer_code = ferCode.fer_encode_signature(signature)
     #print(fer_code)
@@ -454,6 +454,14 @@ def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[
                     pass # No length check, this one is covered by the one at the first span item!
                 else:
                     insertions['CheckStringLengthFieldLength'] = templates['CheckLength'].render({}, {})
+
+                if fer_op.opcode == FerOpcode.STRING:
+                    insertions['ValidateString'] = templates['ValidateString'].render(
+                        {'ValidateUtf8': 'true' if validate_utf8 else 'false'}, {})
+                elif fer_op.opcode == FerOpcode.OBJECT_PATH:
+                    insertions['ValidateString'] = templates['ValidateObjectPath'].render({}, {})
+                elif fer_op.opcode == FerOpcode.SIGNATURE:
+                    insertions['ValidateString'] = templates['ValidateSignature'].render({}, {})
 
                 arg_reader_blocks.append(templates['ReadString'].render(
                     {'LengthType': length_type, 'ProcessArgFunc': receiver_name},
@@ -627,13 +635,19 @@ if __name__ == "__main__":
 
     gen_tests = False
     argv = sys.argv.copy()
-    if len(argv) > 4 and argv[1] == '-t':
-        gen_tests = True
-        argv.pop(1)
+
+    gen_tests = '-t' in argv[1:3]
+    if gen_tests:
+        argv.remove('-t')
+
+    validate_utf8 = '-U' not in argv[1:2]
+    if not validate_utf8:
+        argv.remove('-U')
 
     if len(argv) != 4:
-        print("Usage 1: codegen.py [-t] <type signature> <class name> <output file>\n"
-              "Usage 2: codegen.py [-t] <output file> -i <input file>")
+        print("Usage 1: codegen.py [-t] [-U] <type signature> <class name> <output file>\n"
+              "Usage 2: codegen.py [-t] [-U] <output file> -i <input file>\n"
+              "-t generates code for testing, -U disables unicode validation for strings")
         sys.exit(-1)
 
     templates = parse_templates('argumentscgreader_t.cpp')
@@ -652,12 +666,13 @@ if __name__ == "__main__":
                 #     variant support is planned but takes more work.
                 if len(signature) > 0 and not 'v' in signature:
                     sigs_classes[signature] = class_name
-                    generate_cg_reader(templates, test_templates, signature, class_name, output_file, append)
+                    generate_cg_reader(templates, test_templates, signature, class_name, output_file,
+                                       validate_utf8, append)
                     append = True
     else:
         output_file = argv[3]
         sigs_classes[argv[1]] = argv[2]
-        generate_cg_reader(templates, test_templates, argv[1], argv[2], output_file)
+        generate_cg_reader(templates, test_templates, argv[1], argv[2], output_file, validate_utf8)
 
     if test_templates:
         # TODO skip the same classes that are skipped in

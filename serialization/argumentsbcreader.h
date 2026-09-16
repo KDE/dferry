@@ -54,9 +54,11 @@ public:
 
     void operator=(const ArgumentsBcReader &other);
 
-
     bool isValid() const;
     Error error() const;
+
+    void setValidatesUtf8(bool validate);
+    bool validatesUtf8() const;
 
     Arguments::IoState state() const { return m_state; }
     //cstring stateString() const;

@@ -33,6 +33,7 @@
 #include "message.h"
 #include "platform_p.h"
 #include "stringtools_p.h"
+#include "utf8-hoehrmann.h"
 
 #include <algorithm>
 #include <cassert>
@@ -636,15 +637,16 @@ static void chopFirst(cstring *s)
 }
 
 /// \returns whether \p string is a valid DBus string
-/// Validation criteria are: Valid UTF-8, no embedded nulls, limited length.
+/// Validation criteria are: Length not greater than maximum, has null terminator,
+/// optionally (toggled by \p checkUtf8) valid UTF-8 and no null bytes before the end.
+/// \param checkUtf8
 // static
-bool Arguments::isStringValid(cstring string)
+bool Arguments::isStringValid(cstring string, bool checkUtf8)
 {
     if (!string.ptr || string.length + 1 > MaxArrayLength || string.ptr[string.length] != 0) {
         return false;
     }
-    // check that there are no embedded nulls, exploiting the highly optimized strlen...
-    return strlen(string.ptr) == string.length;
+    return !checkUtf8 || IsUTF8(reinterpret_cast<byte*>(string.ptr));
 }
 
 static inline bool isObjectNameLetter(char c)

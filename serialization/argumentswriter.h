@@ -43,6 +43,9 @@ public:
     // so it is still available later
     Error error() const; // see also: aggregateStack()
 
+    void setValidatesUtf8(bool validate);
+    bool validatesUtf8() const;
+
     Arguments::IoState state() const { return m_state; }
     cstring stateString() const;
     bool isInsideEmptyArray() const;
