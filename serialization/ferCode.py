@@ -575,7 +575,8 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
                 i = begin_array_index # note, the loop will do i += 1 - that is intended
         i += 1
 
-    return i
+    # Should only exit after finding a fixed point (no more addr_set changes)
+    assert False
 
 
 def elide_structs(ops: List[FerCodeItem]) -> None:
