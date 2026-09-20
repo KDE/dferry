@@ -822,6 +822,8 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
         }
     }
 
+    // Should only exit after finding a fixed point (no more addrSet changes), which is (barring bugs)
+    // guaranteed because addrSet can only have 8 bits set and iterations can only add bits.
     assert(false);
     unreachable();
     return 0;
