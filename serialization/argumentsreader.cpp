@@ -293,7 +293,7 @@ void ArgumentsReader::doReadString(uint32 lengthPrefixSize)
     } else {
         stringLength += basic::readUint32(d->m_data.ptr + d->m_dataPosition,
                                           d->m_argsPriv->m_isByteSwapped);
-        VALID_IF(stringLength + 1 <= Arguments::MaxArrayLength, Error::MalformedMessageData);
+        VALID_IF(stringLength <= Arguments::MaxArrayLength, Error::MalformedMessageData);
     }
     d->m_dataPosition += lengthPrefixSize;
     VALID_IF(d->m_dataPosition + stringLength <= d->m_data.length, Error::TruncatedMessageData);
