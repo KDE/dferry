@@ -1101,6 +1101,22 @@ static void test_roundtrip()
         };
         doRoundtrip(Arguments(nullptr, cstring("atuaxa{uu}yyyyya(u)"), chunk(testData, sizeof(testData))));
     }
+    {
+        // Object path serialization
+        byte testData[20] = {
+            11,                     // byte
+            0, 0, 0,                // padding
+#ifdef BIGENDIAN
+            0, 0, 0, 4,             // object path length field
+#else
+            4, 0, 0, 0,             // object path length field
+#endif
+            '/', 'a', '/', 'b', 0,  // object path
+            0, 0, 0,                // padding
+            23, 24, 25, 26          // int32
+        };
+        doRoundtrip(Arguments(nullptr, cstring("yoi"), chunk(testData, sizeof(testData))));
+    }
 }
 
 static void test_writerMisuse()

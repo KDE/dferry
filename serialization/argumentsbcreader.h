@@ -134,11 +134,14 @@ public:
     }
     cstring readObjectPath()
     {
+        return readString();
+    }
+    cstring readSignature()
+    {
         const void* retPtr = advanceState();
         return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(byte),
                        *reinterpret_cast<const byte *>(retPtr));
     }
-    cstring readSignature() { return readObjectPath(); }
     int readUnixFd();
 
     // Returns primitive type and the raw array data if in BeginArray state of an array containing only a

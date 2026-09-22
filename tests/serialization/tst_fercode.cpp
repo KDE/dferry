@@ -62,7 +62,7 @@ static void test_basicEncode()
         FerOp{0, FerOpcode::BeginMethodSignature, Arguments::Int32},
         FerOp{3, FerOpcode::Copy4, Arguments::Int64},
         FerOp{0, FerOpcode::Copy8, Arguments::ObjectPath},
-        FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath},
+        FerOp{2, FerOpcode::ObjectPath, Arguments::ObjectPath},
         FerOp{0, FerOpcode::ObjectPath, Arguments::Finished},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 
@@ -110,7 +110,7 @@ static void test_arrayEncode()
         FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
         FerOp{0, FerOpcode::EndArray, Arguments::ObjectPath},
         FerRepeatArray{0, 2},
-        FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath},
+        FerOp{2, FerOpcode::ObjectPath, Arguments::ObjectPath},
         FerOp{0, FerOpcode::ObjectPath, Arguments::Finished},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 

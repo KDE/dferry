@@ -158,7 +158,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
         chopFirst(s);
         return true;
     case 'o':
-        out->push_back(FerOp{0, FerOpcode::ObjectPath, Arguments::ObjectPath});
+        out->push_back(FerOp{2, FerOpcode::ObjectPath, Arguments::ObjectPath});
 
         chopFirst(s);
         return true;
