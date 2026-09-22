@@ -485,9 +485,9 @@ const void *ArgumentsBcReader::advanceState()
         newPtr += len + 1 /* trailing nul */;
         break; }
     case FerOpcode::ObjectPath: {
-        newPtr += sizeof(byte);
+        newPtr += sizeof(uint32);
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-        byte len = *reinterpret_cast<const byte *>(ret);
+        uint32 len = *reinterpret_cast<const uint32 *>(ret);
         VALID_IF(Arguments::isObjectPathValid(cstring(const_cast<byte*>(newPtr), len)),
                  Error::InvalidObjectPath);
         newPtr += len + 1 /* trailing nul */;

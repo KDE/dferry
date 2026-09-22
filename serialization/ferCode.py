@@ -233,7 +233,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
 
     # —— Object path ———————————————————————————————————————————————————
     elif ch == 'o':
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.OBJECT_PATH, io_state=IoState.OBJECT_PATH))
+        out.append(FerOp(post_align_exponent=2, opcode=FerOpcode.OBJECT_PATH, io_state=IoState.OBJECT_PATH))
         return True, pos + 1
 
     # —— Signature ————————————————————————————————————————————————————

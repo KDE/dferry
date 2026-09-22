@@ -146,7 +146,7 @@ def fixed_op_part_length(opcode: FerOpcode) -> int:
         FerOpcode.BEGIN_ARRAY: 4,
         FerOpcode.ENTER_VARIANT: 1, # starts with a signature, which has a 1-byte length field
         FerOpcode.STRING: 4,
-        FerOpcode.OBJECT_PATH: 1,
+        FerOpcode.OBJECT_PATH: 4,
         FerOpcode.SIGNATURE: 1,
     }
     return table[opcode]
@@ -437,7 +437,7 @@ def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[
                     test_process_arg_defs.append(parg_def)
 
             case FerOpcode.STRING | FerOpcode.OBJECT_PATH | FerOpcode.SIGNATURE:
-                length_type = 'uint32' if fer_op.opcode == FerOpcode.STRING else 'byte'
+                length_type = 'byte' if fer_op.opcode == FerOpcode.SIGNATURE else 'uint32'
 
                 receiver_name = 'processArg' + str(arg_num)
                 arg_num += 1
