@@ -39,10 +39,11 @@
 #include <fstream>
 #include <iostream>
 
+#include <unordered_set> // always included to make LSP features more useful
+
 // Handy helpers
 
 #ifdef COLLECT_SIGNATURES
-#include <unordered_set>
 #define DOES_NOT_COLLECT_SIGNATURES() return
 #else
 #define DOES_NOT_COLLECT_SIGNATURES()
@@ -762,26 +763,62 @@ static void testBcReader(const Arguments &arg)
     TEST(!bcReader.isError());
 }
 
+#ifdef COLLECT_SIGNATURES
+static std::string classnameCompatibleSignature(const std::string &sig)
+{
+    std::string ret = sig;
+    for (char &c : ret) {
+        switch (c) {
+        case '(':
+            c = 'P'; // "parenthesis"
+            break;
+        case ')':
+            c = 'p';
+            break;
+        case '{':
+            c = 'C'; // "curly brace"
+            break;
+        case '}':
+            c = 'c';
+            break;
+        default:
+
+            break;
+        }
+    }
+    return ret;
+}
+
 const char* s_signaturesFilename = nullptr;
 
-static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
+static void saveSignatureForCodegen(cstring sig)
 {
-#ifdef COLLECT_SIGNATURES
     static std::unordered_set<std::string> seenSignatures;
 
-    const cstring sig = arg.signature();
-    const std::string sigAsStr(sig.ptr, sig.length);
+    std::string sigAsStr(sig.ptr, sig.length);
     //std::cerr << "doRoundtrip with signature: " << sigAsStr << '\n';
 
     if (!seenSignatures.insert(sigAsStr).second) {
         return;
     }
 
-    const std::string readerClassname = "CgReader" + std::to_string(seenSignatures.size());
+    std::string sigClassname = classnameCompatibleSignature(sigAsStr);
+    if (sigClassname.length() > 20) {
+        sigClassname = std::to_string(seenSignatures.size());
+    }
+
+    const std::string readerClassname = "CgReader_" + sigClassname;
     std::ofstream out;
     out.open(s_signaturesFilename,
              std::ios::out | (seenSignatures.size() == 1 ? std::ios::trunc : std::ios::app));
     out << sigAsStr << ' ' << readerClassname << '\n';
+}
+#endif
+
+static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
+{
+#ifdef COLLECT_SIGNATURES
+    saveSignatureForCodegen(arg.signature());
     return;
 #endif
 
