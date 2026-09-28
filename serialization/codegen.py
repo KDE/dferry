@@ -592,7 +592,8 @@ def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[
                       'ProcessArgCallbacks': reader_callback_decls}
     if test_templates:
         top_insertions['CgReadTester'] = test_templates['CgReadTester'].render(
-            {'TestConsumer': class_name.replace('CgReader', 'CgConsumer')},
+            {'TestConsumer': class_name.replace('CgReader', 'CgConsumer'),
+             'CgReader': class_name},
             {'ProcessArgDefinitions': test_process_arg_defs})
 
     if not append:
