@@ -285,6 +285,23 @@ bool _Tvar_CgReader<Consumer>::readAll()
         m_dataEnd = savedDataEnd;
     }
     // _TsnipEnd_ReadArray
+    // _TsnipBegin_AfterArrayAlign
+    // This is a separate block to make codegen's job easier. This block is emitted separately //_Tignore_
+    // at EndArray, unlike the above array setup code which is emitted at BeginArray. // _Tignore_
+    // Alignment after array - necessary because previous element applies alignment for next element
+    {
+        const byte* newPtr = m_dataPtr;
+        // _Tinsert_AlignmentForAfterArrayAlign
+        if (newPtr > m_dataEnd) {
+            return false;
+        }
+        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
+            return false;
+        }
+        m_dataPtr = newPtr;
+    }
+    // _TsnipEnd_AfterArrayAlign
+    // _Tinsert_AfterArrayAlign
     // _Tinsert_ArgReaders
 
     if (m_dataPtr == m_dataEnd) {
@@ -332,22 +349,6 @@ bool _Tvar_CgReader<Consumer>::_Tvar_ReadArray()
         return false;
     }
 
-    // _TsnipBegin_AfterArrayAlign
-    // Must do this because of the convention that previous element applies alignment for next element
-    {
-        const byte* newPtr = m_dataPtr;
-        // _Tinsert_AlignmentForAfterArrayAlign
-        if (newPtr > m_dataEnd) {
-            return false;
-        }
-        if (!isPaddingZero(unalignedNewPtr, newPtr)) {
-            return false;
-        }
-        m_dataPtr = newPtr;
-    }
-
-    // _TsnipEnd_AfterArrayAlign
-    // _Tinsert_AfterArrayAlign
     return true;
 
 errorReturn: // for compatibility with snippets from readAll()
