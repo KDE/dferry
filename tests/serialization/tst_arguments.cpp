@@ -1427,6 +1427,30 @@ static void test_alignment()
     }
 }
 
+static void test_alignmentAfterArray()
+{
+    {
+        ArgumentsWriter writer;
+        writer.beginArray();
+            writer.writeByte(64);
+        writer.endArray();
+        writer.writeUint64(9876543210);
+        Arguments arg = writer.finish();
+        doRoundtrip(arg);
+    }
+    {
+        ArgumentsWriter writer;
+        writer.beginArray();
+            writer.writeUint16(6400);
+        writer.endArray();
+        writer.beginStruct();
+            writer.writeByte(120);
+        writer.endStruct();
+        Arguments arg = writer.finish();
+        doRoundtrip(arg);
+    }
+}
+
 static void test_repeatArrayReaderState()
 {
     DOES_NOT_COLLECT_SIGNATURES();
@@ -2339,6 +2363,7 @@ int main([[maybe_unused]]int argc, [[maybe_unused]]char *argv[])
     //      (corruption of serialized data)
     test_complicated();
     test_alignment();
+    test_alignmentAfterArray();
     test_repeatArrayReaderState();
     test_arrayOfVariant();
     test_realMessage();

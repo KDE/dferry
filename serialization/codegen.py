@@ -522,22 +522,6 @@ def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[
 
                 insertions = {'ArgReaders': indent(''.join(arg_reader_blocks), '        ')}
 
-                if fer_op.post_align_exponent != 0:
-                    # Apply fixed or variable length alignment (and find out which one we have)
-                    aligned_after_addrs = apply_alignment(end_array_addr_set, fer_op.post_align_exponent)
-                    after_shift = addr_set_shift_distance(end_array_addr_set, aligned_after_addrs)
-                    assert after_shift != 0 # post_align_exponent would be 0 in that case
-
-                    if after_shift >= 0:
-                        align_insertions = {'AlignmentForAfterArrayAlign': templates['AlignFixed'].render(
-                                                    {'FixedAlign': after_shift}, {})}
-                    else:
-                        align_insertions = {'AlignmentForAfterArrayAlign': templates['Align'].render(
-                                                    {'PostAlign': (1 << fer_op.post_align_exponent)}, {})}
-
-                    insertions['AfterArrayAlign'] = templates['AfterArrayAlign'].render(
-                                                    {}, align_insertions)
-
                 i +=1
                 fer_repeat_array = fer_code[i]
                 if fer_repeat_array.go_back_align_exponent != 0:
@@ -564,6 +548,21 @@ def generate_cg_reader(templates: Dict[str, TextTemplate], test_templates: Dict[
 
                 arg_reader_blocks_stack.pop()
                 arg_reader_blocks = arg_reader_blocks_stack[-1]
+
+                if fer_op.post_align_exponent != 0:
+                    # Apply fixed or variable length alignment (and find out which one we have)
+                    aligned_after_addrs = apply_alignment(end_array_addr_set, fer_op.post_align_exponent)
+                    after_shift = addr_set_shift_distance(end_array_addr_set, aligned_after_addrs)
+                    assert after_shift != 0 # post_align_exponent would be 0 in that case
+
+                    if after_shift >= 0:
+                        align_insertions = {'AlignmentForAfterArrayAlign': templates['AlignFixed'].render(
+                                                    {'FixedAlign': after_shift}, {})}
+                    else:
+                        align_insertions = {'AlignmentForAfterArrayAlign': templates['Align'].render(
+                                                    {'PostAlign': (1 << fer_op.post_align_exponent)}, {})}
+
+                    arg_reader_blocks.append(templates['AfterArrayAlign'].render({}, align_insertions))
 
             # TODO is struct elision REALLY on? It doesn't look so from the code, I may be wrong
             case FerOpcode.ENTER_VARIANT | FerOpcode.END_VARIANT_SIGNATURE:
