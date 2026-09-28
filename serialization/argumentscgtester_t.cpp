@@ -26,7 +26,6 @@
 #include "../tests/testutil.h"
 
 #include <cstring>
-#include <functional>
 #include <iostream>
 #include <unordered_map>
 // _TsnipEnd_TestIncludes
@@ -37,17 +36,17 @@ struct TestConsumerBase
     TestConsumerBase() : m_parallelReader(Arguments()) {}
     virtual ~TestConsumerBase() = default;
 
-    void virtualReadAll();
+    void testReadAll();
+    virtual void cgReaderReadAll() = 0;
     void handleAggregates();
 
-    std::function<void()> m_readAllFunc;
     ArgumentsReader m_parallelReader;
 };
 
-void TestConsumerBase::virtualReadAll()
+void TestConsumerBase::testReadAll()
 {
     handleAggregates(); // for any aggregates opening before the first payload item
-    m_readAllFunc();
+    cgReaderReadAll();
 }
 
 void TestConsumerBase::handleAggregates()
@@ -91,6 +90,10 @@ void TestConsumerBase::handleAggregates()
 
 struct _Tvar_TestConsumer : public TestConsumerBase
 {
+    void cgReaderReadAll() override
+    {
+        reinterpret_cast<_Tvar_CgReader<_Tvar_TestConsumer>*>(this)->readAll();
+    }
     // _TsnipBegin_ProcessArgPrimitive
 
     void _Tvar_ReceiverName(_Tvar_ArgParameterType arg)
@@ -124,9 +127,6 @@ void testCgReader(const Arguments &args)
         {"_Tvar_TesterSignature", [](const Arguments& args) {
             auto* ret = new _Tvar_CgReader<_Tvar_TestConsumer>(args);
             ret->m_parallelReader = ArgumentsReader(args);
-            ret->m_readAllFunc = [ret]() {
-                ret->readAll();
-            };
             return std::unique_ptr<TestConsumerBase>(ret);
         }},
         // _TsnipEnd_TesterMapEntry
@@ -151,7 +151,7 @@ void testCgReader(const Arguments &args)
     // A way to get some position information is to give all payload data different values, so different
     // position = different value. That is a best practice for all serialization tests anyway.
 
-    tester->virtualReadAll();
+    tester->testReadAll();
 
     TEST(tester->m_parallelReader.isFinished());
     TEST(!tester->m_parallelReader.isError());
