@@ -1034,8 +1034,17 @@ static void test_nesting()
 
 struct LengthPrefixedData
 {
-    uint32 length;
-    byte data[256];
+    LengthPrefixedData(uint32 length)
+    {
+        setLength(length);
+        for (int i = 0; i < 256; i++) {
+            data[i] = 0;
+        }
+    }
+    void setLength(uint32 length) { *reinterpret_cast<uint32*>(buffer) = length; };
+
+    alignas(uint64) byte buffer[sizeof(uint32) + 256];
+    byte *const data = buffer + sizeof(uint32);
 };
 
 static void test_roundtrip()
@@ -1061,47 +1070,41 @@ static void test_roundtrip()
         doRoundtrip(Arguments(nullptr, cstring("ty"), chunk(data, 9)));
     }
     {
-        LengthPrefixedData testArray = {0, {0}};
+        LengthPrefixedData testArray(0);
         for (int i = 0; i < 64; i++) {
             testArray.data[i] = i;
         }
-        byte *testData = reinterpret_cast<byte *>(&testArray);
 
-        testArray.length = 1;
-        doRoundtrip(Arguments(nullptr, cstring("ay"), chunk(testData, 5)));
-        testArray.length = 4;
-        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 8)));
-        testArray.length = 8;
-        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 12)));
-        testArray.length = 64;
-        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testData, 68)));
-        doRoundtrip(Arguments(nullptr, cstring("an"), chunk(testData, 68)));
+        testArray.setLength(1);
+        doRoundtrip(Arguments(nullptr, cstring("ay"), chunk(testArray.buffer, 5)));
+        testArray.setLength(4);
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testArray.buffer, 8)));
+        testArray.setLength(8);
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testArray.buffer, 12)));
+        testArray.setLength(64);
+        doRoundtrip(Arguments(nullptr, cstring("ai"), chunk(testArray.buffer, 68)));
+        doRoundtrip(Arguments(nullptr, cstring("an"), chunk(testArray.buffer, 68)));
 
         testArray.data[0] = 0; testArray.data[1] = 0; // zero out padding
         testArray.data[2] = 0; testArray.data[3] = 0;
-        testArray.length = 56;
-        doRoundtrip(Arguments(nullptr, cstring("ad"), chunk(testData, 64)));
+        testArray.setLength(56);
+        doRoundtrip(Arguments(nullptr, cstring("ad"), chunk(testArray.buffer, 64)));
     }
     {
-        LengthPrefixedData testString;
+        LengthPrefixedData testString(200);
         for (int i = 0; i < 200; i++) {
             testString.data[i] = 'A' + i % 53; // stay in the 7-bit ASCII range
         }
-        testString.data[200] = '\0';
-        testString.length = 200;
-        byte *testData = reinterpret_cast<byte *>(&testString);
-        doRoundtrip(Arguments(nullptr, cstring("s"), chunk(testData, 205)));
+        doRoundtrip(Arguments(nullptr, cstring("s"), chunk(testString.buffer, 205)));
     }
     {
-        LengthPrefixedData testDict;
-        testDict.length = 2;
+        LengthPrefixedData testDict(2);
         testDict.data[0] = 0; testDict.data[1] = 0; // zero padding; dict entries are always 8-aligned.
         testDict.data[2] = 0; testDict.data[3] = 0;
 
         testDict.data[4] = 23;
         testDict.data[5] = 42;
-        byte *testData = reinterpret_cast<byte *>(&testDict);
-        doRoundtrip(Arguments(nullptr, cstring("a{yy}"), chunk(testData, 10)));
+        doRoundtrip(Arguments(nullptr, cstring("a{yy}"), chunk(testDict.buffer, 10)));
     }
     {
         byte testData[36] = {
