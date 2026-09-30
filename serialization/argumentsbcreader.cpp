@@ -430,6 +430,10 @@ void ArgumentsBcReader::beginRead()
 
     d->m_dataPtr = d->m_data.ptr;
     d->m_dataEnd = d->m_dataPtr + d->m_data.length;
+    if (uintptr_t(d->m_dataPtr) & 0x07) {
+        m_state = Arguments::InvalidData;
+        d->m_error.setCode(Error::DataNot8ByteAligned);
+    }
 }
 
 const void *ArgumentsBcReader::advanceState()

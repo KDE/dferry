@@ -468,7 +468,7 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
             // allocate the new one before destroying the old one to make sure that the pointer differs
             chunk oldData = shortData;
             shortData.length = std::min(shortData.length + dataIncrement, data.length);
-            shortData.ptr = reinterpret_cast<byte *>(malloc(shortData.length));
+            shortData.ptr = reinterpret_cast<byte *>(aligned_alloc(sizeof(uint64), shortData.length));
             for (uint32 i = 0; i < shortData.length; i++) {
                 shortData.ptr[i] = data.ptr[i];
             }
@@ -1051,7 +1051,7 @@ static void test_roundtrip()
 {
     doRoundtrip(Arguments(nullptr, cstring(""), chunk()));
     {
-        byte data[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+        alignas(uint64) byte data[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
         doRoundtrip(Arguments(nullptr, cstring("i"), chunk(data, 4)));
         doRoundtrip(Arguments(nullptr, cstring("yyyy"), chunk(data, 4)));
         doRoundtrip(Arguments(nullptr, cstring("iy"), chunk(data, 5)));
@@ -1107,7 +1107,7 @@ static void test_roundtrip()
         doRoundtrip(Arguments(nullptr, cstring("a{yy}"), chunk(testDict.buffer, 10)));
     }
     {
-        byte testData[36] = {
+        alignas(uint64) byte testData[36] = {
             5, // variant signature length
             '(', 'y', 'g', 'd', ')', '\0', // signature: struct of: byte, signature (easiest because
                                            //   its length prefix is byte order independent), double
@@ -1123,7 +1123,7 @@ static void test_roundtrip()
     {
         // Spec says: alignment padding after array length, even if the array contains no data. Test this
         // with different types and alignment situations.
-        byte testData[40] = {
+        alignas(uint64) byte testData[40] = {
             0, 0, 0, 0, // length of array of uint64s - zero
             0, 0, 0, 0, // alignment padding to 8 bytes (= natural alignment of uint64)
             // ... zero uint64s ...
@@ -1143,7 +1143,7 @@ static void test_roundtrip()
     }
     {
         // Object path serialization
-        byte testData[20] = {
+        alignas(uint64) byte testData[20] = {
             11,                     // byte
             0, 0, 0,                // padding
 #ifdef BIGENDIAN
@@ -1700,7 +1700,7 @@ static void test_primitiveArray()
     // TODO also test some error cases
 
     static const uint32 testDataSize = 16384;
-    byte testData[testDataSize];
+    alignas(uint64) byte testData[testDataSize];
     for (uint32 i = 0; i < testDataSize; i++) {
         testData[i] = i & 0xff;
     }

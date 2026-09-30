@@ -145,6 +145,7 @@ void ArgumentsReader::beginRead()
     // as a slightly hacky optimizaton, we allow empty Arguments to allocate no space for d->m_buffer.
     if (d->m_signature.length) {
         VALID_IF(Arguments::isSignatureValid(d->m_signature), Error::InvalidSignature);
+        VALID_IF((uintptr_t(d->m_data.ptr) & 0x07) == 0, Error::DataNot8ByteAligned);
     }
     advanceState();
 }

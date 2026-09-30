@@ -57,6 +57,7 @@ public:
         ExcessiveNesting, ///< Arguments nested too deeply
         CannotEndArgumentsWithOpenAggregates, ///< Tried to end writing arguments with unclosed aggregate(s)
         ArgumentsTooLong, ///< Arguments too long to fit into a Message (max 128 MiB)
+        DataNot8ByteAligned, ///< Beginning of data is not aligned to an 8-byte boundary
 
         NotDirectlyInVariant, ///< Variant is not the current ("top of stack") aggregate
         NotSingleCompleteTypeInVariant, ///< Type in variant is not a single complete type

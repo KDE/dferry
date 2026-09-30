@@ -108,7 +108,7 @@ static void test_arrayLength()
 static void test_argumentsLength()
 {
     static const uint32 bufferSize = Arguments::MaxArrayLength + 1024;
-    byte *buffer = static_cast<byte *>(malloc(bufferSize));
+    byte *buffer = static_cast<byte *>(aligned_alloc(sizeof(uint64), bufferSize));
     memset(buffer, 0, bufferSize);
 
     // Gross max length violations should be caught early
