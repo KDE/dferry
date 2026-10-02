@@ -328,9 +328,11 @@ Arguments::Arguments()
 }
 
 /// Constructs an Arguments instance from serialized data.
-/// \param memOwnership If this is non-null, the Arguments "owns" that memory and will delete it
-///                     in its destructor. It is assumed but not checked that signature and data
-///                     point to memory inside \p memOwnership.
+/// \param memOwnership If this is non-null, it must point to a malloc()ed block of memory that contains
+///                     signature and data.
+///                     The created Arguments takes ownership of that memory.
+///                     If this is nullptr, it is assumed that @p signature and @p data live in "borrowed"
+///                     memory and you need to make sure that the memory lives as long as the Arguments.
 /// \param signature The type signature for the arguments
 /// \param data The payload data buffer for the arguments
 /// \param isByteSwapped Whether the payload data is byte-swapped relative to the current platform
@@ -344,9 +346,12 @@ Arguments::Arguments(byte *memOwnership, cstring signature, chunk data, bool isB
 }
 
 /// Constructs an Arguments instance from serialized data.
-/// \param memOwnership If this is non-null, this %Arguments instance owns that memory and will
-///                     delete it in its destructor. It is assumed but not checked that signature
-///                     and data point to memory inside \p memOwnership.
+/// \param memOwnership This is a performance feature to transfer ownership of data instead of copying it.
+///                     If this is non-null, it must point to a malloc()ed block of memory that contains
+///                     signature and data.
+///                     The created Arguments takes ownership of that memory.
+///                     If this is nullptr, it is assumed that @p signature and @p data live in "borrowed"
+///                     memory and you need to make sure that the memory lives as long as the Arguments.
 /// \param signature The type signature for the arguments
 /// \param data The payload data buffer for the arguments
 /// \param fileDescriptors File descriptors array belonging to the arguments
@@ -639,7 +644,6 @@ static void chopFirst(cstring *s)
 /// \returns whether \p string is a valid DBus string
 /// Validation criteria are: Length not greater than maximum, has null terminator,
 /// optionally (toggled by \p checkUtf8) valid UTF-8 and no null bytes before the end.
-/// \param checkUtf8
 // static
 bool Arguments::isStringValid(cstring string, bool checkUtf8)
 {

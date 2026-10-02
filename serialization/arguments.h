@@ -56,18 +56,15 @@ public:
         VariantSignature ///< Signature of a variant, must contain exactly one single complete type
     };
 
-    enum
-    {
-        MaxSignatureLength = 255, ///< Maximum length of a DBus type signature according to spec
-        MaxArrayLength = 1 << 26, ///< Maximum length of a DBus array according to spec (64 MiB)
-        MaxMessageLength = 1 << 27 ///< Maximum length of a DBus message according to spec (128 MiB)
-        // MaxMessageLength applies to a full Message (and it IS checked in Message when the message is
-        // complete), which also implies a max size for Arguments. Instead of working out the exact minimum
-        // size of the header part of a Message (which depends on too many variables), just allow the max
-        // Message length as max Arguments length.
-        // The way the limit is defined in the spec seems tied a bit too closely to the design of
-        // libdbus-1, which conflates Arguments and Message.
-    };
+    static constexpr uint32 MaxSignatureLength = 255; ///< Maximum length of a DBus type signature according to spec
+    static constexpr uint32 MaxArrayLength = 1 << 26; ///< Maximum length of a DBus array according to spec (64 MiB)
+    static constexpr uint32 MaxMessageLength = 1 << 27; ///< Maximum length of a DBus message according to spec (128 MiB)
+    // MaxMessageLength applies to a full Message (and it IS checked in Message when the message is
+    // complete), which also implies a max size for Arguments. Instead of working out the exact minimum
+    // size of the header part of a Message (which depends on too many variables), just allow the max
+    // Message length as max Arguments length.
+    // The way the limit is defined in the spec seems tied a bit too closely to the design of
+    // libdbus-1, which conflates Arguments and Message.
 
     /// State of serialization or deserialization
     enum IoState : byte
@@ -116,24 +113,18 @@ public:
         LastState
     };
 
+    /// Options for type signature preprocessing into FerCode
     enum class FerEncodeOptions
     {
-        None = 0,
-        ElideStructs
+        None = 0, ///< Normal behavior
+        ElideStructs ///< Elide structs. There will be no BeginStruct and EndStruct states and no need to
+                     ///  call beginStruct() or endStruct(). This is faster than having them and takes less
+                     ///  code to handle, but can be confusing.
     };
 
-
-    // Constructs an empty argument list
     Arguments();
 
-    // Constructs an argument list to deserialize data in @p data with signature @p signature;
-    // if memOwnership is non-null, this means that signature and data's memory is contained in
-    // a malloc()ed block starting at memOwnership, and ~Arguments will free it.
-    // Otherwise, the instance assumes that @p signature and @p data live in "borrowed" memory and
-    // you need to make sure that the memory lives as long as the Arguments.
-    // (A notable user of this is Message - you can only get a const ref to its internal Arguments
-    //  so you need to copy to take the Arguments away from the Message, which copies out of the
-    //  borrowed memory into heap memory so the copy is safe)
+    // TODO probably mention this in copy and assignment ctor / operator.
     // The copy constructor and assignment operator will always copy the data, so copying is safe
     // regarding memory correctness but has a significant performance impact.
     Arguments(byte *memOwnership, cstring signature, chunk data, bool isByteSwapped = false);
@@ -142,11 +133,9 @@ public:
     Arguments(byte *memOwnership, cstring signature, chunk data,
               std::vector<int> fileDescriptors, bool isByteSwapped = false);
 
-    // use these wherever possible if you care at all about efficiency!!
     Arguments(Arguments &&other);
     Arguments &operator=(Arguments &&other);
 
-    // copying needs special treatment due to the d-pointer
     Arguments(const Arguments &other);
     Arguments &operator=(const Arguments &other);
 

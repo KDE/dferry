@@ -68,20 +68,6 @@ public:
         ReadTypesOnlyIfEmpty ///< Do one pass through the array to get the types
     };
 
-    // Start reading an array. @p option changes behavior in case the array is empty, i.e. it has
-    // zero elements. Empty arrays still contain types, which may be of interest.
-    // If @p option == SkipIfEmpty, empty arrays will work according to the usual rules:
-    // you call nextArrayEntry() and it returns false, you call endArray() and proceed to the next
-    // value or aggregate.
-    // If @p option == ReadTypesOnlyIfEmpty, you will be taken on a single iteration through the array
-    // if it is empty, which makes it possible to extract the type(s) of data inside the array. In
-    // that mode, all data returned from read...() is undefined and should be discarded. Only use state()
-    // to get the types and call read...() purely to move from one type to the next.
-    // Empty arrays are handled that way for symmetry with regular data extraction code so that very
-    // similar code can handle empty and nonempty arrays.
-    //
-    // The return value is false if the array is empty (has 0 elements), true if it has >= 1 elements.
-    // The return value is not affected by @p option.
     bool beginArray(EmptyArrayOption option = SkipIfEmpty);
     void skipArray(); // skips the current array; only  call this in state BeginArray!
     void endArray(); // leaves the current array; only  call this in state EndArray!
@@ -123,19 +109,8 @@ public:
     void skipCurrentElement(); // works on single values and Begin... states. In the Begin... states,
                                 // skips the whole aggregate.
 
-    // Returns primitive type and the raw array data if in BeginArray state of an array containing only a
-    // primitive type. You must copy the data before destroying the Reader or changing its backing store
-    // with replaceData().
-    // If the array is empty, that does not constitute a special case with this function: It will return
-    // the type in the first return value as usual and an empty chunk in the second return value.
     // (### it might be possible to extend this feature to all fixed-length types including structs)
     std::pair<Arguments::IoState, chunk> readPrimitiveArray();
-    // In state BeginArray, check if the array is a primitive array, in order to check whether to use
-    // readPrimitiveArray(). Returns a primitive type if readPrimitiveArray() will succeed, BeginArray
-    // if the array is not primitive, InvalidData if state is not BeginArray. The latter will not put
-    // the reader in InvalidData state.
-    // If option is SkipIfEmpty, an empty array of primitives will result in a return value of BeginArray
-    // instead of the type of primitive.
     Arguments::IoState peekPrimitiveArray(EmptyArrayOption option = SkipIfEmpty) const;
 
 #ifdef WITH_DICT_ENTRY

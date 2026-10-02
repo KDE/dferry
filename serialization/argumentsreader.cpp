@@ -53,8 +53,7 @@ thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
     \see Arguments
 */
 
-/** Constructs an %ArgumentsReader to read arguments from \p args.
- */
+/// Constructs an %ArgumentsReader to read arguments from \p args.
 ArgumentsReader::ArgumentsReader(const Arguments &args)
    : d(new(allocCache.allocate()) Private),
      m_state(Arguments::NotStarted)
@@ -63,10 +62,8 @@ ArgumentsReader::ArgumentsReader(const Arguments &args)
     beginRead();
 }
 
-/** Constructs an %ArgumentsReader to read arguments from \p msg.
-
-    This is a convenience constructor that just avoids calling msg->arguments().
- */
+/// Constructs an %ArgumentsReader to read arguments from \p msg.
+/// This is a convenience constructor that just avoids calling msg->arguments().
 ArgumentsReader::ArgumentsReader(const Message &msg)
    : d(new(allocCache.allocate()) Private),
      m_state(Arguments::NotStarted)
@@ -679,6 +676,12 @@ std::pair<Arguments::IoState, chunk> ArgumentsReader::readPrimitiveArray()
     return ret;
 }
 
+/// In state BeginArray, checks if the array is a primitive array, in order to check whether to use
+/// readPrimitiveArray(). Returns a primitive type if readPrimitiveArray() will succeed, BeginArray
+/// if the array is not primitive, InvalidData if state is not BeginArray. The latter will not put
+/// the reader in InvalidData state.
+/// If option is SkipIfEmpty, an empty array of primitives will result in a return value of BeginArray
+/// instead of the type of primitive.
 Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) const
 {
     // almost duplicated from readPrimitiveArray(), so keep it in sync

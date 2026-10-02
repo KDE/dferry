@@ -114,7 +114,8 @@ static const char s_nullBuffer[16] {}; // inert fake data for callers when readi
     \see Arguments
 */
 
-// TODO must memoize signature -> FerCode to amortize its generation and get a real performance benefit
+/// Constructs an %ArgumentsBcReader to read arguments from \p args. A preprocessed type signature according
+/// to \p encodeOptions is taken from a thread-local cache or created if necessery.
 ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncodeOptions encodeOptions)
     : d(new Private)
 {
@@ -124,6 +125,9 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncode
     beginRead();
 }
 
+/// Constructs an %ArgumentsBcReader to read arguments from \p msg. A preprocessed type signature according
+/// to \p encodeOptions is taken from a thread-local cache or created if necessery.
+/// This is a convenience constructor that just avoids calling msg->arguments().
 ArgumentsBcReader::ArgumentsBcReader(const Message &msg, Arguments::FerEncodeOptions encodeOptions)
     : d(new Private)
 {
@@ -134,6 +138,8 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, Arguments::FerEncodeOpt
     beginRead();
 }
 
+/// Constructs an %ArgumentsBcReader to read arguments from \p args, using a prep-processed type signature
+/// in \p ferCode.
 #ifdef HAVE_BOOST
 ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
 #else
@@ -147,6 +153,9 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, std::shared_ptr<std:
     beginRead();
 }
 
+/// Constructs an %ArgumentsReader to read arguments from \p msg, using a prep-processed type signature
+/// in \p ferCode.
+/// This is a convenience constructor that just avoids calling msg->arguments().
 #ifdef HAVE_BOOST
 ArgumentsBcReader::ArgumentsBcReader(const Message &msg, boost::local_shared_ptr<std::vector<FerCode>> ferCode)
 #else
@@ -160,6 +169,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, std::shared_ptr<std::ve
     beginRead();
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 ArgumentsBcReader::ArgumentsBcReader(ArgumentsBcReader &&other)
     : m_state(other.m_state),
       d(other.d)
@@ -167,6 +177,7 @@ ArgumentsBcReader::ArgumentsBcReader(ArgumentsBcReader &&other)
     other.d = nullptr;
 }
 
+/// Copies \p other with all of its state, including read position.
 ArgumentsBcReader::ArgumentsBcReader(const ArgumentsBcReader &other)
     : m_state(other.m_state),
       d(nullptr)
@@ -177,6 +188,7 @@ ArgumentsBcReader::ArgumentsBcReader(const ArgumentsBcReader &other)
     }
 }
 
+/// Takes ownership of \p other's data and makes \p other invalid.
 void ArgumentsBcReader::operator=(ArgumentsBcReader &&other)
 {
     if (&other == this) {
@@ -191,6 +203,7 @@ void ArgumentsBcReader::operator=(ArgumentsBcReader &&other)
     other.d = nullptr;
 }
 
+/// Copies \p other with all of its state, including read position.
 void ArgumentsBcReader::operator=(const ArgumentsBcReader &other)
 {
     if (&other == this) {
@@ -239,10 +252,8 @@ bool ArgumentsBcReader::validatesUtf8() const
     return d->m_validateUtf8;
 }
 
-bool ArgumentsBcReader::beginArrayInternal(EmptyArrayOption option)
+bool ArgumentsBcReader::beginArrayInternal()
 {
-    (void)option; // TODO
-
     FerOp ferOp = d->m_opsPtr->op;
     d->m_opsPtr++;
 
@@ -331,14 +342,16 @@ bool ArgumentsBcReader::beginArrayInternal(EmptyArrayOption option)
     }
 }
 
-bool ArgumentsBcReader::beginArray(EmptyArrayOption option)
+/// Starts reading an array.
+/// \returns false if the array is empty (has 0 elements), true if it has >= 1 elements.
+bool ArgumentsBcReader::beginArray()
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
         m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
-    return beginArrayInternal(option);
+    return beginArrayInternal();
 }
 
 /// Ends reading an array.
@@ -350,18 +363,20 @@ void ArgumentsBcReader::endArray()
     advanceState();
 }
 
-bool ArgumentsBcReader::beginDict(EmptyArrayOption option)
+/// Starts reading a dict.
+/// \returns false if the array is empty (has 0 elements), true if it has >= 1 elements.
+bool ArgumentsBcReader::beginDict()
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
         m_state = Arguments::InvalidData;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
-    return beginArrayInternal(option);
+    return beginArrayInternal();
 }
 
 /// Ends reading a dict.
-/// Leaves the dict. Required state: Arguments::EndDict.
+/// Required state: Arguments::EndDict.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endDict()
 {
