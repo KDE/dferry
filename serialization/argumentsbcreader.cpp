@@ -453,7 +453,7 @@ void ArgumentsBcReader::beginRead()
 
 const void *ArgumentsBcReader::advanceState()
 {
-    if (unlikely(m_state == Arguments::InvalidData || m_state == Arguments::Finished)) { // nonrecoverable...
+    if (unlikely(m_state <= Arguments::InvalidData)) { // nonrecoverable...
         return s_nullBuffer;
     }
 

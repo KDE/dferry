@@ -536,7 +536,7 @@ void ArgumentsWriter::advanceState(cstring signatureFragment, Arguments::IoState
 
     d->reserveData(d->m_dataPosition, &m_state);
     // this check is not only for reserveData, but also pre-existing errors
-    if (unlikely(m_state == Arguments::InvalidData)) {
+    if (unlikely(m_state <= Arguments::InvalidData)) {
         return;
     }
 

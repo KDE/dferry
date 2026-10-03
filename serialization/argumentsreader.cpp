@@ -56,7 +56,7 @@ thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 /// Constructs an %ArgumentsReader to read arguments from \p args.
 ArgumentsReader::ArgumentsReader(const Arguments &args)
    : d(new(allocCache.allocate()) Private),
-     m_state(Arguments::NotStarted)
+     m_state(Arguments::AnyData) // will be set appropriately by beginRead() -> advanceState()
 {
     d->m_argsPriv = Arguments::Private::of(&args);
     beginRead();
@@ -66,7 +66,7 @@ ArgumentsReader::ArgumentsReader(const Arguments &args)
 /// This is a convenience constructor that just avoids calling msg->arguments().
 ArgumentsReader::ArgumentsReader(const Message &msg)
    : d(new(allocCache.allocate()) Private),
-     m_state(Arguments::NotStarted)
+     m_state(Arguments::AnyData) // will be set appropriately by beginRead() -> advanceState()
 {
     d->m_argsPriv = Arguments::Private::of(&msg.arguments());
     beginRead();
@@ -318,7 +318,7 @@ void ArgumentsReader::advanceState()
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
 
-    if (unlikely(m_state == Arguments::InvalidData)) { // nonrecoverable...
+    if (unlikely(m_state <= Arguments::InvalidData)) { // nonrecoverable...
         return;
     }
     // can't do the following because a dict is one aggregate in our counting, but two according to
