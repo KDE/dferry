@@ -26,10 +26,12 @@
 
 #include "connection.h"
 
+/// An interface to listen for changes of Connection state
 class DFERRY_EXPORT IConnectionStateListener
 {
 public:
     virtual ~IConnectionStateListener();
+    /// Reimplement this to get notified about state changes of \p connection
     virtual void handleConnectionChanged(Connection *connection,
                                          Connection::State oldState, Connection::State newState) = 0;
 };

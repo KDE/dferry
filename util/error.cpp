@@ -12,6 +12,22 @@
     facilitate error chaining.
 */
 
+/// Creates an Error with error code NoError.
+/// \fn Error::Error()
+
+/// Creates an Error with error code \p code.
+/// \fn Error::Error(Code code)
+
+/// Sets this Error's error code
+/// \fn void Error::setCode(Code code)
+
+/// \returns this Error's error code
+/// \fn Code Error::code() const { return m_code; }
+
+/// \fn bool Error::isError() const
+/// \returns whether this Error's error code signifies an actual error (i.e. it's not NoError)
+
+/// \returns a string representation of this Error's error code.
 std::string Error::message() const
 {
     // TODO looking up a yet to be written string from error code goes here
