@@ -624,32 +624,14 @@ const void *ArgumentsBcReader::advanceState()
 
     m_state = ferOp.ioState;
 
-    const byte *unalignedNewPtr;
-    switch(ferOp.postAlignExponent) {
-    case 0:
-        // fast path for this hopefully common case
+    if (!ferOp.postAlignExponent) {
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-        d->m_dataPtr = newPtr;
-        return ret;
-
-    case 1:
-        unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 2);
-        break;
-    case 2:
-        unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 4);
-        break;
-    case 3:
-        unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 8);
-        break;
-    default:
-        unreachable();
+    } else {
+        const byte *unalignedNewPtr = newPtr;
+        newPtr = align(newPtr, 1 << ferOp.postAlignExponent);
+        VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
+                 Error::MalformedMessageData);
     }
-
-    VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
-             Error::MalformedMessageData);
 
     d->m_dataPtr = newPtr;
     return ret;
