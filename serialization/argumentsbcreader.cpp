@@ -611,6 +611,10 @@ const void *ArgumentsBcReader::advanceState()
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
             ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
             ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
+        } else {
+            // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
+            // not this one! That allows us to do nothing in this branch.
+            assert(ferOp.postAlignExponent == 0);
         }
     }
 

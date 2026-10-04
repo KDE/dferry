@@ -1452,6 +1452,17 @@ static void test_alignmentAfterArray()
         Arguments arg = writer.finish();
         doRoundtrip(arg);
     }
+    {
+        ArgumentsWriter writer;
+        writer.beginArray();
+            writer.beginStruct();
+                writer.writeByte(10);
+            writer.endStruct();
+        writer.endArray();
+        writer.writeByte(1);
+        Arguments arg = writer.finish();
+        doRoundtrip(arg);
+    }
 }
 
 static void test_repeatArrayReaderState()
