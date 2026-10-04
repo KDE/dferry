@@ -98,7 +98,7 @@ private:
 static inline const byte *align(const byte *index, uintptr_t alignment)
 {
     // it also works with 1, but makes no sense
-    if (alignment < 2) {
+    if (alignment < 2 || alignment > 8) {
         unreachable();
     }
     const uintptr_t maxStepUp = alignment - 1;

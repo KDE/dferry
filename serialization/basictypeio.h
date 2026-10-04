@@ -30,6 +30,9 @@
 
 static inline uint32 align(uint32 index, uint32 alignment)
 {
+    if (alignment < 1 || alignment > 8) {
+        unreachable();
+    }
     const uint32 maxStepUp = alignment - 1;
     return (index + maxStepUp) & ~maxStepUp;
 }
