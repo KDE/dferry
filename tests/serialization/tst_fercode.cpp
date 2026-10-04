@@ -109,7 +109,7 @@ static void test_arrayEncode()
         FerOp{3, FerOpcode::BeginArray, Arguments::Int64},
         FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
         FerOp{0, FerOpcode::EndArray, Arguments::ObjectPath},
-        FerRepeatArray{0, 2},
+        FerRepeatArray{0, 0, 2},
         FerOp{2, FerOpcode::ObjectPath, Arguments::ObjectPath},
         FerOp{0, FerOpcode::ObjectPath, Arguments::Finished},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
@@ -121,7 +121,7 @@ static void test_arrayEncode()
         FerOp{0, FerOpcode::Copy4, Arguments::String},
         FerOp{0, FerOpcode::String, Arguments::EndDict},
         FerOp{0, FerOpcode::EndArray, Arguments::Finished},
-        FerRepeatArray{3, 2},
+        FerRepeatArray{3, 0, 2},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 
     ops = ferCodeForSignature(cstring("a(ad)"));
@@ -132,10 +132,10 @@ static void test_arrayEncode()
         FerOp{3, FerOpcode::BeginArray, Arguments::Double},
         FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
         FerOp{0, FerOpcode::EndArray, Arguments::EndStruct},
-        FerRepeatArray{0, 4},
+        FerRepeatArray{0, 0, 4},
         FerOp{0, FerOpcode::Copy0, Arguments::EndArray},
         FerOp{0, FerOpcode::EndArray, Arguments::Finished},
-        FerRepeatArray{0, 2},
+        FerRepeatArray{0, 0, 2},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
 }
 

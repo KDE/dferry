@@ -30,26 +30,29 @@ enum FerOpcode : byte
     End,
 };
 
-struct FerOp
+struct alignas(4) FerOp
 {
-    byte postAlignExponent : 2; // this is for the *following* element!
-    FerOpcode op : 6;
+    byte postAlignExponent; // this is for the *following* element!
+    FerOpcode op;
     Arguments::IoState ioState;
+    byte padding = 0;
 };
 
-struct FerRepeatArray
+struct alignas(4) FerRepeatArray
 {
-    byte goBackAlignExponent : 2;
-    uint16 goBackOpIndex : 14;
+    byte goBackAlignExponent;
+    byte padding = 0;
+    uint16 goBackOpIndex;
 };
 
-struct FerNesting
+struct alignas(4) FerNesting
 {
     byte arrayDepth;
     byte parenDepth;
+    uint16 padding = 0;
 };
 
-union FerCode
+union alignas(4) FerCode
 {
     FerCode(FerOp o) : op{o} {}
     FerCode(FerRepeatArray a) : repeatArray{a} {}

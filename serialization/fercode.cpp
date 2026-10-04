@@ -247,7 +247,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
         nest->endArray();
 
         // Instruction: rewind signature to this position for the next element of the array
-        out->push_back(FerRepeatArray{0 /*to be patched in later*/, static_cast<uint16>(goBackIndex)});
+        out->push_back(FerRepeatArray{0 /*to be patched in later*/, 0, static_cast<uint16>(goBackIndex)});
 
         return true; }
     default:
@@ -726,7 +726,7 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
 
             addrSet = arrayAlign.afterContentsAddrSet;
 
-            (*ops)[i] = FerRepeatArray{loopBackAlignExponent, static_cast<uint16>(goBackIndex)};
+            (*ops)[i] = FerRepeatArray{loopBackAlignExponent, 0, static_cast<uint16>(goBackIndex)};
 
             if (beginArrayIndexes.empty()) {
                 // leaving the outermost level of nested array, we won't need that anymore
