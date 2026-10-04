@@ -597,12 +597,6 @@ const void *ArgumentsBcReader::advanceState()
     // need to call anything like nextArrayElement() to immediately read the next element.
     // Probably not great for performance!
     if (ferOp.ioState == Arguments::EndArray || ferOp.ioState == Arguments::EndDict) {
-        // TODO??? the cursed nil array thing... maybe remove some conditionals by supplying an 8 byte buffer
-        // of nulls to read data from and always reset to its beginning after every read.
-
-        assert(newPtr <= d->m_dataEnd);
-        // (TODO catch newPtr > d->m_dataEnd for *all* reads)
-
         if (newPtr < d->m_dataEnd) {
             const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
 
@@ -612,9 +606,16 @@ const void *ArgumentsBcReader::advanceState()
             ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
             ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
         } else {
+            // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
+            // will be handled shortly by the VALID_IFs below)
             // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
-            // not this one! That allows us to do nothing in this branch.
+            // not this one! That is for the best because m_dataEnd is still the end of the array here,
+            // not data outside of the array, so advancing the data pointer through alignment would
+            // produce an out of bounds error.
             assert(ferOp.postAlignExponent == 0);
+            if (ferOp.postAlignExponent) {
+                unreachable();
+            }
         }
     }
 
