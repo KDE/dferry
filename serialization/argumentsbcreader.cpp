@@ -609,16 +609,8 @@ const void *ArgumentsBcReader::advanceState()
             // "another round"
             d->m_opsPtr = &(*d->m_ops)[0] + repeatArrayData.goBackOpIndex;
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
-            if (!repeatArrayData.goBackAlignExponent) {
-                // fast path
-                m_state = (d->m_opsPtr - 1)->op.ioState;
-                d->m_dataPtr = newPtr;
-                return ret;
-            } else {
-                ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
-                ferOp.op = FerOpcode::Copy0; // ignored, set just to avoid bit masking work (set a whole byte)
-                ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
-            }
+            ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
+            ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
         }
     }
 
