@@ -485,7 +485,7 @@ const void *ArgumentsBcReader::advanceState()
         break;
     case FerOpcode::String: {
         // ### maybe do content validation after alignment to next element and data length check to avoid
-        // length-checking twice. But we do need to check max string length, for String only though!
+        // length-checking twice. But we do need to check max string length for String and ObjectPath!
         newPtr += sizeof(uint32);
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
         uint32 len = *reinterpret_cast<const uint32 *>(ret);
@@ -577,7 +577,7 @@ const void *ArgumentsBcReader::advanceState()
         // if (ferOp.ioState == Arguments::EndArray)
         assert(newPtr == d->m_dataEnd);
 
-        d->m_opsPtr++; // skip endArrayData
+        d->m_opsPtr++; // skip FerRepeatArray
         d->m_dataEnd = d->m_arrayLengthStack.back();
         d->m_arrayLengthStack.pop_back();
         break; }
@@ -608,8 +608,8 @@ const void *ArgumentsBcReader::advanceState()
             // will be handled shortly by the VALID_IFs below)
             // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
             // not this one! That is for the best because m_dataEnd is still the end of the array here,
-            // not data outside of the array, so advancing the data pointer through alignment would
-            // produce an out of bounds error.
+            // not of all data, so advancing the data pointer through alignment would produce a (usually)
+            // spurious out of bounds error.
             assert(ferOp.postAlignExponent == 0);
             if (ferOp.postAlignExponent) {
                 unreachable();
