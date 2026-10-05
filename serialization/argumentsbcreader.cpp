@@ -476,14 +476,12 @@ const void *ArgumentsBcReader::advanceState()
 
     switch (ferOp.op) {
     case FerOpcode::Copy0:
-        // BeginStruct / EndStruct would be such a case. Alignment was in the previous FerOp and nothing
-        // else really happens here, but we still need a new IoState "BeginStruct" for the client.
-        // ### Maybe "return ret;" directly?
+        break;
     case FerOpcode::Copy1:
     case FerOpcode::Copy2:
     case FerOpcode::Copy4:
     case FerOpcode::Copy8:
-        newPtr += 8 >> (4 - uint32(ferOp.op));
+        newPtr += 1 << uint32(ferOp.op);
         break;
     case FerOpcode::String: {
         // ### maybe do content validation after alignment to next element and data length check to avoid

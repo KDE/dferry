@@ -6,11 +6,11 @@
 
 enum FerOpcode : byte
 {
-    Copy0 = 0,// No-op (for e.g. IoState BeginStruct and EndStruct, which only align and change state)
-    Copy1,
-    Copy2,
+    Copy1 = 0,  // This arrangement of CopyN values allows the expression 1 << uint32(CopyN)
+    Copy2,      // to determine the copy size
     Copy4,
     Copy8,
+    Copy0,      // No-op (for e.g. IoState BeginStruct and EndStruct, which only align and change state)
     String,
     ObjectPath,
     Signature,
