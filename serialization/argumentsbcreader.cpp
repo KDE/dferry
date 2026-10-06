@@ -596,7 +596,7 @@ const void *ArgumentsBcReader::advanceState()
     // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
     // need to call anything like nextArrayElement() to immediately read the next element.
     // Probably not great for performance!
-    if (ferOp.ioState == Arguments::EndArray || ferOp.ioState == Arguments::EndDict) {
+    if (ferOp.isLastOfArray) {
         if (newPtr < d->m_dataEnd) {
             const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
 

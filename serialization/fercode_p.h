@@ -35,7 +35,7 @@ struct alignas(4) FerOp
     byte postAlignExponent; // this is for the *following* element!
     FerOpcode op;
     Arguments::IoState ioState;
-    byte padding = 0;
+    bool isLastOfArray = false; // could use ioState or the next FerOp, but this simplifies the check
 };
 
 struct alignas(4) FerRepeatArray

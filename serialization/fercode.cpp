@@ -380,8 +380,12 @@ static std::string printableAlignExponent(byte exponent)
 
 static std::string printableFerOp(FerOp op)
 {
-    return printableAlignExponent(op.postAlignExponent) + printableOpcode(op.op) + " " +
-           printableState(op.ioState).ptr;
+    std::string ret = printableAlignExponent(op.postAlignExponent) + printableOpcode(op.op) + " " +
+                      printableState(op.ioState).ptr;
+    if (op.isLastOfArray) {
+        ret.append(" isLastOfArray");
+    }
+    return ret;
 }
 
 std::string printableFerOps(const std::vector<FerCode>& ops)
@@ -662,6 +666,10 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
             // after it (note that we're left shifting) becomes the new target for alignment merging.
             prevAlignIndex = i;
         }
+        if (ferOp.op == FerOpcode::EndArray) {
+            (*ops)[prevIoStateIndex].op.isLastOfArray = true;
+        }
+
         prevIoStateIndex = i;
 
 

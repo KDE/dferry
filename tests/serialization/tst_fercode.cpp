@@ -106,7 +106,7 @@ static void test_arrayEncode()
     ops = ferCodeForSignature(cstring("axoo"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{0, FerOpcode::BeginMethodSignature, Arguments::BeginArray},
-        FerOp{3, FerOpcode::BeginArray, Arguments::Int64},
+        FerOp{3, FerOpcode::BeginArray, Arguments::Int64, true},
         FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
         FerOp{0, FerOpcode::EndArray, Arguments::ObjectPath},
         FerRepeatArray{0, 0, 2},
@@ -119,7 +119,7 @@ static void test_arrayEncode()
         FerOp{0, FerOpcode::BeginMethodSignature, Arguments::BeginDict},
         FerOp{3, FerOpcode::BeginArray, Arguments::Int32},
         FerOp{0, FerOpcode::Copy4, Arguments::String},
-        FerOp{0, FerOpcode::String, Arguments::EndDict},
+        FerOp{0, FerOpcode::String, Arguments::EndDict, true},
         FerOp{0, FerOpcode::EndArray, Arguments::Finished},
         FerRepeatArray{3, 0, 2},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
@@ -130,10 +130,10 @@ static void test_arrayEncode()
         FerOp{3, FerOpcode::BeginArray, Arguments::BeginStruct},
         FerOp{0, FerOpcode::Copy0, Arguments::BeginArray},
         FerOp{3, FerOpcode::BeginArray, Arguments::Double},
-        FerOp{0, FerOpcode::Copy8, Arguments::EndArray},
+        FerOp{0, FerOpcode::Copy8, Arguments::EndArray, true},
         FerOp{0, FerOpcode::EndArray, Arguments::EndStruct},
         FerRepeatArray{0, 0, 4},
-        FerOp{0, FerOpcode::Copy0, Arguments::EndArray},
+        FerOp{0, FerOpcode::Copy0, Arguments::EndArray, true},
         FerOp{0, FerOpcode::EndArray, Arguments::Finished},
         FerRepeatArray{0, 0, 2},
         FerOp{0, FerOpcode::End, Arguments::InvalidData}}));
