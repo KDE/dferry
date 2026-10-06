@@ -603,7 +603,7 @@ const void *ArgumentsBcReader::advanceState()
             // "another round"
             d->m_opsPtr = d->m_opsBase + repeatArrayData.goBackOpIndex;
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
-            ferOp.ioState = (d->m_opsPtr - 1)->op.ioState;
+            m_state = (d->m_opsPtr - 1)->op.ioState;
             ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
         } else {
             // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
@@ -616,10 +616,11 @@ const void *ArgumentsBcReader::advanceState()
             if (ferOp.postAlignExponent) {
                 unreachable();
             }
+            m_state = ferOp.ioState;
         }
+    } else {
+        m_state = ferOp.ioState;
     }
-
-    m_state = ferOp.ioState;
 
     if (!ferOp.postAlignExponent) {
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
