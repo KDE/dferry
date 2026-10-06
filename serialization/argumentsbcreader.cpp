@@ -593,6 +593,8 @@ const void *ArgumentsBcReader::advanceState()
         break;
     }
 
+    uint32_t postAlignExponent = ferOp.postAlignExponent;
+
     // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
     // need to call anything like nextArrayElement() to immediately read the next element.
     // Probably not great for performance!
@@ -604,7 +606,7 @@ const void *ArgumentsBcReader::advanceState()
             d->m_opsPtr = d->m_opsBase + repeatArrayData.goBackOpIndex;
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
             m_state = (d->m_opsPtr - 1)->op.ioState;
-            ferOp.postAlignExponent = repeatArrayData.goBackAlignExponent;
+            postAlignExponent = repeatArrayData.goBackAlignExponent;
         } else {
             // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
             // will be handled shortly by the VALID_IFs below)
@@ -612,8 +614,8 @@ const void *ArgumentsBcReader::advanceState()
             // not this one! That is for the best because m_dataEnd is still the end of the array here,
             // not of all data, so advancing the data pointer through alignment would produce a (usually)
             // spurious out of bounds error.
-            assert(ferOp.postAlignExponent == 0);
-            if (ferOp.postAlignExponent) {
+            assert(postAlignExponent == 0);
+            if (postAlignExponent) {
                 unreachable();
             }
             m_state = ferOp.ioState;
@@ -622,11 +624,11 @@ const void *ArgumentsBcReader::advanceState()
         m_state = ferOp.ioState;
     }
 
-    if (!ferOp.postAlignExponent) {
+    if (!postAlignExponent) {
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
     } else {
         const byte *unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 1 << ferOp.postAlignExponent);
+        newPtr = align(newPtr, 1 << postAlignExponent);
         VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
                  Error::MalformedMessageData);
     }
