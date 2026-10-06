@@ -148,22 +148,22 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             break;
         }
 
-        out->push_back(FerOp{alignExponent, opcode, ty.state()});
+        out->push_back(FerOp{opcode, alignExponent, ty.state()});
 
         chopFirst(s);
         return true; }
     case 's':
-        out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::String, Arguments::String});
+        out->push_back(FerOp{FerOpcode::String, 2 /*align 4 for length field*/, Arguments::String});
 
         chopFirst(s);
         return true;
     case 'o':
-        out->push_back(FerOp{2, FerOpcode::ObjectPath, Arguments::ObjectPath});
+        out->push_back(FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath});
 
         chopFirst(s);
         return true;
     case 'g':
-        out->push_back(FerOp{0, FerOpcode::Signature, Arguments::Signature});
+        out->push_back(FerOp{FerOpcode::Signature, 0, Arguments::Signature});
 
         chopFirst(s);
         return true;
@@ -172,7 +172,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             return false;
         }
 
-        out->push_back(FerOp{0, FerOpcode::EnterVariant, Arguments::BeginVariant});
+        out->push_back(FerOp{FerOpcode::EnterVariant, 0, Arguments::BeginVariant});
         out->push_back(FerNesting{static_cast<byte>(nest->array), static_cast<byte>(nest->paren)});
 
         chopFirst(s);
@@ -183,7 +183,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             return false;
         }
 
-        out->push_back(FerOp{3 /* 8 byte alignment */, FerOpcode::Copy0, Arguments::BeginStruct});
+        out->push_back(FerOp{FerOpcode::Copy0, 3 /* 8 byte alignment */, Arguments::BeginStruct});
 
         chopFirst(s);
         bool isEmptyStruct = true;
@@ -194,7 +194,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             return false;
         }
 
-        out->push_back(FerOp{0, FerOpcode::Copy0, Arguments::EndStruct});
+        out->push_back(FerOp{FerOpcode::Copy0, 0, Arguments::EndStruct});
 
         chopFirst(s);
         nest->endParen();
@@ -213,7 +213,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             }
             chopFirst(s);
 
-            out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::BeginArray, Arguments::BeginDict});
+            out->push_back(FerOp{FerOpcode::BeginArray, 2 /*align 4 for length field*/, Arguments::BeginDict});
 
             // key must be a basic type
             if (!ferEncodeBasicType(s, nest, out)) {
@@ -234,15 +234,15 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             chopFirst(s);
             nest->endParen();
 
-            out->push_back(FerOp{0, FerOpcode::EndArray, Arguments::EndDict});
+            out->push_back(FerOp{FerOpcode::EndArray, 0, Arguments::EndDict});
         } else { // regular array
-            out->push_back(FerOp{2 /*align 4 for length field*/, FerOpcode::BeginArray, Arguments::BeginArray});
+            out->push_back(FerOp{FerOpcode::BeginArray, 2 /*align 4 for length field*/, Arguments::BeginArray});
 
             if (!ferEncodeSingleCompleteType(s, nest, out)) {
                 return false;
             }
 
-            out->push_back(FerOp{0, FerOpcode::EndArray, Arguments::EndArray});
+            out->push_back(FerOp{FerOpcode::EndArray, 0, Arguments::EndArray});
         }
         nest->endArray();
 
@@ -284,7 +284,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
         return false;
     }
     if (type == Arguments::VariantSignature) {
-        out->push_back(FerOp{0, FerOpcode::BeginVariantSignature,
+        out->push_back(FerOp{FerOpcode::BeginVariantSignature, 0,
                        Arguments::NotStarted /*will be overwritten */});
         out->push_back(FerNesting{0, 0});
         out->push_back(FerNesting{0, 0});
@@ -303,9 +303,9 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
         (*out)[1].nest.parenDepth = nest.maxParen;
         (*out)[2].nest.arrayDepth /* really combinedDeptth */ = nest.maxCombined;
 
-        out->push_back(FerOp{0, FerOpcode::EndVariantSignature, Arguments::EndVariant});
+        out->push_back(FerOp{FerOpcode::EndVariantSignature, 0, Arguments::EndVariant});
     } else {
-        out->push_back(FerOp{0, FerOpcode::BeginMethodSignature, Arguments::NotStarted /*ignored*/});
+        out->push_back(FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::NotStarted /*ignored*/});
 
         while (sig->length) {
             if (!ferEncodeSingleCompleteType(sig, &nest, out)) {
@@ -313,7 +313,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
             }
         }
 
-        out->push_back(FerOp{0, FerOpcode::End, Arguments::Finished});
+        out->push_back(FerOp{FerOpcode::End, 0, Arguments::Finished});
     }
 
     assert(!nest.array);

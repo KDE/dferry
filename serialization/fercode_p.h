@@ -32,8 +32,8 @@ enum FerOpcode : byte
 
 struct alignas(4) FerOp
 {
-    byte postAlignExponent; // this is for the *following* element!
     FerOpcode op;
+    byte postAlignExponent; // this is for the *following* element!
     Arguments::IoState ioState;
     bool isLastOfArray = false; // could use ioState or the next FerOp, but this simplifies the check
 };
