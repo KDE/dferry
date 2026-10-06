@@ -38,9 +38,6 @@
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
     m_state = Arguments::InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
 
-#define VALID_IF_STATE(expectedState) if (likely(m_state == expectedState)) {} else { \
-    m_state = Arguments::InvalidData; d->m_error.setCode(Error::ReadWrongType); return; }
-
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
 {
@@ -357,8 +354,7 @@ bool ArgumentsBcReader::beginArray()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endArray()
 {
-    VALID_IF_STATE(Arguments::EndArray);
-    advanceState();
+    advanceState(Arguments::EndArray);
 }
 
 /// Starts reading a dict.
@@ -378,8 +374,7 @@ bool ArgumentsBcReader::beginDict()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endDict()
 {
-    VALID_IF_STATE(Arguments::EndDict);
-    advanceState();
+    advanceState(Arguments::EndDict);
 }
 
 /// Begins reading a struct.
@@ -387,8 +382,7 @@ void ArgumentsBcReader::endDict()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginStruct()
 {
-    VALID_IF_STATE(Arguments::BeginStruct);
-    advanceState();
+    advanceState(Arguments::BeginStruct);
 }
 
 /// Ends reading a struct.
@@ -396,8 +390,7 @@ void ArgumentsBcReader::beginStruct()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endStruct()
 {
-    VALID_IF_STATE(Arguments::EndStruct);
-    advanceState();
+    advanceState(Arguments::EndStruct);
 }
 
 /// Begins reading a variant.
@@ -405,8 +398,7 @@ void ArgumentsBcReader::endStruct()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginVariant()
 {
-    VALID_IF_STATE(Arguments::BeginVariant);
-    advanceState();
+    advanceState(Arguments::BeginVariant);
 }
 
 /// Ends reading a variant.
@@ -414,8 +406,7 @@ void ArgumentsBcReader::beginVariant()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endVariant()
 {
-    VALID_IF_STATE(Arguments::EndVariant);
-    advanceState();
+    advanceState(Arguments::EndVariant);
 }
 
 #ifdef WITH_DICT_ENTRY
@@ -450,9 +441,9 @@ void ArgumentsBcReader::beginRead()
     }
 }
 
-const void *ArgumentsBcReader::advanceState()
+const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
 {
-    if (unlikely(m_state <= Arguments::InvalidData)) { // nonrecoverable...
+    if (unlikely(m_state != expectedState)) { // nonrecoverable...
         return s_nullBuffer;
     }
 
@@ -690,7 +681,7 @@ const void *ArgumentsBcReader::advanceState()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 int ArgumentsBcReader::readUnixFd()
 {
-    const uint32 index = readUint32();
+    const uint32 index = *reinterpret_cast<const uint32 *>(advanceState(Arguments::UnixFd));
     if (index < d->m_fileDescriptors.size()) {
         return d->m_fileDescriptors[index];
     }
