@@ -159,7 +159,8 @@ bool Server::isListening() const
 }
 
 /// \returns The listening address of this server.
-/// This is the same address that was passed to the constructor.
+/// This is the listenAddress that was passed to the constructor -
+/// it may be incomplete / a wildcard and as such not a concrete address.
 /// \see \link concreteAddress() \endlink
 ConnectAddress Server::listenAddress() const
 {
@@ -167,10 +168,10 @@ ConnectAddress Server::listenAddress() const
 }
 
 /// \returns The concrete listening address of this server.
-/// This may be different from the address that was passed to the constructor. An
-/// address may leave parts unspecified that the server needs to fill in to make it
-/// usable. For example, the address may specifiy a directory in which the server needs
-/// to choose a randome filename, or the address may specify an IP address but no port.
+/// This may be different from listenAddress. Such an address may leave parts unspecified
+/// that the server needs to fill in to make it usable. For example, the address may specify
+/// a directory in which the server needs to choose a randome filename, or the address
+/// may specify an IP address but no port.
 ConnectAddress Server::concreteAddress() const
 {
     return d->concreteAddress;

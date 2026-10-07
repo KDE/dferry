@@ -158,6 +158,8 @@ bool ArgumentsReader::isValid() const
     return d;
 }
 
+/// \returns the error that occured on this reader, if any. Otherwise, the return value has error
+///          code Error::NoError.
 Error ArgumentsReader::error() const
 {
     return d->m_error;
@@ -233,8 +235,8 @@ cstring ArgumentsReader::currentSingleCompleteTypeSignature() const
 }
 
 /// \fn bool ArgumentsReader::isFinished() const
-/// \returns whether this ArgumentsReader has reached the end - either due to end of data
-///          or due to an error.
+/// \returns whether this read has reached the end - either due to end of data
+///          or due to an error. Equivalent to state() == Arguments::Finished.
 
 void ArgumentsReader::doReadPrimitiveType()
 {
@@ -554,6 +556,7 @@ void ArgumentsReader::skipArrayOrDictSignature(bool isDict)
 /// \param option An array always has a type, but may not contain any elements.
 ///               In case you want to read the type of an empty array, pass \p option = ReadTypesOnlyIfEmpty
 ///               to make one pass through the array while reading inert "null" data.
+/// \returns true if the array has >= 1 elements, false if it has 0.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 bool ArgumentsReader::beginArray(EmptyArrayOption option)
 {
@@ -708,6 +711,7 @@ Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) 
 /// \param option A dict always has a key and a value type, but may not contain any elements.
 ///               In case you want to read the types of an empty dict, pass \p option = ReadTypesOnlyIfEmpty
 ///               to make one pass through the dict while reading inert "null" data.
+/// \returns true if the dict has >= 1 elements, false if it has 0.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 bool ArgumentsReader::beginDict(EmptyArrayOption option)
 {

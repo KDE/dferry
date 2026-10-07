@@ -106,8 +106,7 @@ public:
     cstring readSignature() { cstring ret(m_u.String.ptr, m_u.String.length); advanceState(); return ret; }
     int32 readUnixFd() { int32 ret = m_u.Int32; advanceState(); return ret; }
 
-    void skipCurrentElement(); // works on single values and Begin... states. In the Begin... states,
-                                // skips the whole aggregate.
+    void skipCurrentElement();
 
     // (### it might be possible to extend this feature to all fixed-length types including structs)
     std::pair<Arguments::IoState, chunk> readPrimitiveArray();

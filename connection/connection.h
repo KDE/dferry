@@ -52,11 +52,13 @@ public:
         Connected, ///< // Connected
     };
 
+    /// \cond PRIVATE
     enum ThreadAffinity
     {
         MainConnection = 0,
         ThreadLocalConnection,
     };
+    /// \endcond
 
     // Reference for passing to another thread; it guarantees that the target Connection
     // either exists or not, but is not currently being destroyed. Yes, the data is all private.
@@ -70,8 +72,10 @@ public:
 
     // for connecting to the session or system bus
     Connection(EventDispatcher *dispatcher, const ConnectAddress &connectAddress);
+    /// \cond PRIVATE
     // for reusing the connection of a Connection in another thread
-    Connection(EventDispatcher *dispatcher, CommRef otherConnection);
+    Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef);
+    /// \endcond
 
     Connection(Connection &&other);
     Connection &operator=(Connection &&other);
@@ -83,24 +87,20 @@ public:
     State state() const;
 
     void close();
-
+    /// \cond PRIVATE
     CommRef createCommRef();
-
+    /// \endcond
     uint32 supportedFileDescriptorsPerMessage() const;
 
     void setDefaultReplyTimeout(int msecs);
     int defaultReplyTimeout() const;
+    /// Special values for timeouts
     enum TimeoutSpecialValues {
-        DefaultTimeout = -1,
-        NoTimeout = -2
+        DefaultTimeout = -1, ///< Use the default timeout
+        NoTimeout = -2 ///< No timeout; if the operation does not complete but also not definitely fail,
+                       ///  there will be no notification.
     };
-    // if a message expects no reply, that is not absolutely binding; this method allows to send a message that
-    // does not expect (request) a reply, but we get it if it comes - not terribly useful in most cases
-    // NOTE: this takes ownership of the message! The message will be deleted after sending in some future
-    //       event loop iteration, so it is guaranteed to stay valid before the next event loop iteration.
     PendingReply send(Message m, int timeoutMsecs = DefaultTimeout);
-    // Mostly same as above.
-    // This one ignores the reply, if any. Reports any locally detectable errors in the return value.
     Error sendNoReply(Message m);
 
     size_t sendQueueLength() const;

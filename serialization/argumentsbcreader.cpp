@@ -224,6 +224,8 @@ bool ArgumentsBcReader::isValid() const
     return true; // TODO
 }
 
+/// \returns the error that occured on this reader, if any. Otherwise, the return value has error
+///          code Error::NoError.
 Error ArgumentsBcReader::error() const
 {
     return d->m_error;
@@ -246,6 +248,15 @@ bool ArgumentsBcReader::validatesUtf8() const
 {
     return d->m_validateUtf8;
 }
+
+/// \fn Arguments::IoState ArgumentsBcReader::state() const
+/// \returns the type of the next element. In case of error or end of data, the return
+///          value will indicate that instead.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \fn bool ArgumentsBcReader::isFinished() const
+/// \returns whether this reader has reached the end - either due to end of data
+///          or due to an error. Equivalent to state() == Arguments::Finished.
 
 bool ArgumentsBcReader::beginArrayInternal()
 {
@@ -338,7 +349,7 @@ bool ArgumentsBcReader::beginArrayInternal()
 }
 
 /// Starts reading an array.
-/// \returns false if the array is empty (has 0 elements), true if it has >= 1 elements.
+/// \returns true if the array has >= 1 elements, false if it has 0.
 bool ArgumentsBcReader::beginArray()
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
@@ -358,7 +369,7 @@ void ArgumentsBcReader::endArray()
 }
 
 /// Starts reading a dict.
-/// \returns false if the array is empty (has 0 elements), true if it has >= 1 elements.
+/// \returns true if the dict has >= 1 elements, false if it has 0.
 bool ArgumentsBcReader::beginDict()
 {
     if (unlikely(m_state != Arguments::BeginDict)) {

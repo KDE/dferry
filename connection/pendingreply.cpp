@@ -162,6 +162,8 @@ bool PendingReply::hasNonErrorReply() const
     return d && d->m_isFinished && !d->m_error.isError();
 }
 
+/// \returns the error that occured on this reply, if any. Otherwise, the return value has error
+///          code Error::NoError.
 Error PendingReply::error() const
 {
     if (!d) {

@@ -32,8 +32,9 @@ class DFERRY_EXPORT INewConnectionListener
 {
 public:
     virtual ~INewConnectionListener();
-    // This is called when a new client has connected and receives ownership of the Connection.
-    // Usually you want to call server->takeNextConnection() in a loop until it returns nullptr.
+    /// This is called when a new client has connected.
+    /// Usually, you want to call server->takeNextConnection() in a loop until it returns nullptr in order
+    /// to accept all pending client connections.
     virtual void handleNewConnection(Server *server) = 0;
 };
 

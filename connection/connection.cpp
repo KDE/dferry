@@ -712,7 +712,6 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     }
 }
 
-/// \internal
 Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
    : d(new ConnectionPrivate(this, dispatcher))
 {
@@ -838,13 +837,13 @@ int Connection::defaultReplyTimeout() const
     return d->m_defaultTimeout;
 }
 
-/// Sends a message.
+/// Sends a message, returning a PendingReply to observe the result.
 /// \p timeoutMsecs allows to override the default timeout for a reply. Note that it is possible
 /// to send a message with Message::expectsReply() false - it is almost guaranteed to result in a
 /// reply timeout on success, but could be used to watch for any errors with getting the message
-//  to its destination.
-/// \returns a PendingReply to watch for a reply on any errors that prevented receiving a reply.
-/// \see \link setDefaultReplyTimeout() \endlink
+/// to its destination.
+/// \returns a PendingReply to watch for a reply or any errors that prevented receiving a reply.
+/// \see \link setDefaultReplyTimeout() \endlink, \link TimeoutSpecialValues \endlink
 PendingReply Connection::send(Message m, int timeoutMsecs)
 {
     if (timeoutMsecs == DefaultTimeout) {
@@ -894,6 +893,7 @@ PendingReply Connection::send(Message m, int timeoutMsecs)
 
 /// Sends a message without waiting for a reply.
 /// If there is a reply anyway, the connection will treat it as a spontaneous message.
+/// \returns any locally detectable error (before the message has been sent)
 Error Connection::sendNoReply(Message m)
 {
     // ### (when not called from send()) warn if sending a message without the noreply flag set?

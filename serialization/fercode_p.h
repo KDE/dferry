@@ -49,6 +49,7 @@ struct alignas(4) FerNesting
 {
     byte arrayDepth;
     byte parenDepth;
+    // TODO add the other depth thing and use it for variant signatures
     uint16 padding = 0;
 };
 

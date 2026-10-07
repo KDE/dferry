@@ -967,6 +967,8 @@ Message::~Message()
     }
 }
 
+/// \returns the error that occured on this message, if any. Otherwise, the return value has error
+///          code Error::NoError.
 Error Message::error() const
 {
     return d->m_error;

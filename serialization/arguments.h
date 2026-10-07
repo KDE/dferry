@@ -76,9 +76,9 @@ public:
         // Writer states when the next type is still open (not iterating in an array or dict)
         // ### it is inconsistent to have DictKey, but nothing for other constraints. The name AnyData is
         //     also weird. Remove DictKey and call AnyData InputData?
-        AnyData, // occurs in Writer when you are free to add any type
-        DictKey, // occurs in Writer when the next type must be suitable for a dict key -
-                 // a simple string or numeric type.
+        AnyData, ///< Occurs in ArgumentsWriter when any type can be written
+        DictKey, ///< Occurs in ArgumentsWriter when the next type must be suitable for a dict key -
+                 ///  a simple string or numeric type.
 
         // the following occur in Reader, and in Writer when in the second or higher iteration
         // of an array or dict where the types must match the first iteration (except inside variants).
@@ -110,7 +110,7 @@ public:
         BeginDictEntry,
         EndDictEntry,
 #endif
-        LastState
+        LastState ///< The last known state value, for internal use. Value may change.
     };
 
     /// Options for type signature preprocessing into FerCode
@@ -141,7 +141,6 @@ public:
 
     ~Arguments();
 
-    // error (if any) propagates to Message, so it is still available later
     Error error() const;
 
     std::string prettyPrint() const;
@@ -156,7 +155,9 @@ public:
     static bool isObjectPathElementValid(cstring pathElement);
     static bool isSignatureValid(cstring signature, SignatureType type = MethodSignature);
 
+    /// \cond PRIVATE (this mainly exists to support unit tests)
     static void copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer);
+    /// \endcond
 
     class Private;
 

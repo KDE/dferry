@@ -130,6 +130,8 @@ cstring printableState(Arguments::IoState state)
     return cstring(strings[state]);
 }
 
+/// \cond PRIVATE (this mainly exists to support unit tests)
+
 // When using this to iterate over the reader, it will make an exact copy using the Writer.
 // You need to do something only in states where something special should happen.
 // To check errors, "simply" (sorry!) check the reader->state() and writer()->state().
@@ -244,6 +246,7 @@ void Arguments::copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer)
         break; // No way to handle that one here
     }
 }
+/// \endcond
 
 thread_local static MallocCache<sizeof(Arguments::Private), 4> allocCache;
 
@@ -412,6 +415,8 @@ Arguments::~Arguments()
     }
 }
 
+/// \returns the error that occured on this Arguments instance, if any. Otherwise, the return value
+///          has error code Error::NoError.
 Error Arguments::error() const
 {
     return d->m_error;

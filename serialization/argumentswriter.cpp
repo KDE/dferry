@@ -371,6 +371,8 @@ bool ArgumentsWriter::isValid() const
     return !d->m_error.isError();
 }
 
+/// \returns the error that occured on this writer, if any. Otherwise, the return value has error
+///          code Error::NoError.
 Error ArgumentsWriter::error() const
 {
     return d->m_error;
@@ -393,6 +395,11 @@ bool ArgumentsWriter::validatesUtf8() const
 {
     return d->m_validateUtf8;
 }
+
+/// \fn Arguments::IoState ArgumentsWriter::state() const
+/// \returns that state of the writer. It is usually Arguments::AnyData except when previously written
+///          elements constrain the current element, for example a dict requires a non-aggregate type as key,
+///          and in an array, the contained type is fixed after writing the first entry.
 
 /// \returns the current state() as a string
 cstring ArgumentsWriter::stateString() const
