@@ -443,6 +443,7 @@ void ArgumentsBcReader::beginRead()
 
 const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
 {
+    // ### !!! some of this code is copied in advanceStatePrimitive() - the copies need to stay in sync!
     if (unlikely(m_state != expectedState)) { // nonrecoverable...
         return s_nullBuffer;
     }
@@ -628,6 +629,89 @@ const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
     return ret;
 }
 
+const void *ArgumentsBcReader::advanceStatePrimitive(Arguments::IoState expectedState)
+{
+    // ### this is straight copypasta from advanceState() with unnecessary parts omitted
+    if (unlikely(m_state != expectedState)) { // nonrecoverable...
+        return s_nullBuffer;
+    }
+
+    // Normally (in release builds), no need for a length check on ops because ops are pre-validated and
+    // FerOps::End marks the end.
+    assert(d->m_opsBase == &(*d->m_ops)[0]);
+    assert(d->m_opsPtr <= &(*d->m_ops)[0] + d->m_ops->size());
+    assert(d->m_dataPtr <= d->m_dataEnd);
+
+    FerOp ferOp = d->m_opsPtr->op;
+#if 0
+    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &(*d->m_ops)[0])
+              << ", op: " << ferOp.op
+              << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
+              << '\n';
+#endif
+    d->m_opsPtr++;
+
+    const byte* ret = d->m_dataPtr;
+    const byte* newPtr = ret;
+
+    switch (ferOp.op) {
+    case FerOpcode::Copy0:
+        break;
+    case FerOpcode::Copy1:
+    case FerOpcode::Copy2:
+    case FerOpcode::Copy4:
+    case FerOpcode::Copy8:
+        newPtr += 1 << uint32(ferOp.op);
+        break;
+    default:
+        break;
+        unreachable();
+    }
+
+    uint32_t postAlignExponent = ferOp.postAlignExponent;
+
+    // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
+    // need to call anything like nextArrayElement() to immediately read the next element.
+    // Probably not great for performance!
+    if (ferOp.isLastOfArray) {
+        if (newPtr < d->m_dataEnd) {
+            const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
+
+            // "another round"
+            d->m_opsPtr = d->m_opsBase + repeatArrayData.goBackOpIndex;
+            assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
+            m_state = (d->m_opsPtr - 1)->op.ioState;
+            postAlignExponent = repeatArrayData.goBackAlignExponent;
+        } else {
+            // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
+            // will be handled shortly by the VALID_IFs below)
+            // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
+            // not this one! That is for the best because m_dataEnd is still the end of the array here,
+            // not of all data, so advancing the data pointer through alignment would produce a (usually)
+            // spurious out of bounds error.
+            assert(postAlignExponent == 0);
+            if (postAlignExponent) {
+                unreachable();
+            }
+            m_state = ferOp.ioState;
+        }
+    } else {
+        m_state = ferOp.ioState;
+    }
+
+    if (!postAlignExponent) {
+        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
+    } else {
+        const byte *unalignedNewPtr = newPtr;
+        newPtr = align(newPtr, 1 << postAlignExponent);
+        VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
+                 Error::MalformedMessageData);
+    }
+
+    d->m_dataPtr = newPtr;
+    return ret;
+}
+
 /// \fn byte ArgumentsBcReader::readByte()
 /// Reads a byte (8 bit unsigned int). Required state: Arguments::Byte.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
@@ -681,7 +765,7 @@ const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 int ArgumentsBcReader::readUnixFd()
 {
-    const uint32 index = *reinterpret_cast<const uint32 *>(advanceState(Arguments::UnixFd));
+    const uint32 index = *reinterpret_cast<const uint32 *>(advanceStatePrimitive(Arguments::UnixFd));
     if (index < d->m_fileDescriptors.size()) {
         return d->m_fileDescriptors[index];
     }

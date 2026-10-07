@@ -92,16 +92,16 @@ public:
 
     // reading a type that is not indicated by state() will cause undefined behavior and at
     // least return garbage.
-    byte readByte()     { return *reinterpret_cast<const byte *  >(advanceState(Arguments::Byte)); }
+    byte readByte()     { return *reinterpret_cast<const byte *  >(advanceStatePrimitive(Arguments::Byte)); }
     // Yes, booleans are stored as a uint32 with possible values 0 and 1 in DBus!
-    bool readBoolean()  { return *reinterpret_cast<const uint32 *>(advanceState(Arguments::Boolean)); }
-    int16 readInt16()   { return *reinterpret_cast<const int16 * >(advanceState(Arguments::Int16)); }
-    uint16 readUint16() { return *reinterpret_cast<const uint16 *>(advanceState(Arguments::Uint16)); }
-    int32 readInt32()   { return *reinterpret_cast<const int32 * >(advanceState(Arguments::Int32)); }
-    uint32 readUint32() { return *reinterpret_cast<const uint32 *>(advanceState(Arguments::Uint32)); }
-    int64 readInt64()   { return *reinterpret_cast<const int64 * >(advanceState(Arguments::Int64)); }
-    uint64 readUint64() { return *reinterpret_cast<const uint64 *>(advanceState(Arguments::Uint64)); }
-    double readDouble() { return *reinterpret_cast<const double *>(advanceState(Arguments::Double)); }
+    bool readBoolean()  { return *reinterpret_cast<const uint32 *>(advanceStatePrimitive(Arguments::Boolean)); }
+    int16 readInt16()   { return *reinterpret_cast<const int16 * >(advanceStatePrimitive(Arguments::Int16)); }
+    uint16 readUint16() { return *reinterpret_cast<const uint16 *>(advanceStatePrimitive(Arguments::Uint16)); }
+    int32 readInt32()   { return *reinterpret_cast<const int32 * >(advanceStatePrimitive(Arguments::Int32)); }
+    uint32 readUint32() { return *reinterpret_cast<const uint32 *>(advanceStatePrimitive(Arguments::Uint32)); }
+    int64 readInt64()   { return *reinterpret_cast<const int64 * >(advanceStatePrimitive(Arguments::Int64)); }
+    uint64 readUint64() { return *reinterpret_cast<const uint64 *>(advanceStatePrimitive(Arguments::Uint64)); }
+    double readDouble() { return *reinterpret_cast<const double *>(advanceStatePrimitive(Arguments::Double)); }
     cstring readString()
     {
         const void* retPtr = advanceState(Arguments::String);
@@ -141,6 +141,7 @@ private:
     void doReadString(uint32 lengthPrefixSize);
     bool beginArrayInternal();
     const void *advanceState(Arguments::IoState expectedState);
+    const void *advanceStatePrimitive(Arguments::IoState expectedState);
     //void beginArrayOrDict(bool isDict, EmptyArrayOption option);
     //void skipArrayOrDictSignature(bool isDict);
     //void skipArrayOrDict(bool isDict);
