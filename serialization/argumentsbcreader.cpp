@@ -228,6 +228,17 @@ ArgumentsBcReader::~ArgumentsBcReader()
     d = nullptr;
 }
 
+/// \fn Arguments::IoState ArgumentsBcReader::state() const
+/// \returns the type of the next element. In case of error or end of data, the return
+///          value will indicate that instead.
+/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
+
+/// \returns the current state() as a string
+cstring ArgumentsBcReader::stateString() const
+{
+    return printableState(m_state);
+}
+
 bool ArgumentsBcReader::isValid() const
 {
     return true; // TODO
@@ -247,6 +258,7 @@ bool ArgumentsBcReader::isError() const
 }
 
 /// \returns wnether the reader is in a final state, may be success or error.
+/// \see isError()
 bool ArgumentsBcReader::isFinished() const
 {
     return m_state == Arguments::Finished;
@@ -275,15 +287,6 @@ bool ArgumentsBcReader::validatesUtf8() const
 {
     return d->m_validateUtf8;
 }
-
-/// \fn Arguments::IoState ArgumentsBcReader::state() const
-/// \returns the type of the next element. In case of error or end of data, the return
-///          value will indicate that instead.
-/// \see \ref argsreader_concepts "ArgumentsReader Concepts"
-
-/// \fn bool ArgumentsBcReader::isFinished() const
-/// \returns whether this reader has reached the end - either due to end of data
-///          or due to an error. Equivalent to state() == Arguments::Finished.
 
 bool ArgumentsBcReader::beginArrayInternal()
 {

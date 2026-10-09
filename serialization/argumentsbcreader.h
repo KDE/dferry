@@ -55,7 +55,7 @@ public:
     void operator=(const ArgumentsBcReader &other);
 
     Arguments::IoState state() const { return m_state; }
-    //cstring stateString() const; // TODO!!
+    cstring stateString() const;
 
     bool isValid() const;
     Error error() const;
