@@ -29,8 +29,6 @@
 #include "message.h"
 #include "platform_p.h"
 
-#include <cstddef>
-
 thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
 /** \class ArgumentsReader

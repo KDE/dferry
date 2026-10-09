@@ -31,13 +31,11 @@
 #include "error.h"
 #include "malloccache_p.h"
 #include "message.h"
-#include "platform_p.h"
 #include "stringtools_p.h"
 #include "utf8-hoehrmann.h"
 
 #include <algorithm>
 #include <cassert>
-#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
