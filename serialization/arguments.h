@@ -71,8 +71,7 @@ public:
     {
         // "exceptional" states
         NotStarted = 0, ///< De/serialization not started
-        Finished, ///< De/serialization finished
-        InvalidData, ///< Input is invalid
+        Finished, ///< De/serialization finished (usually end of data, but *can* be due to an error)
         // Writer states when the next type is still open (not iterating in an array or dict)
         // ### it is inconsistent to have DictKey, but nothing for other constraints. The name AnyData is
         //     also weird. Remove DictKey and call AnyData InputData?

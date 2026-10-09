@@ -56,8 +56,7 @@ public:
 
     Arguments::IoState state() const { return m_state; }
 
-    bool isFinished() const { return m_state == Arguments::Finished; }
-    bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove?
+    bool isFinished() const { return m_state == Arguments::Finished; } // TODO rework
 
 private:
     // _Tinsert_DeclHelperMethods
@@ -90,10 +89,10 @@ private:
 // _TsnipBegin_Utilities
 #undef VALID_IF
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    assert(false); m_state = InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
+    assert(false); m_state = Finished; d->m_error.setCode(errCode); return s_nullBuffer; }
 
 #define VALID_IF_STATE(expectedState) if (likely(m_state == expectedState)) {} else { \
-    m_state = InvalidData; d->m_error.setCode(Error::ReadWrongType); return; }
+    m_state = Finished; d->m_error.setCode(Error::ReadWrongType); return; }
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
 {
@@ -309,7 +308,7 @@ bool _Tvar_CgReader<Consumer>::readAll()
         return true;
     }
 errorReturn:
-    m_state = Arguments::InvalidData;
+    m_state = Arguments::Finished;
     return false;
 }
 // _Tinsert_DefHelperMethods

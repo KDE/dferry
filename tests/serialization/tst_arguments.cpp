@@ -239,8 +239,8 @@ static void testReadWithSkip(const Arguments &arg, bool debugPrint)
             bool isDone = false;
 
             while (!isDone) {
-                TEST(reader.state() != Arguments::InvalidData);
-                TEST(skippingReader.state() != Arguments::InvalidData);
+                TEST(!reader.isError());
+                TEST(!skippingReader.isError());
 
                 if (debugPrint) {
                     std::cerr << "Reader state: " << reader.stateString().ptr << '\n';
@@ -452,37 +452,38 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
     bool isDone = false;
 
     while (!isDone) {
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(writer.state() != Arguments::Finished);
         if (debugPrint) {
             std::cout << "Reader state: " << reader.stateString().ptr << '\n';
         }
 
         switch(reader.state()) {
         case Arguments::Finished:
-            isDone = true;
-            break;
-        case Arguments::InvalidData: {
-            TEST(reader.error().code() == Error::TruncatedMessageData);
-            TEST(shortData.length < data.length);
-            // reallocate shortData to test that Reader can handle the data moving around - and
-            // allocate the new one before destroying the old one to make sure that the pointer differs
-            chunk oldData = shortData;
-            shortData.length = std::min(shortData.length + dataIncrement, data.length);
-            shortData.ptr = reinterpret_cast<byte *>(aligned_alloc(sizeof(uint64), shortData.length));
-            for (uint32 i = 0; i < shortData.length; i++) {
-                shortData.ptr[i] = data.ptr[i];
-            }
-            // clobber it to provoke errors that only valgrind might find otherwise
-            for (uint32 i = 0; i < oldData.length; i++) {
-                oldData.ptr[i] = 0xff;
-            }
-            if (oldData.ptr) {
-                free(oldData.ptr);
-            }
+            if (!reader.isError()) {
+                isDone = true;
+            } else {
+                TEST(reader.error().code() == Error::TruncatedMessageData);
+                TEST(shortData.length < data.length);
+                // reallocate shortData to test that Reader can handle the data moving around - and
+                // allocate the new one before destroying the old one to make sure that the pointer differs
+                chunk oldData = shortData;
+                shortData.length = std::min(shortData.length + dataIncrement, data.length);
+                shortData.ptr = reinterpret_cast<byte *>(aligned_alloc(sizeof(uint64), shortData.length));
+                for (uint32 i = 0; i < shortData.length; i++) {
+                    shortData.ptr[i] = data.ptr[i];
+                }
+                // clobber it to provoke errors that only valgrind might find otherwise
+                for (uint32 i = 0; i < oldData.length; i++) {
+                    oldData.ptr[i] = 0xff;
+                }
+                if (oldData.ptr) {
+                    free(oldData.ptr);
+                }
 
-            readerPriv->restoreStateForRetry(truncRestoreState);
-            readerPriv->replaceData(shortData, &reader);
-            break; }
+                readerPriv->restoreStateForRetry(truncRestoreState);
+                readerPriv->replaceData(shortData, &reader);
+            }
+            break;
         default:
             truncRestoreState = readerPriv->savedStateForRetry(&reader);
             defaultReadToWrite(&reader, &writer);
@@ -506,7 +507,7 @@ static void doRoundtripWithReaderCopy(const Arguments &original, uint32 dataIncr
     uint32 i = 0;
 
     while (!isDone) {
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         if (i++ == dataIncrement) {
             ArgumentsReader *copy = new ArgumentsReader(*reader);
             delete reader;
@@ -539,7 +540,7 @@ static void doRoundtripWithWriterCopy(const Arguments &original, uint32 dataIncr
     uint32 i = 0;
 
     while (!isDone) {
-        TEST(writer->state() != Arguments::InvalidData);
+        TEST(!writer->isError());
         if (i++ == dataIncrement) {
             ArgumentsWriter *copy = new ArgumentsWriter(*writer);
             delete writer;
@@ -995,9 +996,9 @@ static void test_nesting()
         for (int i = 0; i < 32; i++) {
             writer.beginArray();
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.beginArray();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1006,9 +1007,9 @@ static void test_nesting()
             maybeBeginDictEntry(&writer);
             writer.writeInt32(i); // key, next nested dict is value
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.beginStruct();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1017,18 +1018,18 @@ static void test_nesting()
             maybeBeginDictEntry(&writer);
             writer.writeInt32(i); // key, next nested dict is value
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.beginArray();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         for (int i = 0; i < 64; i++) {
             writer.beginVariant();
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.beginVariant();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
 }
 
@@ -1167,33 +1168,33 @@ static void test_writerMisuse()
         ArgumentsWriter writer;
         writer.beginArray();
         writer.endArray(); // wrong,  must contain exactly one type
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.endArray(); // even with no elements it, must contain exactly one type
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginArray();
         writer.writeByte(1);
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginArray();
         writer.endArray(); // wrong, must contain exactly one type
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginArray();
         writer.writeByte(1);
         writer.writeUint16(2);  // wrong, different from first element
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1201,34 +1202,34 @@ static void test_writerMisuse()
         writer.beginVariant();
         writer.endVariant(); // empty variants are okay if and only if inside an empty array
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     // Dict
     {
         ArgumentsWriter writer;
         writer.beginDict();
         writer.endDict(); // wrong, must contain exactly two types
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginDict(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.endDict(); // wrong, must contain exactly two types
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginDict();
         writer.writeByte(1);
         writer.endDict(); // wrong, must contain exactly two types
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginDict(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.writeByte(1);
         writer.endDict(); // wrong, must contain exactly two types
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1238,7 +1239,7 @@ static void test_writerMisuse()
         writer.writeByte(2);
         maybeEndDictEntry(&writer);
         writer.endDict();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1249,9 +1250,9 @@ static void test_writerMisuse()
         maybeEndDictEntry(&writer);
         // second key-value pair
         maybeBeginDictEntry(&writer);
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.writeUint16(3); // wrong, incompatible with first element
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
@@ -1263,9 +1264,9 @@ static void test_writerMisuse()
         // second key-value pair
         maybeBeginDictEntry(&writer);
         writer.writeByte(3);
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.writeUint16(4); // wrong, incompatible with first element
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
 
     {
@@ -1273,7 +1274,7 @@ static void test_writerMisuse()
         writer.beginDict();
         maybeBeginDictEntry(&writer);
         writer.beginVariant(); // wrong, key type must be basic
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     // Variant
     {
@@ -1282,28 +1283,28 @@ static void test_writerMisuse()
         writer.beginVariant();
         writer.writeByte(1);
         writer.endVariant();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginVariant();
         writer.endVariant();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginVariant();
         writer.writeByte(1);
         writer.writeByte(2); // wrong, a variant may contain only one or zero single complete types
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
     {
         ArgumentsWriter writer;
         writer.beginStruct();
         writer.writeByte(1);
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() == Arguments::InvalidData); // can't finish while inside an aggregate
+        TEST(writer.isError()); // can't finish while inside an aggregate
         TEST(arg.signature().length == 0); // should not be written on error
     }
 }
@@ -1394,9 +1395,9 @@ static void test_complicated()
             writer.writeDouble(1.621133);
             writer.writeDouble(1.982342);
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         arg = writer.finish();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     doRoundtrip(arg);
 }
@@ -1413,9 +1414,9 @@ static void test_alignment()
             writer.writeByte(i);
         }
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         doRoundtrip(arg);
     }
     {
@@ -1555,9 +1556,9 @@ static void test_arrayOfVariant()
         writer.endArray();
         writer.writeByte(123);
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         doRoundtrip(arg);
     }
     // empty array
@@ -1570,9 +1571,9 @@ static void test_arrayOfVariant()
         writer.endArray();
         writer.writeByte(123);
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         doRoundtrip(arg);
     }
 }
@@ -1606,9 +1607,9 @@ static void test_realMessage()
         writer.writeInt32(-1);
         writer.writeInt64(46137372);
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         arg = writer.finish();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
     }
     doRoundtrip(arg);
 }
@@ -1644,9 +1645,9 @@ static void test_isWritingSignatureBug()
                     // ArgumentsWriter::advanceState().
                     maybeBeginDictEntry(&writer);
                     writer.writeByte(1);
-                    TEST(writer.state() != Arguments::InvalidData);
+                    TEST(!writer.isError());
                     writer.writeUint16(2);
-                    TEST(writer.state() == Arguments::InvalidData);
+                    TEST(writer.isError());
     }
     {
         // For completeness, do the equivalent of the previous test with an array inside
@@ -1663,9 +1664,9 @@ static void test_isWritingSignatureBug()
                 writer.beginArray();
                     writer.writeByte(1);
                     writer.writeByte(1);
-                    TEST(writer.state() != Arguments::InvalidData);
+                    TEST(!writer.isError());
                     writer.writeUint16(2);
-                    TEST(writer.state() == Arguments::InvalidData);
+                    TEST(writer.isError());
     }
 }
 
@@ -1724,7 +1725,7 @@ static void test_primitiveArray()
         static const uint32 arrayTypesCount = 5;
         // those types must be compatible with writeValue() and readValue()
         static Arguments::IoState arrayTypes[arrayTypesCount] = {
-            Arguments::InvalidData,
+            Arguments::Finished,
             Arguments::Byte,
             Arguments::Uint16,
             Arguments::Uint32,
@@ -1783,11 +1784,11 @@ static void test_primitiveArray()
                             writer.endArray();
                         }
 
-                        TEST(writer.state() != Arguments::InvalidData);
+                        TEST(!writer.isError());
                         // TEST(writer.state() == Arguments::AnyData);
                         // TODO do we handle AnyData consistently, and do we really need it anyway?
                         writeValue(&writer, otherType, &otherValue);
-                        TEST(writer.state() != Arguments::InvalidData);
+                        TEST(!writer.isError());
                         arg = writer.finish();
                         TEST(writer.state() == Arguments::Finished);
                     }
@@ -1806,29 +1807,29 @@ static void test_primitiveArray()
                             TEST(reader.state() == Arguments::BeginArray);
                             const bool hasData = reader.beginArray(ArgumentsReader::ReadTypesOnlyIfEmpty);
                             TEST(hasData == (arraySize != 0));
-                            TEST(reader.state() != Arguments::InvalidData);
+                            TEST(!reader.isError());
                             byte *testDataPtr = testData;
 
                             if (arraySize) {
                                 for (uint m = 0; m < arraySize; m++) {
-                                    TEST(reader.state() != Arguments::InvalidData);
+                                    TEST(!reader.isError());
                                     TEST(checkValue(&reader, typeInArray, testDataPtr));
-                                    TEST(reader.state() != Arguments::InvalidData);
+                                    TEST(!reader.isError());
                                     testDataPtr += 1 << (typeInArray - 1);
                                 }
                             } else {
                                 TEST(reader.state() == arrayTypes[typeInArray]);
                                 // next: dummy read, necessary to move forward; value is ignored
                                 checkValue(&reader, typeInArray, testDataPtr);
-                                TEST(reader.state() != Arguments::InvalidData);
+                                TEST(!reader.isError());
                             }
 
                             TEST(reader.state() == Arguments::EndArray);
                             reader.endArray();
-                            TEST(reader.state() != Arguments::InvalidData);
+                            TEST(!reader.isError());
                         }
 
-                        TEST(reader.state() != Arguments::InvalidData);
+                        TEST(!reader.isError());
                         TEST(checkValue(&reader, otherType, &otherValue));
                         TEST(reader.state() == Arguments::Finished);
                     }
@@ -1851,12 +1852,13 @@ static void test_signatureLengths()
             writer.writeByte(255);
         }
         if (i == 256) {
-            TEST(writer.state() == Arguments::InvalidData);
+            TEST(writer.isError());
             break;
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
+        TEST(!writer.isError());
 
         // The full doRoundtrip() just here makes this whole file take several seconds to execute
         // instead of a fraction of a second. This way is much quicker.
@@ -1893,10 +1895,10 @@ static void test_signatureLengths()
         writer.endVariant();
 
         if (i == 256) {
-            TEST(writer.state() == Arguments::InvalidData);
+            TEST(writer.isError());
             break;
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
 
@@ -1914,7 +1916,7 @@ static void test_emptyArrayAndDict()
         writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
         writer.writeByte(0);
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1926,7 +1928,7 @@ static void test_emptyArrayAndDict()
         writer.writeByte(0);
         writer.endArray();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1941,7 +1943,7 @@ static void test_emptyArrayAndDict()
         writer.endArray();
         writer.endStruct();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1957,7 +1959,7 @@ static void test_emptyArrayAndDict()
         writer.endArray();
         writer.endStruct();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1978,7 +1980,7 @@ static void test_emptyArrayAndDict()
         writer.writeByte(12);
         writer.endStruct();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -1993,7 +1995,7 @@ static void test_emptyArrayAndDict()
         writer.endVariant();
         writer.endStruct();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2011,7 +2013,7 @@ static void test_emptyArrayAndDict()
                 writer.endArray();
                 writer.writeByte(123);
             writer.endStruct();
-            TEST(writer.state() != Arguments::InvalidData);
+            TEST(!writer.isError());
             Arguments arg = writer.finish();
             TEST(writer.state() == Arguments::Finished);
             doRoundtrip(arg, false);
@@ -2034,7 +2036,7 @@ static void test_emptyArrayAndDict()
                     writer.writeString(cstring("a"));
             writer.endArray();
         writer.endArray();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2051,7 +2053,7 @@ static void test_emptyArrayAndDict()
         // Iterating several times through an empty array is allowed while writing
         writer.writeUint64(1234);
         writer.writeUint64(1234);
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.endArray();
         writer.endArray();
         Arguments arg = writer.finish();
@@ -2106,18 +2108,18 @@ static void test_emptyArrayAndDict()
             for (int j = 0; j <= i; j++) {
                 writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
                 if (j == 32) {
-                    TEST(writer.state() == Arguments::InvalidData);
+                    TEST(writer.isError());
                 }
             }
             if (i == 32) {
-                TEST(writer.state() == Arguments::InvalidData);
+                TEST(writer.isError());
                 break;
             }
             writer.writeUint16(52345);
             for (int j = 0; j <= i; j++) {
                 writer.endArray();
             }
-            TEST(writer.state() != Arguments::InvalidData);
+            TEST(!writer.isError());
             Arguments arg = writer.finish();
             TEST(writer.state() == Arguments::Finished);
             doRoundtrip(arg, false);
@@ -2134,7 +2136,7 @@ static void test_emptyArrayAndDict()
         writer.writeString(cstring("a"));
         maybeEndDictEntry(&writer);
         writer.endDict();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2148,7 +2150,7 @@ static void test_emptyArrayAndDict()
         writer.endVariant();
         maybeEndDictEntry(&writer);
         writer.endDict();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2167,7 +2169,7 @@ static void test_emptyArrayAndDict()
         writer.endVariant();
         maybeEndDictEntry(&writer);
         writer.endDict();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2178,7 +2180,7 @@ static void test_emptyArrayAndDict()
         maybeBeginDictEntry(&writer);
         writer.writeString(cstring("a"));
         writer.beginVariant();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.writeByte(0);
         // variants in nil arrays may contain data but it will be discarded, i.e. there will only be an
         // empty variant in the output
@@ -2219,7 +2221,7 @@ static void test_emptyArrayAndDict()
             writer.endDict();
             maybeEndDictEntry(&writer);
         writer.endDict();
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2231,12 +2233,12 @@ static void test_emptyArrayAndDict()
                 writer.beginDict(ArgumentsWriter::WriteTypesOfEmptyArray);
                     maybeBeginDictEntry(&writer);
                 if (j == 32) {
-                    TEST(writer.state() == Arguments::InvalidData);
+                    TEST(writer.isError());
                 }
                 writer.writeUint16(12345);
             }
             if (i == 32) {
-                TEST(writer.state() == Arguments::InvalidData);
+                TEST(writer.isError());
                 break;
             }
             writer.writeUint16(52345);
@@ -2244,7 +2246,7 @@ static void test_emptyArrayAndDict()
                 maybeEndDictEntry(&writer);
                 writer.endDict();
             }
-            TEST(writer.state() != Arguments::InvalidData);
+            TEST(!writer.isError());
             Arguments arg = writer.finish();
             TEST(writer.state() == Arguments::Finished);
             doRoundtrip(arg, false);
@@ -2266,7 +2268,7 @@ static void test_arrayBugs()
             writer.endArray();
         writer.endArray();
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2282,7 +2284,7 @@ static void test_arrayBugs()
             writer.endArray();
         writer.endArray();
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
         TEST(writer.state() == Arguments::Finished);
         doRoundtrip(arg, false);
@@ -2349,8 +2351,7 @@ static void test_closeWrongAggregate()
             case 3: writer.endDict(); break;
             }
 
-            const bool isValid = writer.state() != Arguments::InvalidData;
-            TEST(isValid == (i == j));
+            TEST(writer.isError() == (i != j));
         }
     }
 }

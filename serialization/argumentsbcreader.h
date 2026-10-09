@@ -54,17 +54,18 @@ public:
 
     void operator=(const ArgumentsBcReader &other);
 
+    Arguments::IoState state() const { return m_state; }
+    //cstring stateString() const; // TODO!!
+
     bool isValid() const;
     Error error() const;
 
+    bool isError() const;
+    bool isFinished() const;
+    bool isSuccess() const;
+
     void setValidatesUtf8(bool validate);
     bool validatesUtf8() const;
-
-    Arguments::IoState state() const { return m_state; }
-    //cstring stateString() const;
-
-    bool isFinished() const { return m_state == Arguments::Finished; }
-    bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove?
 
     bool beginArray();
     //void skipArray(); // skips the current array; only  call this in state BeginArray!

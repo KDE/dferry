@@ -31,6 +31,13 @@
 
 thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
+void ArgumentsReader::Private::mergeError(Error::Code errorCode)
+{
+    if (!m_error.isError()) {
+        m_error.setCode(errorCode);
+    }
+}
+
 /** \class ArgumentsReader
     Reads arguments out of Arguments.
 
@@ -161,6 +168,24 @@ bool ArgumentsReader::isValid() const
 Error ArgumentsReader::error() const
 {
     return d->m_error;
+}
+
+/// \returns wnether the reader is in an error state. Error states are not recoverable.
+bool ArgumentsReader::isError() const
+{
+    return d->m_error.isError();
+}
+
+/// \returns wnether the reader is in a final state, may be success or error.
+bool ArgumentsReader::isFinished() const
+{
+    return m_state == Arguments::Finished;
+}
+
+/// \returns isFinished() && !isError()
+bool ArgumentsReader::isSuccess() const
+{
+    return m_state == Arguments::Finished && !d->m_error.isError();
 }
 
 /// Sets whether the reader fully validates the UTF-8 encoding of strings.
@@ -318,7 +343,7 @@ void ArgumentsReader::advanceState()
     // variant signatures are only parsed while reading the data. individual variant signatures
     // ARE checked beforehand whenever we find one in this method.
 
-    if (unlikely(m_state <= Arguments::InvalidData)) { // nonrecoverable...
+    if (unlikely(m_state <= Arguments::Finished)) { // nonrecoverable...
         return;
     }
     // can't do the following because a dict is one aggregate in our counting, but two according to
@@ -398,7 +423,7 @@ void ArgumentsReader::advanceState()
     const TypeInfo ty = typeInfo(d->m_signature.ptr[d->m_signaturePosition]);
     m_state = ty.state();
 
-    VALID_IF(m_state != Arguments::InvalidData, Error::MalformedMessageData);
+    VALID_IF(m_state != Arguments::Finished, Error::MalformedMessageData);
 
     // check if we have enough data for the next type, and read it
     // if we're in a nil array, we are iterating only over the types without reading any data
@@ -559,8 +584,8 @@ void ArgumentsReader::skipArrayOrDictSignature(bool isDict)
 bool ArgumentsReader::beginArray(EmptyArrayOption option)
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
         return false;
     }
 
@@ -608,8 +633,8 @@ void ArgumentsReader::skipArray()
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
         // TODO test this
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
     } else {
         skipArrayOrDict(false);
     }
@@ -633,10 +658,10 @@ void ArgumentsReader::endArray()
 /// \returns an array of primitives as one block of memory.
 /// The reader must be in BeginArray state for this to work and the array must contain just one
 /// type which is primitive (fixed length numeric / byte / boolean).
-/// Otherwise, returns (InvalidData, chunk()).
+/// Otherwise, returns (NotStarted, chunk()).
 std::pair<Arguments::IoState, chunk> ArgumentsReader::readPrimitiveArray()
 {
-    auto ret = std::make_pair(Arguments::InvalidData, chunk());
+    auto ret = std::make_pair(Arguments::NotStarted, chunk());
 
     if (m_state != Arguments::BeginArray) {
         return ret;
@@ -679,15 +704,15 @@ std::pair<Arguments::IoState, chunk> ArgumentsReader::readPrimitiveArray()
 
 /// In state BeginArray, checks if the array is a primitive array, in order to check whether to use
 /// readPrimitiveArray(). Returns a primitive type if readPrimitiveArray() will succeed, BeginArray
-/// if the array is not primitive, InvalidData if state is not BeginArray. The latter will not put
-/// the reader in InvalidData state.
+/// if the array is not primitive, Finished if state is not BeginArray. The latter will not put
+/// the reader in Finished state.
 /// If option is SkipIfEmpty, an empty array of primitives will result in a return value of BeginArray
 /// instead of the type of primitive.
 Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) const
 {
     // almost duplicated from readPrimitiveArray(), so keep it in sync
     if (m_state != Arguments::BeginArray) {
-        return Arguments::InvalidData;
+        return Arguments::Finished;
     }
     const uint32 arrayLength = m_u.Uint32 - d->m_dataPosition;
     if (option == SkipIfEmpty && !arrayLength) {
@@ -714,8 +739,8 @@ Arguments::IoState ArgumentsReader::peekPrimitiveArray(EmptyArrayOption option) 
 bool ArgumentsReader::beginDict(EmptyArrayOption option)
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
         return false;
     }
 
@@ -757,8 +782,8 @@ void ArgumentsReader::skipDict()
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
         // TODO test this
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
     } else {
         d->m_signaturePosition++; // skip '{' like beginDict() does - skipArrayOrDict() expects it
         skipArrayOrDict(true);
@@ -831,8 +856,8 @@ void ArgumentsReader::beginStruct()
 void ArgumentsReader::skipStruct()
 {
     if (unlikely(m_state != Arguments::BeginStruct)) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
     } else {
         skipCurrentElement();
     }
@@ -876,8 +901,8 @@ void ArgumentsReader::beginVariant()
 void ArgumentsReader::skipVariant()
 {
     if (unlikely(m_state != Arguments::BeginVariant)) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ReadWrongType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ReadWrongType);
     } else {
         skipCurrentElement();
     }
@@ -1010,10 +1035,8 @@ void ArgumentsReader::skipCurrentElement()
             readUnixFd();
             break;
         default:
-            m_state = Arguments::InvalidData;
-            d->m_error.setCode(Error::StateNotSkippable);
-            [[fallthrough]];
-        case Arguments::InvalidData:
+            m_state = Arguments::Finished;
+            d->mergeError(Error::StateNotSkippable);
             isDone = true;
             break;
         }

@@ -45,11 +45,11 @@ static void test_arrayLength()
             }
             writer.endArray();
             if (withVariant) {
-                TEST(writer.state() != Arguments::InvalidData);
+                TEST(!writer.isError());
                 writer.endVariant();
             }
             Arguments arg = writer.finish();
-            TEST(writer.state() == Arguments::Finished);
+            TEST(writer.isSuccess());
         }
         {
             ArgumentsWriter writer;
@@ -62,10 +62,10 @@ static void test_arrayLength()
             }
             writer.endArray();
             if (withVariant) {
-                TEST(writer.state() != Arguments::InvalidData);
+                TEST(!writer.isError());
                 writer.endVariant();
             }
-            TEST(writer.state() == Arguments::InvalidData);
+            TEST(writer.isError());
         }
     }
 
@@ -85,9 +85,9 @@ static void test_arrayLength()
             }
             writer.endArray();
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() == Arguments::Finished);
+        TEST(writer.isSuccess());
     }
     {
         ArgumentsWriter writer;
@@ -99,9 +99,10 @@ static void test_arrayLength()
             writer.endArray();
         }
         writer.writeByte(123); // one byte too many!
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         Arguments arg = writer.finish();
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.state() == Arguments::Finished);
+        TEST(writer.isError());
     }
 }
 
@@ -132,12 +133,12 @@ static void test_argumentsLength()
                     }
                 }
                 ArgumentsWriter writer2(writer);
-                TEST(writer2.state() != Arguments::InvalidData);
+                TEST(!writer2.isError());
                 writer2.finish();
-                TEST(writer2.state() == Arguments::InvalidData);
+                TEST(writer2.isError());
             }
         }
-        TEST(writer.state() == Arguments::InvalidData);
+        TEST(writer.isError());
     }
 
     // Test message size exactly at maximum and exactly 1 byte over
@@ -156,7 +157,7 @@ static void test_argumentsLength()
         writer.writePrimitiveArray(Arguments::Byte, chunk(buffer, left - 4));
         // Now there are exactly 4 bytes left to MaxMessageLength
 
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
 
         if (withVariant) {
             writer.beginVariant();
@@ -170,12 +171,12 @@ static void test_argumentsLength()
         if (withVariant) {
             writer.endVariant();
         }
-        TEST(writer.state() != Arguments::InvalidData);
+        TEST(!writer.isError());
         writer.finish();
         if (makeTooLong) {
-            TEST(writer.state() == Arguments::InvalidData);
+            TEST(writer.isError());
         } else {
-            TEST(writer.state() == Arguments::Finished);
+            TEST(writer.isSuccess());
         }
     }
 }

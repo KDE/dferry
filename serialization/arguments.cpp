@@ -56,32 +56,32 @@ const TypeInfo &typeInfo(char letterCode)
     static const TypeInfo high['}' - 'a' + 1] = {
         { Arguments::BeginArray,   4, false, false }, // a
         { Arguments::Boolean,      4, true,  false }, // b
-        { Arguments::InvalidData,  1, true,  false }, // c
+        { Arguments::Finished,     1, true,  false }, // c
         { Arguments::Double,       8, true,  false }, // d
-        { Arguments::InvalidData,  1, true,  false }, // e
-        { Arguments::InvalidData,  1, true,  false }, // f
+        { Arguments::Finished,     1, true,  false }, // e
+        { Arguments::Finished,     1, true,  false }, // f
         { Arguments::Signature,    1, false, true  }, // g
         { Arguments::UnixFd,       4, true,  false }, // h
         { Arguments::Int32,        4, true,  false }, // i
-        { Arguments::InvalidData,  1, true,  false }, // j
-        { Arguments::InvalidData,  1, true,  false }, // k
-        { Arguments::InvalidData,  1, true,  false }, // l
-        { Arguments::InvalidData,  1, true,  false }, // m
+        { Arguments::Finished,     1, true,  false }, // j
+        { Arguments::Finished,     1, true,  false }, // k
+        { Arguments::Finished,     1, true,  false }, // l
+        { Arguments::Finished,     1, true,  false }, // m
         { Arguments::Int16,        2, true,  false }, // n
         { Arguments::ObjectPath,   4, false, true  }, // o
-        { Arguments::InvalidData,  1, true,  false }, // p
+        { Arguments::Finished,     1, true,  false }, // p
         { Arguments::Uint16,       2, true,  false }, // q
-        { Arguments::InvalidData,  1, true,  false }, // r
+        { Arguments::Finished,     1, true,  false }, // r
         { Arguments::String,       4, false, true  }, // s
         { Arguments::Uint64,       8, true,  false }, // t
         { Arguments::Uint32,       4, true,  false }, // u
         { Arguments::BeginVariant, 1, false, false }, // v
-        { Arguments::InvalidData,  1, true,  false }, // w
+        { Arguments::Finished,     1, true,  false }, // w
         { Arguments::Int64,        8, true,  false }, // x
         { Arguments::Byte,         1, true,  false }, // y
-        { Arguments::InvalidData,  1, true,  false }, // z
+        { Arguments::Finished,     1, true,  false }, // z
         { Arguments::BeginDict,    8, false, false }, // {
-        { Arguments::InvalidData,  1, true,  false }, // |
+        { Arguments::Finished,     1, true,  false }, // |
         { Arguments::EndDict,      1, false, false }  // }
     };
     return high[letterCode - 'a'];
@@ -95,7 +95,6 @@ cstring printableState(Arguments::IoState state)
     static const char *strings[Arguments::LastState] = {
         "NotStarted",
         "Finished",
-        "InvalidData",
         "AnyData",
         "DictKey",
         "BeginArray",
@@ -163,7 +162,7 @@ void Arguments::copyOneElement(ArgumentsReader *reader, ArgumentsWriter *writer)
         // Application note: to avoid handling arrays as primitive (where applicable), just don't
         // call this function in BeginArray state and do as in the else case.
         const Arguments::IoState primitiveType = reader->peekPrimitiveArray();
-        if (primitiveType != BeginArray) { // InvalidData can't happen because the state *is* BeginArray
+        if (primitiveType != BeginArray) { // Finished can't happen because the state *is* BeginArray
             const std::pair<Arguments::IoState, chunk> arrayData = reader->readPrimitiveArray();
             writer->writePrimitiveArray(arrayData.first, arrayData.second);
         } else {
@@ -628,7 +627,6 @@ std::string Arguments::prettyPrint() const
         case Arguments::UnixFd:
             printMaybeNil(&ret, nestingPrefix, inEmptyArray, reader.readUnixFd(), "file descriptor");
             break;
-        case Arguments::InvalidData:
         default: {
             return std::string("<error: ") +
                    toStdString(reader.stateString()) + ">\n";

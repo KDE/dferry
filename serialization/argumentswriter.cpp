@@ -22,6 +22,7 @@
 */
 
 #include "argumentswriter.h"
+#include "arguments.h"
 #include "arguments_p.h"
 
 #include "basictypeio.h"
@@ -82,10 +83,10 @@ public:
 
         // In most cases, callers do not need to check for errors: Very large single arguments are
         // already rejected, and we actually allocate the too large buffer to prevent out-of-bounds
-        // access. Any following writing API calls will then cleanly abort due to m_state == InvalidData.
+        // access. Any following writing API calls will then cleanly abort due to m_state == Finished.
         // ### Callers DO need to check m_state before possibly overwriting it, hiding the error!
         if (newCapacity > Arguments::MaxMessageLength * 3) {
-            *state = Arguments::InvalidData;
+            *state = Arguments::Finished;
             m_error.setCode(Error::ArgumentsTooLong);
         }
     }
@@ -152,6 +153,8 @@ public:
         }
         zeroPad(m_data, alignment, &m_dataPosition);
     }
+
+    void mergeError(Error::Code errorCode);
 
     uint32 m_dataElementsCountBeforeNilArray;
     uint32 m_dataPositionBeforeVariant;
@@ -265,6 +268,13 @@ void ArgumentsWriter::Private::operator=(const Private &other)
     m_queuedData = other.m_queuedData;
 }
 
+void ArgumentsWriter::Private::mergeError(Error::Code errorCode)
+{
+    if (!m_error.isError()) {
+        m_error.setCode(errorCode);
+    }
+}
+
 /** \class ArgumentsWriter
     Writes arguments into Arguments.
 
@@ -365,17 +375,30 @@ ArgumentsWriter::~ArgumentsWriter()
     }
 }
 
-// TODO this is too similarly-named-but-different to ArgumentsReader::isValid()
-bool ArgumentsWriter::isValid() const
-{
-    return !d->m_error.isError();
-}
 
 /// \returns the error that occured on this writer, if any. Otherwise, the return value has error
 ///          code Error::NoError.
 Error ArgumentsWriter::error() const
 {
     return d->m_error;
+}
+
+/// \returns wnether the writer is in an error state. Error states are not recoverable.
+bool ArgumentsWriter::isError() const
+{
+    return d->m_error.isError();
+}
+
+/// \returns wnether the writer is in a final state, may be success or error.
+bool ArgumentsWriter::isFinished() const
+{
+    return m_state == Arguments::Finished;
+}
+
+/// \returns isFinished() && !isError()
+bool ArgumentsWriter::isSuccess() const
+{
+    return m_state == Arguments::Finished && !d->m_error.isError();
 }
 
 /// Sets whether the writer fully validates the UTF-8 encoding of strings.
@@ -543,7 +566,7 @@ void ArgumentsWriter::advanceState(cstring signatureFragment, Arguments::IoState
 
     d->reserveData(d->m_dataPosition, &m_state);
     // this check is not only for reserveData, but also pre-existing errors
-    if (unlikely(m_state <= Arguments::InvalidData)) {
+    if (unlikely(m_state <= Arguments::Finished)) {
         return;
     }
 
@@ -1022,20 +1045,20 @@ void ArgumentsWriter::writePrimitiveArray(Arguments::IoState type, chunk data)
 {
     const char letterCode = letterForPrimitiveIoState(type);
     if (letterCode == 'c') {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::NotPrimitiveType);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::NotPrimitiveType);
         return;
     }
     if (data.length > Arguments::MaxArrayLength) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::ArrayOrDictTooLong);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::ArrayOrDictTooLong);
         return;
     }
 
     const TypeInfo elementType = typeInfo(letterCode);
     if (!isAligned(data.length, elementType.alignment)) {
-        m_state = Arguments::InvalidData;
-        d->m_error.setCode(Error::DataLengthNotMultipleOfElementLength);
+        m_state = Arguments::Finished;
+        d->mergeError(Error::DataLengthNotMultipleOfElementLength);
         return;
     }
 
@@ -1076,12 +1099,12 @@ Arguments ArgumentsWriter::finish()
     Arguments args;
     Arguments::Private *argsPriv = Arguments::Private::of(&args);
 
-    if (m_state == Arguments::InvalidData) {
+    if (m_state == Arguments::Finished) {
         argsPriv->m_error = d->m_error;
         return args; // heavily relying on NRVO in all returns here!
     }
     if (d->m_nesting.total() != 0) {
-        m_state = Arguments::InvalidData;
+        m_state = Arguments::Finished;
         d->m_error.setCode(Error::CannotEndArgumentsWithOpenAggregates);
         argsPriv->m_error = d->m_error;
         return args;
@@ -1107,7 +1130,7 @@ Arguments ArgumentsWriter::finish()
     const uint32 dataSize = d->m_dataPosition - Private::SignatureReservedSpace;
     if (success && dataSize > Arguments::MaxMessageLength) {
         success = false;
-        d->m_error.setCode(Error::ArgumentsTooLong);
+        d->mergeError(Error::ArgumentsTooLong);
     }
 
     if (!dataSize || !success) {
@@ -1125,7 +1148,7 @@ Arguments ArgumentsWriter::finish()
         argsPriv->m_fileDescriptors = std::move(d->m_fileDescriptors);
         m_state = Arguments::Finished;
     } else {
-        m_state = Arguments::InvalidData;
+        m_state = Arguments::Finished;
         argsPriv->m_error = d->m_error;
     }
     return args;
@@ -1204,8 +1227,8 @@ void ArgumentsWriter::flushQueuedData()
                 const ArrayLengthField al = lengthFieldStack.back();
                 const uint32 arrayLength = outPos - al.dataStartPosition;
                 if (arrayLength > Arguments::MaxArrayLength) {
-                    m_state = Arguments::InvalidData;
-                    d->m_error.setCode(Error::ArrayOrDictTooLong);
+                    m_state = Arguments::Finished;
+                    d->mergeError(Error::ArrayOrDictTooLong);
                     i = count + 1; // break out of the loop
                     break;
                 }
@@ -1224,7 +1247,7 @@ void ArgumentsWriter::flushQueuedData()
             break;
         }
     }
-    assert(m_state == Arguments::InvalidData || lengthFieldStack.empty());
+    assert(m_state == Arguments::Finished || lengthFieldStack.empty());
 
     d->m_dataPosition = outPos;
     d->m_queuedData.clear();
@@ -1264,7 +1287,7 @@ Arguments::IoState ArgumentsWriter::currentAggregate() const
 chunk ArgumentsWriter::peekSerializedData() const
 {
     chunk ret;
-    if (isValid() && m_state != Arguments::InvalidData && d->m_nesting.total() == 0) {
+    if (!isError() && m_state > Arguments::Finished && d->m_nesting.total() == 0) {
         ret.ptr = d->m_data + Private::SignatureReservedSpace;
         ret.length = d->m_dataPosition - Private::SignatureReservedSpace;
     }

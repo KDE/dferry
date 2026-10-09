@@ -38,21 +38,23 @@ public:
 
     ~ArgumentsWriter();
 
-    bool isValid() const;
-    // error propagates to Arguments (if the error wasn't that the Arguments is not writable),
-    // so it is still available later
-    Error error() const; // see also: aggregateStack()
+    Arguments::IoState state() const { return m_state; }
+    cstring stateString() const;
+
+    Error error() const;
+
+    bool isError() const;
+    bool isFinished() const;
+    bool isSuccess() const;
 
     void setValidatesUtf8(bool validate);
     bool validatesUtf8() const;
 
-    Arguments::IoState state() const { return m_state; }
-    cstring stateString() const;
     bool isInsideEmptyArray() const;
     cstring currentSignature() const; // current signature, either main signature or current variant
     uint32 currentSignaturePosition() const;
 
-    /// How to write an array
+    /// Options for writing arrays and dicts
     enum ArrayOption
     {
         NonEmptyArray = 0, ///< Normal array with contents

@@ -95,6 +95,9 @@ QAbstractItemModel* createArgumentsModel(Message *message)
         switch(reader.state()) {
         case Arguments::Finished:
             isDone = true;
+            if (reader.isError()) {
+                return withFaultyData(model);
+            }
             break;
         case Arguments::BeginStruct:
             reader.beginStruct();
@@ -169,7 +172,6 @@ QAbstractItemModel* createArgumentsModel(Message *message)
         case Arguments::UnixFd:
             addKeyValue(parent, "file descriptor", inEmptyArray, reader.readUnixFd());
             break;
-        case Arguments::InvalidData:
         default:
             return withFaultyData(model);
             break;

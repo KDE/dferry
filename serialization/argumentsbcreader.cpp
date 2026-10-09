@@ -36,7 +36,7 @@
 
 #undef VALID_IF
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    m_state = Arguments::InvalidData; d->m_error.setCode(errCode); return s_nullBuffer; }
+    m_state = Arguments::Finished; d->mergeError(errCode); return s_nullBuffer; }
 
 
 static inline const byte *align(const byte *index, uintptr_t alignment)
@@ -96,7 +96,16 @@ public:
 #endif
     std::vector<VariantInfo> m_variantStack;
     std::vector<int> m_fileDescriptors;
+
+    void mergeError(Error::Code errorCode);
 };
+
+void ArgumentsBcReader::Private::mergeError(Error::Code errorCode)
+{
+    if (!m_error.isError()) {
+        m_error.setCode(errorCode);
+    }
+}
 
 static const char s_nullBuffer[16] {}; // inert fake data for callers when reading bad or nonexistent data
 
@@ -231,6 +240,24 @@ Error ArgumentsBcReader::error() const
     return d->m_error;
 }
 
+/// \returns wnether the reader is in an error state. Error states are not recoverable.
+bool ArgumentsBcReader::isError() const
+{
+    return d->m_error.isError();
+}
+
+/// \returns wnether the reader is in a final state, may be success or error.
+bool ArgumentsBcReader::isFinished() const
+{
+    return m_state == Arguments::Finished;
+}
+
+/// \returns isFinished() && !isError()
+bool ArgumentsBcReader::isSuccess() const
+{
+    return m_state == Arguments::Finished && !d->m_error.isError();
+}
+
 /// Sets whether the reader fully validates the UTF-8 encoding of strings.
 /// \see validatesUtf8
 void ArgumentsBcReader::setValidatesUtf8(bool validate)
@@ -353,7 +380,7 @@ bool ArgumentsBcReader::beginArrayInternal()
 bool ArgumentsBcReader::beginArray()
 {
     if (unlikely(m_state != Arguments::BeginArray)) {
-        m_state = Arguments::InvalidData;
+        m_state = Arguments::Finished;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
@@ -373,7 +400,7 @@ void ArgumentsBcReader::endArray()
 bool ArgumentsBcReader::beginDict()
 {
     if (unlikely(m_state != Arguments::BeginDict)) {
-        m_state = Arguments::InvalidData;
+        m_state = Arguments::Finished;
         d->m_error.setCode(Error::ReadWrongType);
         return false;
     }
@@ -447,7 +474,7 @@ void ArgumentsBcReader::beginRead()
     d->m_dataPtr = d->m_data.ptr;
     d->m_dataEnd = d->m_dataPtr + d->m_data.length;
     if (uintptr_t(d->m_dataPtr) & 0x07) {
-        m_state = Arguments::InvalidData;
+        m_state = Arguments::Finished;
         d->m_error.setCode(Error::DataNot8ByteAligned);
     }
 }
@@ -456,6 +483,7 @@ const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
 {
     // ### !!! some of this code is copied in advanceStatePrimitive() - the copies need to stay in sync!
     if (unlikely(m_state != expectedState)) { // nonrecoverable...
+        d->mergeError(Error::ReadWrongType);
         return s_nullBuffer;
     }
 
@@ -644,6 +672,7 @@ const void *ArgumentsBcReader::advanceStatePrimitive(Arguments::IoState expected
 {
     // ### this is straight copypasta from advanceState() with unnecessary parts omitted
     if (unlikely(m_state != expectedState)) { // nonrecoverable...
+        d->mergeError(Error::ReadWrongType);
         return s_nullBuffer;
     }
 

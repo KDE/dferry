@@ -45,21 +45,23 @@ public:
 
     ~ArgumentsReader();
 
-    bool isValid() const;
-    Error error() const; // see also: aggregateStack()
+    Arguments::IoState state() const { return m_state; }
+    cstring stateString() const;
+
+    bool isValid() const; // TODO what does it mean exactly?
+    Error error() const;
+
+    bool isError() const;
+    bool isFinished() const;
+    bool isSuccess() const;
 
     void setValidatesUtf8(bool validate);
     bool validatesUtf8() const;
 
-    Arguments::IoState state() const { return m_state; }
-    cstring stateString() const;
     bool isInsideEmptyArray() const;
     cstring currentSignature() const;
     uint32 currentSignaturePosition() const;
     cstring currentSingleCompleteTypeSignature() const;
-
-    bool isFinished() const { return m_state == Arguments::Finished; }
-    bool isError() const { return m_state == Arguments::InvalidData; } // TODO remove
 
     /// What to do when opening an empty array
     enum EmptyArrayOption

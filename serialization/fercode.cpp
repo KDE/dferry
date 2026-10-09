@@ -651,7 +651,7 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
         // These have now been left-shifted to the next appropriate op. Mark them as inert / invalid -
         // they will (ioState) or might (postAlignExponent) be filled in again by further left-shifting.
         (*ops)[i].op.postAlignExponent = 0;
-        (*ops)[i].op.ioState = Arguments::InvalidData;
+        (*ops)[i].op.ioState = Arguments::Finished;
 
 
         // == Payload data

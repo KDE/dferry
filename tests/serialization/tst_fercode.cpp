@@ -43,19 +43,19 @@ static void test_basicEncode()
     ops = ferCodeForSignature(cstring(""));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("i"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::Int32},
         FerOp{FerOpcode::Copy4, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("x"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("ixoo"));
     TEST((*ops == std::vector<FerCode>{
@@ -64,7 +64,7 @@ static void test_basicEncode()
         FerOp{FerOpcode::Copy8, 0, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     // TODO check that EnterVariant has the alignment for the element after the variant
 
@@ -83,7 +83,7 @@ static void test_variantSignature()
         FerNesting{0, 0},
         FerNesting{0, 0},
         FerOp{FerOpcode::Copy4, 0, Arguments::EndVariant},
-        FerOp{FerOpcode::EndVariantSignature, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::EndVariantSignature, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("(ixix)"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
@@ -96,7 +96,7 @@ static void test_variantSignature()
         FerOp{FerOpcode::Copy4, 3, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::EndStruct},
         FerOp{FerOpcode::Copy0, 0, Arguments::EndVariant},
-        FerOp{FerOpcode::EndVariantSignature, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::EndVariantSignature, 0, Arguments::Finished}}));
 }
 
 static void test_arrayEncode()
@@ -112,7 +112,7 @@ static void test_arrayEncode()
         FerRepeatArray{0, 0, 2},
         FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("a{is}"));
     TEST((*ops == std::vector<FerCode>{
@@ -122,7 +122,7 @@ static void test_arrayEncode()
         FerOp{FerOpcode::String, 0, Arguments::EndDict, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::Finished},
         FerRepeatArray{3, 0, 2},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("a(ad)"));
     TEST((*ops == std::vector<FerCode>{
@@ -136,7 +136,7 @@ static void test_arrayEncode()
         FerOp{FerOpcode::Copy0, 0, Arguments::EndArray, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::Finished},
         FerRepeatArray{0, 0, 2},
-        FerOp{FerOpcode::End, 0, Arguments::InvalidData}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 }
 
 static void test_reader_basic()
@@ -398,7 +398,6 @@ static void test_benchmark()
         std::cout << "normal: "
                   << std::chrono::duration_cast<std::chrono::microseconds>(endNormalReader - beginNormalReader).count()
                   << '\n';
-
     }
 }
 

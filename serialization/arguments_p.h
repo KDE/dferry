@@ -100,6 +100,6 @@ const TypeInfo &typeInfo(char letterCode);
 // Macros are icky, but here every use saves three lines.
 // Funny condition to avoid the dangling-else problem.
 #define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    m_state = Arguments::InvalidData; d->m_error.setCode(errCode); return; }
+    m_state = Arguments::Finished; d->mergeError(errCode); return; }
 
 #endif // ARGUMENTS_P_H

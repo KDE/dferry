@@ -89,6 +89,8 @@ public:
 #else
     std::vector<AggregateInfo> m_aggregateStack;
 #endif
+
+    void mergeError(Error::Code errorCode);
 };
 
 // Testing support methods - their code should only occur in test binaries, not installed libraries,
@@ -149,8 +151,9 @@ inline void ArgumentsReader::Private::replaceData(chunk data, ArgumentsReader *r
     }
 
     m_data = data;
-    if (reader->m_state == Arguments::InvalidData && m_error.code() == Error::TruncatedMessageData) {
+    if (reader->m_state == Arguments::Finished && m_error.code() == Error::TruncatedMessageData) {
         reader->m_state = Arguments::AnyData; // ### get past the m_state check in advanceState()
+        m_error.setCode(Error::NoError);
         reader->advanceState();
     }
 }
