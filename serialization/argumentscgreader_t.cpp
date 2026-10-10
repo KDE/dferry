@@ -25,7 +25,6 @@
 // _TsnipBegin_Includes
 #include "arguments_p.h"
 
-#include "fercode_p.h"
 #include "message.h"
 #include "types.h"
 
@@ -51,23 +50,16 @@ public:
 
     bool readAll();
 
-    bool isValid() const;
-    Error error() const;
-
-    Arguments::IoState state() const { return m_state; }
-
-    bool isFinished() const { return m_state == Arguments::Finished; } // TODO rework
+    bool isError() const { return m_isError; }
 
 private:
     // _Tinsert_DeclHelperMethods
-
-    Arguments::IoState m_state;
 
     const byte *m_dataPtr{};
     const byte *m_dataEnd{};
 
     chunk m_data;
-    Error m_error; // TODO use
+    bool m_isError{};
 
     const std::vector<int> &m_fileDescriptors;
 
@@ -87,13 +79,6 @@ private:
 };
 
 // _TsnipBegin_Utilities
-#undef VALID_IF
-#define VALID_IF(cond, errCode) if (likely(cond)) {} else { \
-    assert(false); m_state = Finished; d->m_error.setCode(errCode); return s_nullBuffer; }
-
-#define VALID_IF_STATE(expectedState) if (likely(m_state == expectedState)) {} else { \
-    m_state = Finished; d->m_error.setCode(Error::ReadWrongType); return; }
-
 static inline const byte *align(const byte *index, uintptr_t alignment)
 {
     // it also works with 1, but makes no sense
@@ -138,18 +123,6 @@ _Tvar_CgReader<Consumer>::_Tvar_CgReader(const Message &msg)
 
 template <class Consumer>
 _Tvar_CgReader<Consumer>::~_Tvar_CgReader() = default;
-
-template <class Consumer>
-bool _Tvar_CgReader<Consumer>::isValid() const
-{
-    return true; // TODO
-}
-
-template <class Consumer>
-Error _Tvar_CgReader<Consumer>::error() const
-{
-    return m_error;
-}
 
 template <class Consumer>
 bool _Tvar_CgReader<Consumer>::readAll()
@@ -304,11 +277,10 @@ bool _Tvar_CgReader<Consumer>::readAll()
     // _Tinsert_ArgReaders
 
     if (m_dataPtr == m_dataEnd) {
-        m_state = Arguments::Finished;
         return true;
     }
 errorReturn:
-    m_state = Arguments::Finished;
+    m_isError = true;
     return false;
 }
 // _Tinsert_DefHelperMethods
