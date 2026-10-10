@@ -712,6 +712,7 @@ Connection::Connection(EventDispatcher *dispatcher, const ConnectAddress &ca)
     }
 }
 
+/// \cond PRIVATE
 Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
    : d(new ConnectionPrivate(this, dispatcher))
 {
@@ -745,6 +746,7 @@ Connection::Connection(EventDispatcher *dispatcher, CommRef mainConnectionRef)
                                 ->queueEvent(std::unique_ptr<Event>(evt));
     stateChanger.setNewState(ConnectionPrivate::AwaitingUniqueName);
 }
+/// \endcond
 
 Connection::Connection(ITransport *transport, EventDispatcher *ed, const ConnectAddress &address)
    : d(new ConnectionPrivate(this, ed))
@@ -1004,7 +1006,7 @@ void Connection::setConnectionStateListener(IConnectionStateListener *listener)
     d->m_connectionStateListener = listener;
 }
 
-/// \internal
+/// \cond PRIVATE
 Connection::CommRef Connection::createCommRef()
 {
     // TODO this is a good time to clean up "dead" CommRefs, where the counterpart was destroyed.
@@ -1018,6 +1020,7 @@ Connection::CommRef Connection::createCommRef()
     ret.commutex = std::move(link.second);
     return ret;
 }
+/// \endcond
 
 /// \returns how many file descriptors this connection allows to send per message.
 /// This is zero on any connection that is not using some kind of Unix local socket and is

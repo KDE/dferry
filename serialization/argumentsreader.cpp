@@ -31,12 +31,14 @@
 
 thread_local static MallocCache<sizeof(ArgumentsReader::Private), 4> allocCache;
 
+/// \cond PRIVATE
 void ArgumentsReader::Private::mergeError(Error::Code errorCode)
 {
     if (!m_error.isError()) {
         m_error.setCode(errorCode);
     }
 }
+/// \endcond
 
 /** \class ArgumentsReader
     Reads arguments out of Arguments.
@@ -152,8 +154,8 @@ void ArgumentsReader::beginRead()
     advanceState();
 }
 
-/// \returns whether this %ArgumentsReader is connected to an Arguments instance.
-/// A moved-from %ArgumentsReader, for example, is not.
+/// \returns whether this reader is connected to an Arguments instance.
+/// A moved-from reader is not.
 bool ArgumentsReader::isValid() const
 {
     if (d) {

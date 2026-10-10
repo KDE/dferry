@@ -172,6 +172,8 @@ Error PendingReply::error() const
     return d->m_error;
 }
 
+/// \returns wnether the %PendingReply is in an error state. Error states are not recoverable.
+// TODO might want to rethink what to do about "null"
 bool PendingReply::isError() const
 {
     return d && d->m_error.isError();

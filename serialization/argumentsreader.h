@@ -48,7 +48,7 @@ public:
     Arguments::IoState state() const { return m_state; }
     cstring stateString() const;
 
-    bool isValid() const; // TODO what does it mean exactly?
+    bool isValid() const;
     Error error() const;
 
     bool isError() const;

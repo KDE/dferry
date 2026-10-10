@@ -239,9 +239,11 @@ cstring ArgumentsBcReader::stateString() const
     return printableState(m_state);
 }
 
+/// \returns whether this reader is connected to an Arguments instance.
+/// A moved-from reader is not.
 bool ArgumentsBcReader::isValid() const
 {
-    return true; // TODO
+    return d;
 }
 
 /// \returns the error that occured on this reader, if any. Otherwise, the return value has error
@@ -379,6 +381,7 @@ bool ArgumentsBcReader::beginArrayInternal()
 }
 
 /// Starts reading an array.
+/// Required state: Arguments::BeginArray.
 /// \returns true if the array has >= 1 elements, false if it has 0.
 bool ArgumentsBcReader::beginArray()
 {
@@ -399,6 +402,7 @@ void ArgumentsBcReader::endArray()
 }
 
 /// Starts reading a dict.
+/// Required state: Arguments::BeginDict.
 /// \returns true if the dict has >= 1 elements, false if it has 0.
 bool ArgumentsBcReader::beginDict()
 {

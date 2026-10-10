@@ -93,8 +93,6 @@ public:
     void setGuid(const std::string &guid);
     std::string guid() const;
 
-    // the dbus standard format strings don't contain information about role and bus type, so the setter
-    // will not touch these and the getter will lose that information.
     bool setAddressFromString(const std::string &addr);
     std::string toString() const;
 

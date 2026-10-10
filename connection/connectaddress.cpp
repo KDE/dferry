@@ -436,6 +436,8 @@ private:
 
 /// Sets the address from a DBus address string.
 /// Examples: "unix:path=/var/run/dbus/system_bus_socket", "tcp:host=127.0.0.1,port=4242"
+/// Note that DBus address strings according to spec don't contain information about role
+/// and bus type, so the setter will not touch these and toString() cannot include them.
 bool ConnectAddress::setAddressFromString(const std::string &addr)
 {
     d->m_addrType = Type::None;
