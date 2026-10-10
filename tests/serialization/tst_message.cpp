@@ -162,7 +162,7 @@ void testFileDescriptorsInArguments()
             ArgumentsReader reader(args);
             for (uint j = 0; j < i; j++) {
                 TEST(reader.readUnixFd() == int(DummyFdOffset - j));
-                TEST(reader.isValid());
+                TEST(!reader.isError());
             }
             TEST(reader.isFinished());
         }
@@ -172,7 +172,7 @@ void testFileDescriptorsInArguments()
             ArgumentsReader reader(args);
             for (uint j = 0; j < i; j++) {
                 TEST(reader.readUnixFd() == int(DummyFdOffset - j));
-                TEST(reader.isValid());
+                TEST(!reader.isError());
             }
             TEST(reader.isFinished());
         }

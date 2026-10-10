@@ -614,7 +614,6 @@ bool MessagePrivate::deserializeVariableHeaders()
     Arguments argList(nullptr, varHeadersSig, headerData, m_isByteSwapped);
 
     ArgumentsReader reader(argList);
-    assert(reader.isValid());
 
     if (reader.state() != Arguments::Int32) {
         return false;

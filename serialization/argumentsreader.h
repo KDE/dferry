@@ -48,7 +48,6 @@ public:
     Arguments::IoState state() const { return m_state; }
     cstring stateString() const;
 
-    bool isValid() const;
     Error error() const;
 
     bool isError() const;

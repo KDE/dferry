@@ -239,13 +239,6 @@ cstring ArgumentsBcReader::stateString() const
     return printableState(m_state);
 }
 
-/// \returns whether this reader is connected to an Arguments instance.
-/// A moved-from reader is not.
-bool ArgumentsBcReader::isValid() const
-{
-    return d;
-}
-
 /// \returns the error that occured on this reader, if any. Otherwise, the return value has error
 ///          code Error::NoError.
 Error ArgumentsBcReader::error() const

@@ -83,9 +83,6 @@ QAbstractItemModel* createArgumentsModel(Message *message)
     QStandardItem *parent = model->invisibleRootItem();
 
     ArgumentsReader reader(message->arguments());
-    if (!reader.isValid()) {
-        return withFaultyData(model);
-    }
 
     bool isDone = false;
     // Cache it, don't call Reader::isInsideEmptyArray() on every data element.

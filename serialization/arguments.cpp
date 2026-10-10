@@ -485,9 +485,6 @@ static bool strEndsWith(const std::string &str, const std::string &ending)
 std::string Arguments::prettyPrint() const
 {
     ArgumentsReader reader(*this);
-    if (!reader.isValid()) {
-        return std::string();
-    }
     std::stringstream ret;
     std::string nestingPrefix;
 

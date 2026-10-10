@@ -154,17 +154,6 @@ void ArgumentsReader::beginRead()
     advanceState();
 }
 
-/// \returns whether this reader is connected to an Arguments instance.
-/// A moved-from reader is not.
-bool ArgumentsReader::isValid() const
-{
-    if (d) {
-        // None of the constructors should allow construction without Arguments
-        assert(d->m_argsPriv);
-    }
-    return d;
-}
-
 /// \returns the error that occured on this reader, if any. Otherwise, the return value has error
 ///          code Error::NoError.
 Error ArgumentsReader::error() const
