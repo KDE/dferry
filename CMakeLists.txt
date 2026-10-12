@@ -156,7 +156,7 @@ if (WIN32)
     target_link_libraries(dfer PRIVATE ws2_32)
 endif()
 
-if (DFER_BUILD_CLIENTLIB)
+if (DFERRY_BUILD_CLIENTLIB)
     find_package(LibTinyxml2 REQUIRED) # for the introspection parser in dferclient
     include_directories(${LIBTINYXML2_INCLUDE_DIRS})
 endif()
@@ -184,7 +184,7 @@ set(DFERCLIENT_SOURCES
 set(DFERCLIENT_HEADERS
     client/introspection.cpp)
 
-if (DFER_BUILD_CLIENTLIB)
+if (DFERRY_BUILD_CLIENTLIB)
     add_library(dferclient SHARED ${DFERCLIENT_SOURCES} ${DFERCLIENT_HEADERS})
     target_include_directories(dferclient INTERFACE "$<INSTALL_INTERFACE:include/dferry>")
     target_link_libraries(dferclient PUBLIC dfer PRIVATE ${LIBTINYXML2_LIBRARIES})
