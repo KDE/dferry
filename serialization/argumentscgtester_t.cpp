@@ -20,6 +20,9 @@
    Version 1.1.  You may obtain a copy of the License at
    http://www.mozilla.org/MPL/
 */
+
+/// \cond PRIVATE // hide the whole file from Doxygen // _Tignore_
+
 // _TsnipBegin_TestIncludes
 
 #include <argumentsreader.h>
@@ -157,3 +160,4 @@ void testCgReader(const Arguments &args)
     TEST(!tester->m_parallelReader.isError());
 }
 // _TsnipEnd_TestReadFunc
+/// \endcond // hide the whole file from Doxygen // _Tignore_

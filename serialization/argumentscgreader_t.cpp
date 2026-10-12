@@ -21,6 +21,8 @@
    http://www.mozilla.org/MPL/
 */
 
+/// \cond PRIVATE // hide the whole file from Doxygen // _Tignore_
+
 // _TsnipBegin_TopDecl
 // _TsnipBegin_Includes
 #include "arguments_p.h"
@@ -326,3 +328,4 @@ errorReturn: // for compatibility with snippets from readAll()
     return false;
 }
 // _TsnipEnd_ParseArray
+/// \endcond // hide the whole file from Doxygen // _Tignore_
