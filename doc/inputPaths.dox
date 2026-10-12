@@ -1,0 +1,6 @@
+INPUT                  = ../doc \
+                         ../connection \
+                         ../events \
+                         ../serialization \
+                         ../transport \
+                         ../util

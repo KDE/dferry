@@ -24,6 +24,7 @@ endif()
 
 option(DFERRY_BUILD_ANALYZER "Build the dfer-analyzer bus analyzer GUI" TRUE)
 option(DFERRY_BUILD_CLIENTLIB "Build (incomplete, experimental) introspection support" FALSE)
+option(DFERRY_BUILD_DOC "Build documentation" FALSE)
 
 include(GNUInstallDirs)
 
@@ -195,6 +196,10 @@ install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION include/dferry)
 enable_testing() # need this here to get the "test" target in the toplevel build dir
 add_subdirectory(tests)
 add_subdirectory(applications)
+
+if (DFERRY_BUILD_DOC)
+    add_subdirectory(doc)
+endif()
 
 set(configModuleLocation "lib/cmake/dferry")
 
