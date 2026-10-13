@@ -172,8 +172,32 @@ Malformed reply arguments?
     }
 }
 
+void test_errorEnumToString()
+{
+    // Doesn't really belong here, but a separate test file for this? Nah.
+
+    // Test first and last enum values of all error ranges to check that the indexing shenanigans
+    // in Error::message() work. This did detect errors when the code was new.
+    // Obviously, we don't want to essentially duplicate the entire logic of message(), so glass-box
+    // testing of known difficult cases only.
+    TEST(Error(Error::NoError).string() == std::string("NoError"));
+    TEST(Error(Error::MaxArgumentsError).string() == std::string("MaxArgumentsError"));
+    TEST(Error(Error::DetachedPendingReply).string() == std::string("DetachedPendingReply"));
+    TEST(Error(Error::MaxMessageError).string() == std::string("MaxMessageError"));
+    TEST(Error(Error::AuthenticationFailed).string() == std::string("AuthenticationFailed"));
+    TEST(Error(Error::MaxConnectionError).string() == std::string("MaxConnectionError"));
+
+    // These are technically undefined behavior due to invalid static_casts to nonexistent enum value...
+    // but let's try to check test invalid index detection a little anyway.
+    TEST(Error(static_cast<Error::Code>(-1)).string() == std::string("<unknown error code>"));
+    TEST(Error(static_cast<Error::Code>(-1)).string() == std::string("<unknown error code>"));
+    TEST(Error(static_cast<Error::Code>(Error::MaxConnectionError + 1)).string() ==
+               std::string("<unknown error code>"));
+}
+
 int main(int, char *[])
 {
     test_errorPropagation();
+    test_errorEnumToString();
     std::cout << "Passed!\n";
 }

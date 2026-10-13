@@ -1,5 +1,7 @@
 #include "error.h"
 
+#include <iterator> // std::size()
+
 /** \class Error
     For all errors in Dferry.
 
@@ -28,8 +30,109 @@
 /// \returns whether this Error's error code signifies an actual error (i.e. it's not NoError)
 
 /// \returns a string representation of this Error's error code.
-std::string Error::message() const
+const char *Error::string() const
 {
-    // TODO looking up a yet to be written string from error code goes here
-    return std::string();
+    static const char* const names[] = {
+        "NoError",
+        // Arguments errors
+        "NotAttachedToArguments",
+        "InvalidSignature",
+        "TruncatedMessageData",
+        "MalformedMessageData",
+        "ReadWrongType",
+        "InvalidString",
+        "InvalidObjectPath",
+        "SignatureTooLong",
+        "ExcessiveNesting",
+        "CannotEndArgumentsWithOpenAggregates",
+        "ArgumentsTooLong",
+        "DataNot8ByteAligned",
+        "NotDirectlyInVariant",
+        "NotSingleCompleteTypeInVariant",
+        "NotDirectlyInStruct",
+        "EmptyStruct",
+        "NotDirectlyInArray",
+        "NotSingleCompleteTypeInArray",
+        "NotPrimitiveType",
+        "DataLengthNotMultipleOfElementLength",
+        "InvalidStateToRestartEmptyArray",
+        "NotDirectlyInDict",
+        "DictKeyNotBasicType",
+        "NotKeyAndValueTypesInDict",
+        "TypeMismatchInArrayOrDictRepetition",
+        "ArrayOrDictTooLong", ///< Array or dict too long (max 64 MiB)
+        "StateNotSkippable", ///< Tried to skip an argument type that cannot be skipped
+#ifdef WITH_DICT_ENTRY
+        "MissingBeginDictEntry = 1019",
+        "MisplacedBeginDictEntry",
+        "MissingEndDictEntry",
+        "MisplacedEndDictEntry",
+#endif
+        "MaxArgumentsError", // = 1023
+
+        // Message  / PendingReply
+        "DetachedPendingReply",
+        "PendingReplyNotFinished",
+        "Timeout",
+        "MalformedReply",
+        "MessageType",
+        "MessageSender",
+        "MessageDestination",
+        "MessagePath",
+        "MessageInterface",
+        "MessageSignature",
+        "MessageMethod",
+        "MessageErrorNameMissing",
+        "MessageSerial",
+        "MessageReplySerial",
+        "MessageProtocolVersion",
+#if 0
+        "PeerNoSuchReceiver",
+        "PeerNoSuchPath",
+        "PeerNoSuchInterface",
+        "PeerNoSuchMethod",
+
+        "ArgumentTypeMismatch",
+        "PeerInvalidProperty",
+        "PeerNoSuchProperty",
+        "AccessDenied",
+#endif
+        "MaxMessageError", // = 2047
+        // Connection
+        "AuthenticationFailed",
+        "RemoteDisconnect",
+        "LocalDisconnect",
+        "SendingTooManyUnixFds",
+        "MaxConnectionError", // = 3071
+    };
+
+    struct Group {
+        constexpr uint32 count() const { return last - first; }
+        uint32 first;               uint32 last;
+    };
+    static constexpr Group groups[] = {
+        {NoError,                   LastArgumentsError},
+        {MaxArgumentsError,         LastMessageError},
+        {MaxMessageError,           LastConnectionError},
+        {MaxConnectionError,        LastOtherError},
+        {MaxConnectionError + 1,    MaxConnectionError + 1}, // sentinel item, only .first is used
+    };
+    static_assert(groups[0].count() + groups[1].count() + groups[2].count() + groups[3].count()
+                  == std::size(names),
+                  "Group counts don't add up to the names table size");
+
+    uint32 base = 0;
+    for (uint32 i = 0; i < std::size(groups) - 1; i++) {
+        if (m_code < groups[i + 1].first) {
+            const uint32 indexInGroup = m_code - groups[i].first;
+            const uint32 tableIndex = base + indexInGroup;
+            if (m_code >= groups[i].last || tableIndex >= std::size(names)) {
+                break; // error: invalid enum value or our group data is wrong
+            }
+            return names[tableIndex];
+        }
+        base += groups[i].count();
+    }
+
+    return "<unknown error code>";
 }

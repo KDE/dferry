@@ -37,11 +37,11 @@
 
 #include "types.h"
 
-#include <string>
-
 class DFERRY_EXPORT Error {
 public:
     /// Error codes
+    // If you add, remove, reorder, rename anything here, *do* adapt message()!
+    // It is recommended to temporarily(!) add affected values to test_errorEnumToString() and run it.
     enum Code : uint32 {
         NoError = 0, ///< No error
 
@@ -91,8 +91,11 @@ public:
 #endif
         // we have a lot of error codes at our disposal, so reserve some for easy classification
         // by range
-        MaxArgumentsError = 1023,
-        // end Arguments errors
+        /// \cond PRIVATE
+        LastArgumentsError, // keep this last!
+        /// \endcond
+        MaxArgumentsError = 1023, ///< (Highest possible arguments-related error value)
+
 
         // Message  / PendingReply
         DetachedPendingReply, ///< PendingReply is default-constructed or has its result already taken out
@@ -102,21 +105,17 @@ public:
                         ///  Absence of this error does not guarantee that the reply is fully valid -
                         ///  in particular, its Arguments (if any) are only validated while deserializing
                         ///  them.
-
-        // ||| all of these may potentially mean missing for the type of message
-        // vvv or locally found to be invalid (invalid object path for example)
         MessageType, ///< Message type is unsuitable
-        MessageSender, ///< Message sender is invalid
-        MessageDestination, ///< Message destination is invalid
-        MessagePath, ///< Message (DBus object) path is invalid
-        MessageInterface, ///< Message interface is invalid
+        MessageSender, ///< Message sender is invalid or missing
+        MessageDestination, ///< Message destination is invalid or missing
+        MessagePath, ///< Message (DBus object) path is invalid or missing
+        MessageInterface, ///< Message interface name is invalid or missing
         MessageSignature, ///< Message (DBus type) signature is invalid
         MessageMethod, ///< Message method name is invalid
         MessageErrorNameMissing, ///< DBus error-type Message is missing error name
         MessageSerial, ///< Message serial number is invalid
-        MessageReplySerial, ///< Message reply serial number is invalid
+        MessageReplySerial, ///< Message reply serial number is invalid or missing
         MessageProtocolVersion, ///< Message protocol version is not supported
-
 #if 0
         PeerNoSuchReceiver,
         PeerNoSuchPath,
@@ -128,8 +127,11 @@ public:
         PeerNoSuchProperty,
         AccessDenied, // for now(?) only properties: writing to read-only / reading from write-only
 #endif
-        MaxMessageError = 2047,
-        // end Message / PendingReply errors
+        /// \cond PRIVATE
+        LastMessageError,  // keep this last!
+        /// \endcond
+        MaxMessageError = 2047, ///< (Highest possible message-related error value)
+
 
         // Connection
         AuthenticationFailed, ///< Could not authenticate to message bus
@@ -138,9 +140,15 @@ public:
         SendingTooManyUnixFds, ///< Tried to send a message containing more file descriptors
                                ///  than the connection supports.
                                ///  \see Connection::supportedFileDescriptorsPerMessage()
-        MaxConnectionError = 3071,
+        /// \cond PRIVATE
+        LastConnectionError, // keep this last!
+        /// \endcond
+        MaxConnectionError = 3071, ///< (Highest possible connection-related error value)
 
         // errors for other occasions go here
+        /// \cond PRIVATE
+        LastOtherError,  // keep this last!
+        /// \endcond
     };
 
     Error() : m_code(NoError) {}
@@ -148,8 +156,7 @@ public:
     void setCode(Code code) { m_code = code; }
     Code code() const { return m_code; }
     bool isError() const { return m_code != NoError; }
-    // no setter for message - it is just looked up from a static table according to error code
-    std::string message() const;
+    const char *string() const;
 
 private:
     Code m_code;
