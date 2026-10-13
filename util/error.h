@@ -71,7 +71,8 @@ public:
         NotPrimitiveType, ///< Writing array of primitives: element type is not a primitive type
         DataLengthNotMultipleOfElementLength, ///< Writing array of primitives: input data length is not an
                                               ///  integer multiple of element length
-        InvalidStateToRestartEmptyArray, // TODO? remove or make it a Qt special
+        InvalidStateToRestartEmptyArray, ///< ArgumentsWriter::RestartEmptyArrayToWriteTypes was used with
+                                         ///  writer in an unsuitable state
 
         NotDirectlyInDict, ///< Dict is not the current ("top of stack") aggregate
         DictKeyNotBasicType, ///< Dict key is not a numeric, boolean or string type

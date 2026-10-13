@@ -6,6 +6,7 @@ EXTRACT_LOCAL_CLASSES  = NO
 HIDE_FRIEND_COMPOUNDS  = YES
 SHOW_FILES             = NO
 WARN_IF_UNDOC_ENUM_VAL = YES
+SHOW_ENUM_VALUES       = YES
 @INCLUDE               = inputPaths.dox
 FILE_PATTERNS          = *.c \
                          *.cpp \

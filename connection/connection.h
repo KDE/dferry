@@ -49,7 +49,7 @@ public:
     {
         Unconnected = 0, ///< Not connected
         Connecting, ///< Connecting / trying to connect
-        Connected, ///< // Connected
+        Connected, ///< Connected
     };
 
     /// \cond PRIVATE
