@@ -113,7 +113,8 @@ IO::Status ITransport::handleIoReady(IO::RW rw)
         assert(false);
     }
     if (ret != IO::Status::OK) {
-        // TODO call some common close, cleanup & report error method
+        // ### anything else to do?
+        close();
     }
     return ret;
 }
