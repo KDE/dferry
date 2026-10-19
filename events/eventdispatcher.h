@@ -43,6 +43,8 @@ public:
     bool poll(int timeout = -1);
     void interrupt();
 
+    void run();
+
 private:
     friend class EventDispatcherPrivate;
     EventDispatcherPrivate *d;

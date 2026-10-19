@@ -432,3 +432,11 @@ void EventDispatcher::interrupt()
 {
     d->m_poller->interrupt(IEventPoller::Stop);
 }
+
+/// Dispatches events until interrupted.
+/// This is a convenience method equivalent to "while (eventDispatcher->poll());".
+/// \see poll(), interrupt()
+void EventDispatcher::run()
+{
+    while (poll());
+}
