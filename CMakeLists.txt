@@ -196,6 +196,7 @@ install(FILES ${DFER_PUBLIC_HEADERS} DESTINATION include/dferry)
 enable_testing() # need this here to get the "test" target in the toplevel build dir
 add_subdirectory(tests)
 add_subdirectory(applications)
+add_subdirectory(examples)
 
 if (DFERRY_BUILD_DOC)
     add_subdirectory(doc)
