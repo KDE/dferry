@@ -76,9 +76,9 @@ public:
                             // for pretty-printing purposes (it is usually clear in marshalling code).
     void endDict(); // like endArray()
 
-    void beginStruct();
+    void beginStruct() { advanceStatePrimitive(Arguments::BeginStruct); }
     //void skipStruct(); // like skipArray()
-    void endStruct(); // like endArray()
+    void endStruct() { advanceStatePrimitive(Arguments::EndStruct); } // like endArray()
 
     void beginVariant(); // TODO probably need to return a regular Reader here - or somehow obtain bytecode
                          // for the variant signature as well and swap state...

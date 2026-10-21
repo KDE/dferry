@@ -415,21 +415,15 @@ void ArgumentsBcReader::endDict()
     advanceStateAggregate(Arguments::EndDict);
 }
 
+/// \fn void ArgumentsBcReader::beginStruct()
 /// Begins reading a struct.
 /// Required state: Arguments::BeginStruct.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
-void ArgumentsBcReader::beginStruct()
-{
-    advanceStatePrimitive(Arguments::BeginStruct);
-}
 
+/// \fn void ArgumentsBcReader::endStruct()
 /// Ends reading a struct.
 /// Required state: Arguments::EndStruct.
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
-void ArgumentsBcReader::endStruct()
-{
-    advanceStatePrimitive(Arguments::EndStruct);
-}
 
 /// Begins reading a variant.
 /// Required state:  Arguments::BeginVariant.
