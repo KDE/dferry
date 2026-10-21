@@ -391,7 +391,7 @@ bool ArgumentsBcReader::beginArray()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endArray()
 {
-    advanceState(Arguments::EndArray);
+    advanceStateAggregate(Arguments::EndArray);
 }
 
 /// Starts reading a dict.
@@ -412,7 +412,7 @@ bool ArgumentsBcReader::beginDict()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endDict()
 {
-    advanceState(Arguments::EndDict);
+    advanceStateAggregate(Arguments::EndDict);
 }
 
 /// Begins reading a struct.
@@ -420,7 +420,7 @@ void ArgumentsBcReader::endDict()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginStruct()
 {
-    advanceState(Arguments::BeginStruct);
+    advanceStatePrimitive(Arguments::BeginStruct);
 }
 
 /// Ends reading a struct.
@@ -428,7 +428,7 @@ void ArgumentsBcReader::beginStruct()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endStruct()
 {
-    advanceState(Arguments::EndStruct);
+    advanceStatePrimitive(Arguments::EndStruct);
 }
 
 /// Begins reading a variant.
@@ -436,7 +436,7 @@ void ArgumentsBcReader::endStruct()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::beginVariant()
 {
-    advanceState(Arguments::BeginVariant);
+    advanceStateAggregate(Arguments::BeginVariant);
 }
 
 /// Ends reading a variant.
@@ -444,7 +444,7 @@ void ArgumentsBcReader::beginVariant()
 /// \see \ref argsreader_concepts "ArgumentsReader Concepts"
 void ArgumentsBcReader::endVariant()
 {
-    advanceState(Arguments::EndVariant);
+    advanceStateAggregate(Arguments::EndVariant);
 }
 
 #ifdef WITH_DICT_ENTRY
@@ -479,9 +479,14 @@ void ArgumentsBcReader::beginRead()
     }
 }
 
-const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
+template<ArgumentsBcReader::StateType stateType>
+#ifdef __GNUC__
+[[gnu::always_inline]]
+#elif defined __MSVC__
+[[msvc::forceinline]]
+#endif
+inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState expectedState)
 {
-    // ### !!! some of this code is copied in advanceStatePrimitive() - the copies need to stay in sync!
     if (unlikely(m_state != expectedState)) { // nonrecoverable...
         d->mergeError(Error::ReadWrongType);
         return s_nullBuffer;
@@ -505,123 +510,137 @@ const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
     const byte* ret = d->m_dataPtr;
     const byte* newPtr = ret;
 
-    switch (ferOp.op) {
-    case FerOpcode::Copy0:
-        break;
-    case FerOpcode::Copy1:
-    case FerOpcode::Copy2:
-    case FerOpcode::Copy4:
-    case FerOpcode::Copy8:
-        newPtr += 1 << uint32(ferOp.op);
-        break;
-    case FerOpcode::String: {
-        // ### maybe do content validation after alignment to next element and data length check to avoid
-        // length-checking twice. But we do need to check max string length for String and ObjectPath!
-        newPtr += sizeof(uint32);
-        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-        uint32 len = *reinterpret_cast<const uint32 *>(ret);
-        VALID_IF(Arguments::isStringValid(cstring(const_cast<byte*>(newPtr), len), d->m_validateUtf8),
-                 Error::InvalidString);
-        newPtr += len + 1 /* trailing nul */;
-        break; }
-    case FerOpcode::ObjectPath: {
-        newPtr += sizeof(uint32);
-        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-        uint32 len = *reinterpret_cast<const uint32 *>(ret);
-        VALID_IF(Arguments::isObjectPathValid(cstring(const_cast<byte*>(newPtr), len)),
-                 Error::InvalidObjectPath);
-        newPtr += len + 1 /* trailing nul */;
-        break; }
-    case FerOpcode::Signature: {
-        newPtr += sizeof(byte);
-        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-        byte len = *reinterpret_cast<const byte *>(ret);
-        VALID_IF(Arguments::isSignatureValid(cstring(const_cast<byte*>(newPtr), len)),
-                 Error::InvalidSignature);
-        newPtr += len + 1 /* trailing nul */;
-        break; }
-
-    case FerOpcode::EnterVariant: {
-        const FerNesting outerNest = d->m_opsPtr->nest;
-        d->m_nesting.array += outerNest.arrayDepth;
-        d->m_nesting.paren += outerNest.parenDepth;
-        d->m_nesting.variant += 1;
-
-        const uint32 opsIndex = d->m_opsPtr + 1 - d->m_opsBase; // point it after the EnterVariant + FerNest
-        d->m_variantStack.emplace_back(VariantInfo{std::move(d->m_ops), opsIndex});
-
-        const byte len = *reinterpret_cast<const byte *>(ret);
-        const cstring newSig(const_cast<byte *>(ret + sizeof(byte)), len);
-        newPtr += sizeof(byte);
-        newPtr += len + 1 /* trailing nul */;
-
-        d->m_ops = ferCodeForSignature(newSig, Arguments::VariantSignature);
-        assert(d->m_ops->size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
-        d->m_opsPtr = &(*d->m_ops)[0];
-        d->m_opsBase = d->m_opsPtr;
-
-        ferOp = d->m_opsPtr->op;
-
-        const FerNesting innerNest = (d->m_opsPtr + 1)->nest;
-        const FerNesting extraNest = (d->m_opsPtr + 2)->nest;
-        d->m_opsPtr += 3;
-        if (d->m_nesting.array + innerNest.arrayDepth > Nesting::arrayMax ||
-            d->m_nesting.paren + innerNest.parenDepth > Nesting::parenMax ||
-            d->m_nesting.total() + extraNest.arrayDepth /* really combinedDeptth */ > Nesting::totalMax) {
-            assert(false); // for now, TODO error handling
+    if constexpr (stateType == StateType::Primitive) {
+        switch (ferOp.op) {
+        case FerOpcode::Copy0:
+            break;
+        case FerOpcode::Copy1:
+        case FerOpcode::Copy2:
+        case FerOpcode::Copy4:
+        case FerOpcode::Copy8:
+            newPtr += 1 << uint32(ferOp.op);
+            break;
+        default:
+            unreachable();
+            break;
         }
+    } else if constexpr (stateType == StateType::String) {
+        switch (ferOp.op) {
+        case FerOpcode::String: {
+            // ### maybe do content validation after alignment to next element and data length check to avoid
+            // length-checking twice. But we do need to check max string length for String and ObjectPath!
+            newPtr += sizeof(uint32);
+            VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
+            uint32 len = *reinterpret_cast<const uint32 *>(ret);
+            VALID_IF(Arguments::isStringValid(cstring(const_cast<byte*>(newPtr), len), d->m_validateUtf8),
+                    Error::InvalidString);
+            newPtr += len + 1 /* trailing nul */;
+            break; }
+        case FerOpcode::ObjectPath: {
+            newPtr += sizeof(uint32);
+            VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
+            uint32 len = *reinterpret_cast<const uint32 *>(ret);
+            VALID_IF(Arguments::isObjectPathValid(cstring(const_cast<byte*>(newPtr), len)),
+                    Error::InvalidObjectPath);
+            newPtr += len + 1 /* trailing nul */;
+            break; }
+        case FerOpcode::Signature: {
+            newPtr += sizeof(byte);
+            VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
+            byte len = *reinterpret_cast<const byte *>(ret);
+            VALID_IF(Arguments::isSignatureValid(cstring(const_cast<byte*>(newPtr), len)),
+                    Error::InvalidSignature);
+            newPtr += len + 1 /* trailing nul */;
+            break; }
+        default:
+            unreachable();
+            break;
+        }
+    } else {
+        switch (ferOp.op) {
+        case FerOpcode::EnterVariant: {
+            const FerNesting outerNest = d->m_opsPtr->nest;
+            d->m_nesting.array += outerNest.arrayDepth;
+            d->m_nesting.paren += outerNest.parenDepth;
+            d->m_nesting.variant += 1;
 
-        break; }
+            const uint32 opsIndex = d->m_opsPtr + 1 - d->m_opsBase; // point it after the EnterVariant + FerNest
+            d->m_variantStack.emplace_back(VariantInfo{std::move(d->m_ops), opsIndex});
 
-    case FerOpcode::EndVariantSignature: {
-        assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+            const byte len = *reinterpret_cast<const byte *>(ret);
+            const cstring newSig(const_cast<byte *>(ret + sizeof(byte)), len);
+            newPtr += sizeof(byte);
+            newPtr += len + 1 /* trailing nul */;
 
-        VariantInfo& varInfo = d->m_variantStack.back();
-        d->m_ops = std::move(varInfo.prevOps);
-        d->m_opsBase = &(*d->m_ops)[0];
-        d->m_opsPtr = d->m_opsBase + varInfo.prevOpsIndex;
-        d->m_variantStack.pop_back();
+            d->m_ops = ferCodeForSignature(newSig, Arguments::VariantSignature);
+            assert(d->m_ops->size() >= 4); // two begin, one end, >= 1 data elements  // TODO error handling
+            d->m_opsPtr = &(*d->m_ops)[0];
+            d->m_opsBase = d->m_opsPtr;
 
-        const FerNesting outerNest = (d->m_opsPtr - 1)->nest;
-        d->m_nesting.array -= outerNest.arrayDepth;
-        d->m_nesting.paren -= outerNest.parenDepth;
-        d->m_nesting.variant -= 1;
+            ferOp = d->m_opsPtr->op;
 
-        const FerOp enterVariantOp = (d->m_opsPtr - 2)->op;
-        assert(enterVariantOp.op == FerOpcode::EnterVariant);
-        ferOp.postAlignExponent = enterVariantOp.postAlignExponent;
-        // avoid bit fiddling by copying all bits in the first byte of FerOp - it makes no other difference
-        ferOp.op = enterVariantOp.op;
+            const FerNesting innerNest = (d->m_opsPtr + 1)->nest;
+            const FerNesting extraNest = (d->m_opsPtr + 2)->nest;
+            d->m_opsPtr += 3;
+            if (d->m_nesting.array + innerNest.arrayDepth > Nesting::arrayMax ||
+                d->m_nesting.paren + innerNest.parenDepth > Nesting::parenMax ||
+                d->m_nesting.total() + extraNest.arrayDepth /* really combinedDeptth */ > Nesting::totalMax) {
+                assert(false); // for now, TODO error handling
+            }
 
-        break; }
+            break; }
 
-    case FerOpcode::End:
-        assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
-        assert(d->m_arrayLengthStack.empty());
-        assert(d->m_variantStack.empty());
-        assert(!d->m_nesting.array);
-        assert(!d->m_nesting.paren);
-        assert(!d->m_nesting.variant);
-        m_state = Arguments::Finished;
-        return s_nullBuffer;
+        case FerOpcode::EndVariantSignature: {
+            assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
 
-    case FerOpcode::EndArray: {
-        // Only handles actual end of array, "more elements to come, loop back" is handled under:
-        // if (ferOp.ioState == Arguments::EndArray)
-        assert(newPtr == d->m_dataEnd);
+            VariantInfo& varInfo = d->m_variantStack.back();
+            d->m_ops = std::move(varInfo.prevOps);
+            d->m_opsBase = &(*d->m_ops)[0];
+            d->m_opsPtr = d->m_opsBase + varInfo.prevOpsIndex;
+            d->m_variantStack.pop_back();
 
-        d->m_opsPtr++; // skip FerRepeatArray
-        d->m_dataEnd = d->m_arrayLengthStack.back();
-        d->m_arrayLengthStack.pop_back();
-        break; }
+            const FerNesting outerNest = (d->m_opsPtr - 1)->nest;
+            d->m_nesting.array -= outerNest.arrayDepth;
+            d->m_nesting.paren -= outerNest.parenDepth;
+            d->m_nesting.variant -= 1;
 
-        // The following two should only occur at the beginning of a signature, which we don't handle here
-    case FerOpcode::BeginVariantSignature:
-    case FerOpcode::BeginMethodSignature:
-        // The following are handled by their own begin*() methods
-    case FerOpcode::BeginArray:
-        unreachable();
-        break;
+            const FerOp enterVariantOp = (d->m_opsPtr - 2)->op;
+            assert(enterVariantOp.op == FerOpcode::EnterVariant);
+            ferOp.postAlignExponent = enterVariantOp.postAlignExponent;
+            // avoid bit fiddling by copying all bits in the first byte of FerOp - it makes no other difference
+            ferOp.op = enterVariantOp.op;
+
+            break; }
+
+        case FerOpcode::End:
+            assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+            assert(d->m_arrayLengthStack.empty());
+            assert(d->m_variantStack.empty());
+            assert(!d->m_nesting.array);
+            assert(!d->m_nesting.paren);
+            assert(!d->m_nesting.variant);
+            m_state = Arguments::Finished;
+            return s_nullBuffer;
+
+        case FerOpcode::EndArray: {
+            // Only handles actual end of array, "more elements to come, loop back" is handled under:
+            // if (ferOp.ioState == Arguments::EndArray)
+            assert(newPtr == d->m_dataEnd);
+
+            d->m_opsPtr++; // skip FerRepeatArray
+            d->m_dataEnd = d->m_arrayLengthStack.back();
+            d->m_arrayLengthStack.pop_back();
+            break; }
+
+            // The following two should only occur at the beginning of a signature, which we don't handle here
+        case FerOpcode::BeginVariantSignature:
+        case FerOpcode::BeginMethodSignature:
+            // The following are handled by their own begin*() methods
+        case FerOpcode::BeginArray:
+        default:
+            unreachable();
+            break;
+        }
     }
 
     uint32_t postAlignExponent = ferOp.postAlignExponent;
@@ -670,86 +689,17 @@ const void *ArgumentsBcReader::advanceState(Arguments::IoState expectedState)
 
 const void *ArgumentsBcReader::advanceStatePrimitive(Arguments::IoState expectedState)
 {
-    // ### this is straight copypasta from advanceState() with unnecessary parts omitted
-    if (unlikely(m_state != expectedState)) { // nonrecoverable...
-        d->mergeError(Error::ReadWrongType);
-        return s_nullBuffer;
-    }
+    return advanceStateInternal<StateType::Primitive>(expectedState);
+}
 
-    // Normally (in release builds), no need for a length check on ops because ops are pre-validated and
-    // FerOps::End marks the end.
-    assert(d->m_opsBase == &(*d->m_ops)[0]);
-    assert(d->m_opsPtr <= &(*d->m_ops)[0] + d->m_ops->size());
-    assert(d->m_dataPtr <= d->m_dataEnd);
+const void *ArgumentsBcReader::advanceStateString(Arguments::IoState expectedState)
+{
+    return advanceStateInternal<StateType::String>(expectedState);
+}
 
-    FerOp ferOp = d->m_opsPtr->op;
-#if 0
-    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &(*d->m_ops)[0])
-              << ", op: " << ferOp.op
-              << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
-              << '\n';
-#endif
-    d->m_opsPtr++;
-
-    const byte* ret = d->m_dataPtr;
-    const byte* newPtr = ret;
-
-    switch (ferOp.op) {
-    case FerOpcode::Copy0:
-        break;
-    case FerOpcode::Copy1:
-    case FerOpcode::Copy2:
-    case FerOpcode::Copy4:
-    case FerOpcode::Copy8:
-        newPtr += 1 << uint32(ferOp.op);
-        break;
-    default:
-        break;
-        unreachable();
-    }
-
-    uint32_t postAlignExponent = ferOp.postAlignExponent;
-
-    // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
-    // need to call anything like nextArrayElement() to immediately read the next element.
-    // Probably not great for performance!
-    if (ferOp.isLastOfArray) {
-        if (newPtr < d->m_dataEnd) {
-            const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
-
-            // "another round"
-            d->m_opsPtr = d->m_opsBase + repeatArrayData.goBackOpIndex;
-            assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
-            m_state = (d->m_opsPtr - 1)->op.ioState;
-            postAlignExponent = repeatArrayData.goBackAlignExponent;
-        } else {
-            // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
-            // will be handled shortly by the VALID_IFs below)
-            // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
-            // not this one! That is for the best because m_dataEnd is still the end of the array here,
-            // not of all data, so advancing the data pointer through alignment would produce a (usually)
-            // spurious out of bounds error.
-            assert(postAlignExponent == 0);
-            if (postAlignExponent) {
-                unreachable();
-            }
-            m_state = ferOp.ioState;
-        }
-    } else {
-        m_state = ferOp.ioState;
-    }
-
-    if (!postAlignExponent) {
-        VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
-    } else {
-        const byte *unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 1 << postAlignExponent);
-        VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
-                 Error::MalformedMessageData);
-    }
-
-    d->m_dataPtr = newPtr;
-    return ret;
+const void *ArgumentsBcReader::advanceStateAggregate(Arguments::IoState expectedState)
+{
+    return advanceStateInternal<StateType::Aggregate>(expectedState);
 }
 
 /// \fn byte ArgumentsBcReader::readByte()

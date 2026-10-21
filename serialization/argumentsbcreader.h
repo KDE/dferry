@@ -104,19 +104,19 @@ public:
     double readDouble() { return *reinterpret_cast<const double *>(advanceStatePrimitive(Arguments::Double)); }
     cstring readString()
     {
-        const void* retPtr = advanceState(Arguments::String);
+        const void* retPtr = advanceStateString(Arguments::String);
         return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(uint32),
                        *reinterpret_cast<const uint32 *>(retPtr));
     }
     cstring readObjectPath()
     {
-        const void* retPtr = advanceState(Arguments::ObjectPath);
+        const void* retPtr = advanceStateString(Arguments::ObjectPath);
         return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(uint32),
                        *reinterpret_cast<const uint32 *>(retPtr));
     }
     cstring readSignature()
     {
-        const void* retPtr = advanceState(Arguments::Signature);
+        const void* retPtr = advanceStateString(Arguments::Signature);
         return cstring(reinterpret_cast<const char *>(retPtr) + sizeof(byte),
                        *reinterpret_cast<const byte *>(retPtr));
     }
@@ -140,8 +140,18 @@ private:
     //void doReadPrimitiveType();
     void doReadString(uint32 lengthPrefixSize);
     bool beginArrayInternal();
-    const void *advanceState(Arguments::IoState expectedState);
+
+    enum class StateType{Primitive, String, Aggregate};
+    template<StateType stateType>
+    #ifdef __GNUC__
+    [[gnu::always_inline]]
+    #elif defined __MSVC__
+    [[msvc::forceinline]]
+    #endif
+    inline const void *advanceStateInternal(Arguments::IoState expectedState);
     const void *advanceStatePrimitive(Arguments::IoState expectedState);
+    const void *advanceStateString(Arguments::IoState expectedState);
+    const void *advanceStateAggregate(Arguments::IoState expectedState);
     //void beginArrayOrDict(bool isDict, EmptyArrayOption option);
     //void skipArrayOrDictSignature(bool isDict);
     //void skipArrayOrDict(bool isDict);
