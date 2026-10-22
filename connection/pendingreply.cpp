@@ -231,16 +231,18 @@ Message PendingReply::takeReply()
         return reply;
     }
 
+    // Synthesize a reply message with available error information
     Message reply;
+    MessagePrivate *md = MessagePrivate::of(&reply);
     if (!d) {
-        MessagePrivate::of(&reply)->m_error.setCode(Error::DetachedPendingReply);
+        md->m_error.setCode(Error::DetachedPendingReply);
     } else if (d->m_error.isError()) {
-        MessagePrivate::of(&reply)->m_error = d->m_error;
+        md->m_error = d->m_error;
     } else if (!d->m_isFinished) {
-        MessagePrivate::of(&reply)->m_error.setCode(Error::PendingReplyNotFinished);
+        md->m_error.setCode(Error::PendingReplyNotFinished);
     } else {
         assert(!d->m_connectionOrReply.reply); // should have covered all other error cases before
-        MessagePrivate::of(&reply)->m_error.setCode(Error::DetachedPendingReply);
+        md->m_error.setCode(Error::DetachedPendingReply);
     }
     return reply;
 }

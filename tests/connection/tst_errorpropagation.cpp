@@ -155,20 +155,30 @@ Malformed reply arguments?
             Error::NoError // TODO: actually inject an error in that case
         };
 
-        std::cerr << "Error at step " << errorAtStep << ": error code = " << reply.error().code()
+        std::cerr << "Error at step " << errorAtStep << ": error = " << reply.error().string()
                   << std::endl;
         if (reply.reply()) {
-            std::cerr << "    reply msg error code = " << reply.reply()->error().code()
-                      << ", reply msg args error code = " << reply.reply()->arguments().error().code()
+            std::cerr << "    reply msg error = " << reply.reply()->error().string()
+                      << ", reply msg args error = " << reply.reply()->arguments().error().string()
                       << std::endl;
         }
 
         TEST(reply.error().code() == expectedErrors[errorAtStep]);
         if (reply.reply()) {
+            // ### Strange that no destination is different from no path or no method. They are all invalid
+            //     in a similar way.
+            if (errorAtStep == 4) {
+                TEST(reply.reply()->type() == Message::ErrorMessage);
+            } else {
+                TEST(reply.reply()->type() == Message::MethodReplyMessage);
+            }
             TEST(reply.reply()->error().code() == expectedErrors[errorAtStep]);
             TEST(reply.reply()->arguments().error().code() == expectedErrors[errorAtStep]);
+        } else {
+            Message replyMsg = reply.takeReply();
+            TEST(replyMsg.type() == Message::InvalidMessage);
+            TEST(replyMsg.error().code() == reply.error().code());
         }
-
     }
 }
 
