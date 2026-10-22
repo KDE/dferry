@@ -1,4 +1,4 @@
-foreach(_examplename busMessage bytecoded codegenerated p2pClient p2pServer typesystem)
+foreach(_examplename busMessage bytecoded codegenerated errorhandling p2pClient p2pServer typesystem)
     add_executable(${_examplename} ${_examplename}.cpp)
     target_link_libraries(${_examplename} dfer)
 endforeach()
