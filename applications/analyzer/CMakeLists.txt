@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 

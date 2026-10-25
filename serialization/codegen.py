@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 
+# SPDX-FileCopyrightText: 2026 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: LGPL-2.1-or-later OR  MPL-2.0
+
 from __future__ import annotations
 from dataclasses import dataclass
 import os

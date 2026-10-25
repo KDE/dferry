@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 project(dferry)
 
 cmake_minimum_required(VERSION 3.25.0 FATAL_ERROR)

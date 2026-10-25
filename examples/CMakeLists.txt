@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 foreach(_examplename busMessage bytecoded codegenerated errorhandling p2pClient p2pServer typesystem)
     add_executable(${_examplename} ${_examplename}.cpp)
     target_link_libraries(${_examplename} dfer)

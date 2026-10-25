@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 set(TESTUTIL_SOURCES

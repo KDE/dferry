@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 include_directories(${CMAKE_SOURCE_DIR}/connection ${CMAKE_SOURCE_DIR}/serialization)
 
 add_executable(dfer-bin dfer.cpp) # "dfer" is already the target name of the library

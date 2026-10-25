@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/doc)
 
 # ### Not ideal: This will only run at CMake time, just running make / ninja etc will not trigger it.

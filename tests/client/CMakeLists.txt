@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 foreach(_testname introspection)
     add_executable(tst_${_testname} tst_${_testname}.cpp)
     set_target_properties(tst_${_testname} PROPERTIES COMPILE_FLAGS

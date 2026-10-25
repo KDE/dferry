@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2013 Andreas Hartmetz <ahartmetz@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 foreach(_testname arguments arguments_slow message fercode)
     add_executable(tst_${_testname} tst_${_testname}.cpp)
     target_link_libraries(tst_${_testname} testutil dfer)

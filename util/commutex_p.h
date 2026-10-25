@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2015 Andreas Hartmetz <ahartmetz@gmail.com>
+// SPDX-License-Identifier: LGPL-2.1-or-later OR MPL-2.0
+
 /* When two objects on different threads talk to each other (uni- or bidirectionally), they will
  * have pointers to each other. Before sending something on the other side, the sender needs to
  * know:
