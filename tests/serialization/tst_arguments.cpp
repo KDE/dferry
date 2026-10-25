@@ -3,6 +3,7 @@
 
 #include "arguments.h"
 #include "argumentsbcreader.h"
+#include "argumentsbcwriter.h"
 #include "argumentsreader.h"
 #include "argumentsreader_p.h"
 #include "argumentswriter.h"
@@ -390,11 +391,11 @@ static void defaultReadToWrite(ArgumentsReader *reader, ArgumentsWriter *writer)
 }
 
 static void verifyAfterRoundtrip(const Arguments &original, const ArgumentsReader &originalReader,
-                                 const Arguments &copy, const ArgumentsWriter &copyWriter,
+                                 const Arguments &copy, const ArgumentsWriter *copyWriter,
                                  bool debugPrint)
 {
     TEST(originalReader.state() == Arguments::Finished);
-    TEST(copyWriter.state() == Arguments::Finished);
+    TEST(!copyWriter || copyWriter->state() == Arguments::Finished);
     cstring originalSignature = original.signature();
     cstring copySignature = copy.signature();
     if (originalSignature.length) {
@@ -472,7 +473,7 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
     }
 
     Arguments copy = writer.finish();
-    verifyAfterRoundtrip(original, reader, copy, writer, debugPrint);
+    verifyAfterRoundtrip(original, reader, copy, &writer, debugPrint);
     if (shortData.ptr) {
         free(shortData.ptr);
     }
@@ -507,7 +508,7 @@ static void doRoundtripWithReaderCopy(const Arguments &original, uint32 dataIncr
     }
 
     Arguments copy = writer.finish();
-    verifyAfterRoundtrip(original, *reader, copy, writer, debugPrint);
+    verifyAfterRoundtrip(original, *reader, copy, &writer, debugPrint);
     delete reader;
 }
 
@@ -540,7 +541,7 @@ static void doRoundtripWithWriterCopy(const Arguments &original, uint32 dataIncr
     }
 
     Arguments copy = writer->finish();
-    verifyAfterRoundtrip(original, reader, copy, *writer, debugPrint);
+    verifyAfterRoundtrip(original, reader, copy, writer, debugPrint);
     delete writer;
 }
 
@@ -744,6 +745,132 @@ static void testBcReader(const Arguments &arg)
     TEST(!bcReader.isError());
 }
 
+static void testBcWriter(const Arguments &arg)
+{
+    const cstring sig = arg.signature();
+    const std::string sigStr(sig.ptr, sig.length);
+    if (/*sigStr.empty() ||*/ sigStr.find('v') != std::string::npos) {
+        std::cerr << "Warning: testBcWriter: cannot handle signature \"" << sig.ptr
+                  << "\", will skip testing for it.\n";
+        return;
+
+    }
+
+    ArgumentsReader reader(arg);
+    ArgumentsBcWriter writer(arg.signature());
+
+    bool isDone = false;
+    while (!isDone) {
+
+        // The writer cannot "predict" EndArray before the API client calls endArray()
+        if (reader.state() != Arguments::EndArray && reader.state() != Arguments::EndDict) {
+            TEST(reader.state() == writer.state());
+        }
+
+        switch(reader.state()) {
+        case Arguments::Finished:
+            isDone = true;
+            break;
+        case Arguments::BeginStruct:
+            //std::cerr << "Beginning struct\n";
+            reader.beginStruct();
+            writer.beginStruct();
+            break;
+        case Arguments::EndStruct:
+            reader.endStruct();
+            writer.endStruct();
+            break;
+        case Arguments::BeginVariant:
+            //std::cerr << "Beginning variant\n";
+            //reader.beginVariant();
+            //bcReader.beginVariant();
+            TEST(false);
+            break;
+        case Arguments::EndVariant:
+            //reader.endVariant();
+            //bcReader.endVariant();
+            TEST(false);
+            break;
+        case Arguments::BeginArray:
+            reader.beginArray();
+            writer.beginArray();
+            break;
+        case Arguments::EndArray:
+            reader.endArray();
+            writer.endArray();
+            break;
+        case Arguments::BeginDict:
+            reader.beginDict();
+            writer.beginDict();
+            break;
+#ifdef WITH_DICT_ENTRY
+        case Arguments::BeginDictEntry:
+            reader.beginDictEntry();
+            bcReader.beginDictEntry();
+            break;
+        case Arguments::EndDictEntry:
+            reader.endDictEntry();
+            bcReader.endDictEntry();
+            break;
+#endif
+        case Arguments::EndDict:
+            reader.endDict();
+            writer.endDict();
+            break;
+        case Arguments::Byte:
+            writer.writeByte(reader.readByte());
+            break;
+        case Arguments::Boolean:
+            writer.writeBoolean(reader.readBoolean());
+            break;
+        case Arguments::Int16:
+            writer.writeInt16(reader.readInt16());
+            break;
+        case Arguments::Uint16:
+            writer.writeUint16(reader.readUint16());
+            break;
+        case Arguments::Int32:
+            writer.writeInt32(reader.readInt32());
+            break;
+        case Arguments::Uint32:
+            writer.writeUint32(reader.readUint32());
+            break;
+        case Arguments::Int64:
+            writer.writeInt64(reader.readInt64());
+            break;
+        case Arguments::Uint64:
+            writer.writeUint64(reader.readUint64());
+            break;
+        case Arguments::Double:
+            writer.writeDouble(reader.readDouble());
+            break;
+        case Arguments::String:
+            writer.writeString(reader.readString());
+            break;
+        case Arguments::ObjectPath:
+            writer.writeObjectPath(reader.readObjectPath());
+            break;
+        case Arguments::Signature:
+            writer.writeSignature(reader.readSignature());
+            break;
+        case Arguments::UnixFd:
+            writer.writeUnixFd(reader.readUnixFd());
+            break;
+
+        default:
+            TEST(false);
+            break;
+        }
+    }
+
+    TEST(writer.state() == Arguments::Finished);
+    TEST(!reader.isError());
+    TEST(!writer.isError());
+
+    Arguments copy = writer.finish();
+    verifyAfterRoundtrip(arg, reader, copy, nullptr, false /*debugPrint*/);
+}
+
 #ifdef COLLECT_SIGNATURES
 static std::string classnameCompatibleSignature(const std::string &sig)
 {
@@ -811,6 +938,8 @@ static void doRoundtrip(const Arguments &arg, bool debugPrint = false)
     testReadWithSkip(arg, debugPrint);
 
     testBcReader(arg);
+
+    testBcWriter(arg);
 
 #ifndef COLLECT_SIGNATURES
     testCgReader(arg);

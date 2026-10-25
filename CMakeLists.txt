@@ -69,6 +69,7 @@ set(DFER_SOURCES
     events/timer.cpp
     serialization/arguments.cpp
     serialization/argumentsbcreader.cpp
+    serialization/argumentsbcwriter.cpp
     serialization/argumentsreader.cpp
     serialization/argumentswriter.cpp
     serialization/fercode.cpp
@@ -104,6 +105,7 @@ set(DFER_PUBLIC_HEADERS
     serialization/message.h
     serialization/arguments.h
     serialization/argumentsbcreader.h
+    serialization/argumentsbcwriter.h
     serialization/argumentsreader.h
     serialization/argumentswriter.h
     util/error.h
