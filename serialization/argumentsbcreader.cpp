@@ -59,9 +59,6 @@ public:
     const FerCode *m_opsPtr{};    // end pointer not needed, we stop at FerOpcode::End
     const byte *m_dataPtr{};
     const byte *m_dataEnd{};
-    chunk m_data; // TODO possibly replace, only operate on m_dataPtr and m_dataEnd, possibly use 32-bit pointer diffs
-                  // in array operations to save space (should be fine because all in same data array with limited length)
-                  // ... or just store a pointer to args and use its data in the rare cases that we need it
     const FerCode *m_opsBase{};
     Nesting m_nesting;
     Error m_error;
@@ -76,6 +73,14 @@ public:
 #endif
     std::vector<VariantInfo> m_variantStack;
     std::vector<int> m_fileDescriptors;
+
+    void setDataFrom(const Arguments& args)
+    {
+        const chunk& data = Arguments::Private::of(&args)->m_data;
+        m_dataPtr = data.ptr;
+        m_dataEnd = data.ptr + data.length;
+        m_fileDescriptors = args.fileDescriptors();
+    }
 
     void mergeError(Error::Code errorCode);
 };
@@ -104,8 +109,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, Arguments::FerEncode
     : d(new Private)
 {
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
-    d->m_data = Arguments::Private::of(&args)->m_data;
-    d->m_fileDescriptors = args.fileDescriptors();
+    d->setDataFrom(args);
     beginRead();
 }
 
@@ -117,8 +121,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, Arguments::FerEncodeOpt
 {
     const Arguments &args = msg.arguments();
     d->m_ops = ferCodeForSignature(args.signature(), Arguments::MethodSignature, encodeOptions);
-    d->m_data = Arguments::Private::of(&args)->m_data;
-    d->m_fileDescriptors = args.fileDescriptors();
+    d->setDataFrom(args);
     beginRead();
 }
 
@@ -132,8 +135,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Arguments &args, std::shared_ptr<std:
     : d(new Private)
 {
     d->m_ops = ferCode;
-    d->m_data = Arguments::Private::of(&args)->m_data;
-    d->m_fileDescriptors = args.fileDescriptors();
+    d->setDataFrom(args);
     beginRead();
 }
 
@@ -148,8 +150,7 @@ ArgumentsBcReader::ArgumentsBcReader(const Message &msg, std::shared_ptr<std::ve
 {
     const Arguments &args = msg.arguments();
     d->m_ops = ferCode;
-    d->m_data = Arguments::Private::of(&args)->m_data;
-    d->m_fileDescriptors = args.fileDescriptors();
+    d->setDataFrom(args);
     beginRead();
 }
 
@@ -445,8 +446,6 @@ void ArgumentsBcReader::beginRead()
     m_state = d->m_opsPtr->op.ioState;
     d->m_opsPtr++;
 
-    d->m_dataPtr = d->m_data.ptr;
-    d->m_dataEnd = d->m_dataPtr + d->m_data.length;
     if (uintptr_t(d->m_dataPtr) & 0x07) {
         m_state = Arguments::Finished;
         d->m_error.setCode(Error::DataNot8ByteAligned);
