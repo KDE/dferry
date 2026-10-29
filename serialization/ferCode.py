@@ -66,15 +66,15 @@ class FerOpcode(IntEnum):
 
 @dataclass
 class FerOp:
-    post_align_exponent: int   # 0..3 → align 1, 2, 4, 8
+    post_align: int   # 0, 2, 4, 8
     opcode: FerOpcode
     io_state: IoState
 
 
 @dataclass
 class FerRepeatArray:
-    go_back_align_exponent: int   # for loop back
-    go_back_op_index: int         # index of BeginArray
+    go_back_align: int      # for loop back
+    go_back_op_index: int   # index of BeginArray
 
 
 @dataclass
@@ -156,7 +156,7 @@ def fer_encode_signature(signature: str, sig_type: str = "method") -> Optional[L
 
     if sig_type == "variant":
         # BeginVariantSignature header: 3 items: FerOp + 2x FerNesting
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.BEGIN_VARIANT_SIGNATURE,
+        out.append(FerOp(post_align=0, opcode=FerOpcode.BEGIN_VARIANT_SIGNATURE,
                          io_state=IoState.NOT_STARTED))
         out.append(FerNesting(array_depth=0, paren_depth=0))
         out.append(FerNesting(array_depth=0, paren_depth=0))
@@ -173,11 +173,11 @@ def fer_encode_signature(signature: str, sig_type: str = "method") -> Optional[L
         out[1].paren_depth = nest.max_paren
         out[2].array_depth = nest.max_combined  # really combined depth
 
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.END_VARIANT_SIGNATURE,
+        out.append(FerOp(post_align=0, opcode=FerOpcode.END_VARIANT_SIGNATURE,
                          io_state=IoState.END_VARIANT))
 
     else:  # method signature
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.BEGIN_METHOD_SIGNATURE,
+        out.append(FerOp(post_align=0, opcode=FerOpcode.BEGIN_METHOD_SIGNATURE,
                          io_state=IoState.NOT_STARTED))
 
         i = 0
@@ -187,7 +187,7 @@ def fer_encode_signature(signature: str, sig_type: str = "method") -> Optional[L
                 return None
             i = new_i
 
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.END, io_state=IoState.FINISHED))
+        out.append(FerOp(post_align=0, opcode=FerOpcode.END, io_state=IoState.FINISHED))
 
     assert nest.array == 0
     assert nest.paren == 0
@@ -214,41 +214,39 @@ def fer_encode_single_complete_type(signature: str, pos: int,
     if ch in "ybnqiuxtdh":  # numeric & boolean + handle (fd)
         ty = type_info(ch)
         align = ty["alignment"]
-        opcode = FerOpcode.COPY1
-        align_exp = 0
         if align == 2:
             opcode = FerOpcode.COPY2
-            align_exp = 1
         elif align == 4:
             opcode = FerOpcode.COPY4
-            align_exp = 2
         elif align == 8:
             opcode = FerOpcode.COPY8
-            align_exp = 3
+        else:
+            opcode = FerOpcode.COPY1
+            align = 0
 
-        out.append(FerOp(post_align_exponent=align_exp, opcode=opcode, io_state=ty["state"]))
+        out.append(FerOp(post_align=align, opcode=opcode, io_state=ty["state"]))
         return True, pos + 1
 
     # —— String ———————————————————————————————————————————————————————
     elif ch == 's':
-        out.append(FerOp(post_align_exponent=2, opcode=FerOpcode.STRING, io_state=IoState.STRING))
+        out.append(FerOp(post_align=4, opcode=FerOpcode.STRING, io_state=IoState.STRING))
         return True, pos + 1
 
     # —— Object path ———————————————————————————————————————————————————
     elif ch == 'o':
-        out.append(FerOp(post_align_exponent=2, opcode=FerOpcode.OBJECT_PATH, io_state=IoState.OBJECT_PATH))
+        out.append(FerOp(post_align=4, opcode=FerOpcode.OBJECT_PATH, io_state=IoState.OBJECT_PATH))
         return True, pos + 1
 
     # —— Signature ————————————————————————————————————————————————————
     elif ch == 'g':
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.SIGNATURE, io_state=IoState.SIGNATURE))
+        out.append(FerOp(post_align=0, opcode=FerOpcode.SIGNATURE, io_state=IoState.SIGNATURE))
         return True, pos + 1
 
     # —— Variant ———————————————————————————————————————————————————————
     elif ch == 'v':
         if not nest.begin_variant():
             return False, pos
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.ENTER_VARIANT, io_state=IoState.BEGIN_VARIANT))
+        out.append(FerOp(post_align=0, opcode=FerOpcode.ENTER_VARIANT, io_state=IoState.BEGIN_VARIANT))
         out.append(FerNesting(array_depth=nest.array, paren_depth=nest.paren))
         # Consume the variant body (one complete type)
         success, new_pos = fer_encode_single_complete_type(signature, pos + 1, nest, out)
@@ -262,7 +260,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
         if not nest.begin_paren():
             return False, pos
 
-        out.append(FerOp(post_align_exponent=3, opcode=FerOpcode.COPY0, io_state=IoState.BEGIN_STRUCT))
+        out.append(FerOp(post_align=8, opcode=FerOpcode.COPY0, io_state=IoState.BEGIN_STRUCT))
 
         # Parse zero or more elements
         i = pos + 1
@@ -276,7 +274,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
         if i >= len(signature) or signature[i] != ')' or elements == 0:
             return False, pos
 
-        out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.COPY0, io_state=IoState.END_STRUCT))
+        out.append(FerOp(post_align=0, opcode=FerOpcode.COPY0, io_state=IoState.END_STRUCT))
 
         nest.end_paren()
         return True, i + 1
@@ -297,7 +295,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
             i += 1
 
             # BeginArray for dict
-            out.append(FerOp(post_align_exponent=2, opcode=FerOpcode.BEGIN_ARRAY, io_state=IoState.BEGIN_DICT))
+            out.append(FerOp(post_align=4, opcode=FerOpcode.BEGIN_ARRAY, io_state=IoState.BEGIN_DICT))
 
             # Parse key (must be basic type)
             success, i = fer_encode_basic_type(signature, i, nest, out)
@@ -305,7 +303,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
                 return False, pos
 
             # Patch: key must be 8-aligned
-            out[-1].post_align_exponent = 3
+            out[-1].post_align = 8
 
             # Parse value (any single complete type)
             success, i = fer_encode_single_complete_type(signature, i, nest, out)
@@ -318,21 +316,21 @@ def fer_encode_single_complete_type(signature: str, pos: int,
             nest.end_paren()
 
             # EndArray for dict
-            out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.END_ARRAY, io_state=IoState.END_DICT))
+            out.append(FerOp(post_align=0, opcode=FerOpcode.END_ARRAY, io_state=IoState.END_DICT))
         else:
             # Regular array
-            out.append(FerOp(post_align_exponent=2, opcode=FerOpcode.BEGIN_ARRAY, io_state=IoState.BEGIN_ARRAY))
+            out.append(FerOp(post_align=4, opcode=FerOpcode.BEGIN_ARRAY, io_state=IoState.BEGIN_ARRAY))
 
             success, i = fer_encode_single_complete_type(signature, i, nest, out)
             if not success:
                 return False, pos
 
-            out.append(FerOp(post_align_exponent=0, opcode=FerOpcode.END_ARRAY, io_state=IoState.END_ARRAY))
+            out.append(FerOp(post_align=0, opcode=FerOpcode.END_ARRAY, io_state=IoState.END_ARRAY))
 
         nest.end_array()
 
         # Go-back annotation
-        out.append(FerRepeatArray(go_back_align_exponent=0, go_back_op_index=go_back_index))
+        out.append(FerRepeatArray(go_back_align=0, go_back_op_index=go_back_index))
 
         return True, i
 
@@ -378,23 +376,23 @@ def type_info(ch: str) -> Dict[str, Any]:
 
 # ============== Optimization Passes ==============
 
-def apply_alignment(addr_set: int, align_exp: int) -> int:
+def apply_alignment(addr_set: int, align: int) -> int:
     """Simulate alignment (C++ `applyAlignment`).
     `addr_set`: bitmask of possible addresses 1..8 → bit n-1 set if address n possible.
     """
-    if align_exp == 0:
+    if align == 0:
         return addr_set
-    elif align_exp == 1:  # align 2
+    elif align == 2:
         addr_set |= addr_set << 1
         return addr_set & 0b10101010
-    elif align_exp == 2:  # align 4
+    elif align == 4:
         addr_set |= addr_set << 1
         addr_set |= addr_set << 2
         return addr_set & 0b10001000
-    elif align_exp == 3:  # align 8
+    elif align == 8:
         return 0b10000000
     else:
-        raise ValueError("Invalid alignment exponent")
+        raise ValueError("Invalid alignment value")
 
 
 def apply_addition(addr_set: int, add_opcode: FerOpcode) -> int:
@@ -454,17 +452,17 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
         assert isinstance(fer_op, FerOp)
 
         # Apply alignment BEFORE opcode
-        addr_set = apply_alignment(addr_set, fer_op.post_align_exponent)
+        addr_set = apply_alignment(addr_set, fer_op.post_align)
 
         # Merge alignment into previous alignment-defining op if no data op intervened
         if addr_set != prev_addr_set:
-            ops[prev_align_index].post_align_exponent = fer_op.post_align_exponent
+            ops[prev_align_index].post_align = fer_op.post_align
 
         # Move io_state into previous opcode
         ops[prev_io_state_index].io_state = fer_op.io_state
 
         # Zero out in current op
-        fer_op.post_align_exponent = 0
+        fer_op.post_align = 0
         fer_op.io_state = IoState.INVALID_DATA
 
         # Payload update (alignment + data address)
@@ -497,7 +495,7 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
             go_back_idx = begin_arr_idx + 1
 
             i += 1 # now at FerRepeatArray!
-            loop_back_align = ops[i].go_back_align_exponent
+            loop_back_align = ops[i].go_back_align
 
             # Can we skip alignment on loopback?
             if loop_back_align:
@@ -507,7 +505,7 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
 
             addr_set = arr_align.after
 
-            ops[i] = FerRepeatArray(go_back_align_exponent=loop_back_align, go_back_op_index=go_back_idx)
+            ops[i] = FerRepeatArray(go_back_align=loop_back_align, go_back_op_index=go_back_idx)
 
         else:
             if is_var_length_op(fer_op.opcode):
@@ -534,7 +532,7 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
         op = ops[i]
         assert isinstance(op, FerOp)
 
-        addr_set = apply_alignment(addr_set, op.post_align_exponent)
+        addr_set = apply_alignment(addr_set, op.post_align)
 
         if is_basic_addition_op(op.opcode):
             addr_set = apply_addition(addr_set, op.opcode)
@@ -568,7 +566,7 @@ def optimize_arrays(ops: List[FerCodeItem], addr_set: int,
                 no_more_addr_set_changes = arr_data.before == addr_set
 
                 # Preserve this information before optimizeFerOps possibly optimizes it away
-                ops[i + 1].go_back_align_exponent = ops[begin_array_index + 1].post_align_exponent
+                ops[i + 1].go_back_align = ops[begin_array_index + 1].post_align
 
             arr_data.after = addr_set
 
@@ -610,7 +608,7 @@ def elide_structs(ops: List[FerCodeItem]) -> None:
             ops[out_index] = op
             if alignment_from_preceding_struct:
                 alignment_from_preceding_struct = False
-                ops[out_index].post_align_exponent = 3
+                ops[out_index].post_align = 8
 
             out_index += 1
 

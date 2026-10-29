@@ -40,9 +40,9 @@ static void test_basicEncode()
     ops = ferCodeForSignature(cstring("ixoo"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::Int32},
-        FerOp{FerOpcode::Copy4, 3, Arguments::Int64},
+        FerOp{FerOpcode::Copy4, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::ObjectPath},
-        FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath},
+        FerOp{FerOpcode::ObjectPath, 4, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
         FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
@@ -59,7 +59,7 @@ static void test_variantSignature()
 
     ops = ferCodeForSignature(cstring("i"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
-        FerOp{FerOpcode::BeginVariantSignature, 2, Arguments::Int32},
+        FerOp{FerOpcode::BeginVariantSignature, 4, Arguments::Int32},
         FerNesting{0, 0},
         FerNesting{0, 0},
         FerOp{FerOpcode::Copy4, 0, Arguments::EndVariant},
@@ -67,13 +67,13 @@ static void test_variantSignature()
 
     ops = ferCodeForSignature(cstring("(ixix)"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
-        FerOp{FerOpcode::BeginVariantSignature, 3, Arguments::BeginStruct},
+        FerOp{FerOpcode::BeginVariantSignature, 8, Arguments::BeginStruct},
         FerNesting{0, 1},
         FerNesting{1, 0},
         FerOp{FerOpcode::Copy0, 0, Arguments::Int32},
-        FerOp{FerOpcode::Copy4, 3, Arguments::Int64},
+        FerOp{FerOpcode::Copy4, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::Int32},
-        FerOp{FerOpcode::Copy4, 3, Arguments::Int64},
+        FerOp{FerOpcode::Copy4, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::EndStruct},
         FerOp{FerOpcode::Copy0, 0, Arguments::EndVariant},
         FerOp{FerOpcode::EndVariantSignature, 0, Arguments::Finished}}));
@@ -86,30 +86,30 @@ static void test_arrayEncode()
     ops = ferCodeForSignature(cstring("axoo"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginArray},
-        FerOp{FerOpcode::BeginArray, 3, Arguments::Int64},
+        FerOp{FerOpcode::BeginArray, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::EndArray, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::ObjectPath},
         FerRepeatArray{0, 0, 2},
-        FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath},
+        FerOp{FerOpcode::ObjectPath, 4, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
         FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("a{is}"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginDict},
-        FerOp{FerOpcode::BeginArray, 3, Arguments::Int32},
+        FerOp{FerOpcode::BeginArray, 8, Arguments::Int32},
         FerOp{FerOpcode::Copy4, 0, Arguments::String},
         FerOp{FerOpcode::String, 0, Arguments::EndDict, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::Finished},
-        FerRepeatArray{3, 0, 2},
+        FerRepeatArray{8, 0, 2},
         FerOp{FerOpcode::End, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("a(ad)"));
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginArray},
-        FerOp{FerOpcode::BeginArray, 3, Arguments::BeginStruct},
+        FerOp{FerOpcode::BeginArray, 8, Arguments::BeginStruct},
         FerOp{FerOpcode::Copy0, 0, Arguments::BeginArray},
-        FerOp{FerOpcode::BeginArray, 3, Arguments::Double},
+        FerOp{FerOpcode::BeginArray, 8, Arguments::Double},
         FerOp{FerOpcode::Copy8, 0, Arguments::EndArray, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::EndStruct},
         FerRepeatArray{0, 0, 4},

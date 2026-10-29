@@ -36,14 +36,14 @@ enum FerOpcode : byte
 struct alignas(4) FerOp
 {
     FerOpcode op;
-    byte postAlignExponent; // this is for the *following* element!
+    byte postAlign; // this is for the *following* element!
     Arguments::IoState ioState;
     bool isLastOfArray = false; // could use ioState or the next FerOp, but this simplifies the check
 };
 
 struct alignas(4) FerRepeatArray
 {
-    byte goBackAlignExponent;
+    byte goBackAlign;
     byte padding = 0;
     uint16 goBackOpIndex;
 };

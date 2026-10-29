@@ -134,34 +134,34 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
         const TypeInfo& ty = typeInfo(*s->ptr);
 
         FerOpcode opcode = FerOpcode::Copy1;
-        byte alignExponent = 0;
+        byte alignment = 0;
         const byte alignSize = typeInfo(*s->ptr).alignment;
         switch (alignSize) {
         case 2:
             opcode = FerOpcode::Copy2;
-            alignExponent = 1;
+            alignment = 2;
             break;
         case 4:
             opcode = FerOpcode::Copy4;
-            alignExponent = 2;
+            alignment = 4;
             break;
         case 8:
             opcode = FerOpcode::Copy8;
-            alignExponent = 3;
+            alignment = 8;
             break;
         }
 
-        out->push_back(FerOp{opcode, alignExponent, ty.state()});
+        out->push_back(FerOp{opcode, alignment, ty.state()});
 
         chopFirst(s);
         return true; }
     case 's':
-        out->push_back(FerOp{FerOpcode::String, 2 /*align 4 for length field*/, Arguments::String});
+        out->push_back(FerOp{FerOpcode::String, 4 /*align for length field*/, Arguments::String});
 
         chopFirst(s);
         return true;
     case 'o':
-        out->push_back(FerOp{FerOpcode::ObjectPath, 2, Arguments::ObjectPath});
+        out->push_back(FerOp{FerOpcode::ObjectPath, 4 /*align for length field*/, Arguments::ObjectPath});
 
         chopFirst(s);
         return true;
@@ -186,7 +186,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             return false;
         }
 
-        out->push_back(FerOp{FerOpcode::Copy0, 3 /* 8 byte alignment */, Arguments::BeginStruct});
+        out->push_back(FerOp{FerOpcode::Copy0, 8 /* spec says so */, Arguments::BeginStruct});
 
         chopFirst(s);
         bool isEmptyStruct = true;
@@ -216,7 +216,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             }
             chopFirst(s);
 
-            out->push_back(FerOp{FerOpcode::BeginArray, 2 /*align 4 for length field*/, Arguments::BeginDict});
+            out->push_back(FerOp{FerOpcode::BeginArray, 4 /*align for length field*/, Arguments::BeginDict});
 
             // key must be a basic type
             if (!ferEncodeBasicType(s, nest, out)) {
@@ -224,7 +224,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
             }
 
             // Since key is the first element after the '('-like '{', it must be 8 byte aligned - patch it
-            out->back().op.postAlignExponent = 3;
+            out->back().op.postAlign = 8;
 
             // value can be any single complete type
             if (!ferEncodeSingleCompleteType(s, nest, out)) {
@@ -239,7 +239,7 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
 
             out->push_back(FerOp{FerOpcode::EndArray, 0, Arguments::EndDict});
         } else { // regular array
-            out->push_back(FerOp{FerOpcode::BeginArray, 2 /*align 4 for length field*/, Arguments::BeginArray});
+            out->push_back(FerOp{FerOpcode::BeginArray, 4 /*align for length field*/, Arguments::BeginArray});
 
             if (!ferEncodeSingleCompleteType(s, nest, out)) {
                 return false;
@@ -364,16 +364,16 @@ static std::string printableOpcode(FerOpcode op)
     return "?Opcode?";
 }
 
-static std::string printableAlignExponent(byte exponent)
+static std::string printableAlignValue(byte alignment)
 {
-    switch (exponent) {
+    switch (alignment) {
     case 0:
         return "A0 ";
-    case 1:
-        return "A2 ";
     case 2:
+        return "A2 ";
+    case 4:
         return "A4 ";
-    case 3:
+    case 8:
         return "A8 ";
     }
 
@@ -383,7 +383,7 @@ static std::string printableAlignExponent(byte exponent)
 
 static std::string printableFerOp(FerOp op)
 {
-    std::string ret = printableAlignExponent(op.postAlignExponent) + printableOpcode(op.op) + " " +
+    std::string ret = printableAlignValue(op.postAlign) + printableOpcode(op.op) + " " +
                       printableState(op.ioState).ptr;
     if (op.isLastOfArray) {
         ret.append(" isLastOfArray");
@@ -417,7 +417,7 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
                 ret.append(" GoBackOpIndex ");
                 ret.append(std::to_string(ops[i].repeatArray.goBackOpIndex));
                 ret.append(" GoBackAlign ");
-                ret.append(printableAlignExponent(ops[i].repeatArray.goBackAlignExponent));
+                ret.append(printableAlignValue(ops[i].repeatArray.goBackAlign));
                 ret.pop_back(); // remove trailing space
             } else {
                 ret.append(" GoBackTrunc");
@@ -515,22 +515,22 @@ ferCodeForSignature(cstring signature, Arguments::SignatureType sigType,
     return it->second;
 }
 
-static uint32 applyAlignment(uint32 addrSet, uint alignExponent)
+static uint32 applyAlignment(uint32 addrSet, uint alignment)
 {
     assert(addrSet <= 0b11111111); // allowed values are just 1-8
     assert(addrSet != 0); // there must be some value (1 << 7 is the canonical representation of 8 ~= 0)
 
-    switch (alignExponent) {
+    switch (alignment) {
     case 0:
         return addrSet;
-    case 1:
+    case 2:
         addrSet |= addrSet << 1;
         return addrSet & 0b10101010;
-    case 2:
+    case 4:
         addrSet |= addrSet << 1;
         addrSet |= addrSet << 2;
         return addrSet & 0b10001000;
-    case 3:
+    case 8:
         return 0b10000000;
     default:
         assert(false);
@@ -540,7 +540,7 @@ static uint32 applyAlignment(uint32 addrSet, uint alignExponent)
 
 static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
 {
-    return applyAlignment(addrSet, alignOp.postAlignExponent);
+    return applyAlignment(addrSet, alignOp.postAlign);
 }
 
 static uint32 applyAddition(uint32 addrSet, FerOpcode addOp)
@@ -647,13 +647,13 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
         // "Shift left" (so that alignment and setting m_state for the *next* op can be processed as part of
         // handling the *current* op), also eliminate alignment operations that do nothing
         if (addrSet != prevAddrSet) {
-            (*ops)[prevAlignIndex].op.postAlignExponent = ferOp.postAlignExponent;
+            (*ops)[prevAlignIndex].op.postAlign = ferOp.postAlign;
         }
         (*ops)[prevIoStateIndex].op.ioState = ferOp.ioState;
 
         // These have now been left-shifted to the next appropriate op. Mark them as inert / invalid -
-        // they will (ioState) or might (postAlignExponent) be filled in again by further left-shifting.
-        (*ops)[i].op.postAlignExponent = 0;
+        // they will (ioState) or might (postAlign) be filled in again by further left-shifting.
+        (*ops)[i].op.postAlign = 0;
         (*ops)[i].op.ioState = Arguments::Finished;
 
 
@@ -723,21 +723,21 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
             // (i.e. after the first), *skip* the alignment when going back!
             // No alignment req'd only for first element can happen, but is probably not worth handling.
             i++; // now at FerRepeatArray!
-            byte loopBackAlignExponent = (*ops)[i].repeatArray.goBackAlignExponent;
+            byte loopBackAlign = (*ops)[i].repeatArray.goBackAlign;
 
-            if (loopBackAlignExponent) {
+            if (loopBackAlign) {
                 const uint32 afterContentsAlignedAddrs = applyAlignment(arrayAlign.afterContentsAddrSet,
-                                                                        loopBackAlignExponent);
+                                                                        loopBackAlign);
 
                 if (afterContentsAlignedAddrs == arrayAlign.afterContentsAddrSet) {
                     // alignment did nothing -> is not necessary -> remove it
-                    loopBackAlignExponent = 0;
+                    loopBackAlign = 0;
                 }
             }
 
             addrSet = arrayAlign.afterContentsAddrSet;
 
-            (*ops)[i] = FerRepeatArray{loopBackAlignExponent, 0, static_cast<uint16>(goBackIndex)};
+            (*ops)[i] = FerRepeatArray{loopBackAlign, 0, static_cast<uint16>(goBackIndex)};
 
             if (beginArrayIndexes.empty()) {
                 // leaving the outermost level of nested array, we won't need that anymore
@@ -816,8 +816,7 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
                 // a linear scan. In the case of e.g. an "aay" type signature, upon repeating the outer
                 // array after a nonempty inner array, the data address is usually not 4-aligned and the
                 // second "a" needs a 4-alignment for its length field that isn't preserved in any other way.
-                (*ops)[i + 1].repeatArray.goBackAlignExponent =
-                                                        (*ops)[beginArrayIndex + 1].op.postAlignExponent;
+                (*ops)[i + 1].repeatArray.goBackAlign = (*ops)[beginArrayIndex + 1].op.postAlign;
             }
 
             arrayAlign.afterContentsAddrSet = addrSet;
@@ -866,7 +865,7 @@ static void elideStructs(std::vector<FerCode> *ops)
             (*ops)[outIndex] = (*ops)[i];
             if (alignmentFromPrecedingStruct) {
                 alignmentFromPrecedingStruct = false;
-                (*ops)[outIndex].op.postAlignExponent = 3; // it's not "post" yet, it's for this element
+                (*ops)[outIndex].op.postAlign = 8; // it's not "post" yet, it's for this element
             }
             outIndex++;
             if (ferOp.op == FerOpcode::EndArray || ferOp.op == FerOpcode::EnterVariant) {

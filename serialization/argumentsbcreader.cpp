@@ -282,8 +282,8 @@ bool ArgumentsBcReader::beginArrayInternal()
     // of the array contents for empty arrays because that is where the next data field starts. It's a quirk
     // of DBus serialization that even zero elements are aligned.
     const byte *unalignedNewPtr = newPtr;
-    if (ferOp.postAlignExponent) {
-        assert(ferOp.postAlignExponent == 3); // we're already 4-aligned at / after the length field
+    if (ferOp.postAlign) {
+        assert(ferOp.postAlign == 8); // we're already 4-aligned at / after the length field
         newPtr = align(newPtr, 8);
     }
 
@@ -564,7 +564,7 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
             break; }
 
         case FerOpcode::EndVariantSignature: {
-            assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+            assert(ferOp.postAlign == 0); // alignment for next element at the end never makes sense
 
             VariantInfo& varInfo = d->m_variantStack.back();
             d->m_ops = std::move(varInfo.prevOps);
@@ -579,14 +579,14 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
 
             const FerOp enterVariantOp = (d->m_opsPtr - 2)->op;
             assert(enterVariantOp.op == FerOpcode::EnterVariant);
-            ferOp.postAlignExponent = enterVariantOp.postAlignExponent;
+            ferOp.postAlign = enterVariantOp.postAlign;
             // avoid bit fiddling by copying all bits in the first byte of FerOp - it makes no other difference
             ferOp.op = enterVariantOp.op;
 
             break; }
 
         case FerOpcode::End:
-            assert(ferOp.postAlignExponent == 0); // alignment for next element at the end never makes sense
+            assert(ferOp.postAlign == 0); // alignment for next element at the end never makes sense
             assert(d->m_arrayLengthStack.empty());
             assert(d->m_variantStack.empty());
             assert(!d->m_nesting.array);
@@ -616,7 +616,7 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
         }
     }
 
-    uint32_t postAlignExponent = ferOp.postAlignExponent;
+    uint32_t postAlign = ferOp.postAlign;
 
     // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
     // need to call anything like nextArrayElement() to immediately read the next element.
@@ -629,16 +629,16 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
             d->m_opsPtr = d->m_opsBase + repeatArrayData.goBackOpIndex;
             assert((d->m_opsPtr - 1)->op.op == FerOpcode::BeginArray);
             m_state = (d->m_opsPtr - 1)->op.ioState;
-            postAlignExponent = repeatArrayData.goBackAlignExponent;
+            postAlign = repeatArrayData.goBackAlign;
         } else {
             // (Normally, newPtr == d->m_dataEnd here, but if it's greater, that's Ok too: the error
             // will be handled shortly by the VALID_IFs below)
-            // Note: any non-zero postAlignExponent for the array is packaged with the EndErray opcode,
+            // Note: any non-zero postAlign for the array is packaged with the EndErray opcode,
             // not this one! That is for the best because m_dataEnd is still the end of the array here,
             // not of all data, so advancing the data pointer through alignment would produce a (usually)
             // spurious out of bounds error.
-            assert(postAlignExponent == 0);
-            if (postAlignExponent) {
+            assert(postAlign == 0);
+            if (postAlign) {
                 unreachable();
             }
             m_state = ferOp.ioState;
@@ -647,11 +647,11 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
         m_state = ferOp.ioState;
     }
 
-    if (!postAlignExponent) {
+    if (!postAlign) {
         VALID_IF(newPtr <= d->m_dataEnd, Error::MalformedMessageData);
     } else {
         const byte *unalignedNewPtr = newPtr;
-        newPtr = align(newPtr, 1 << postAlignExponent);
+        newPtr = align(newPtr, postAlign);
         VALID_IF(newPtr <= d->m_dataEnd && isPaddingZero(unalignedNewPtr, newPtr),
                  Error::MalformedMessageData);
     }
