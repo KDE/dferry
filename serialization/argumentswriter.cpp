@@ -65,7 +65,7 @@ public:
         // already rejected, and we actually allocate the too large buffer to prevent out-of-bounds
         // access. Any following writing API calls will then cleanly abort due to m_state == Finished.
         // ### Callers DO need to check m_state before possibly overwriting it, hiding the error!
-        if (newCapacity > Arguments::MaxMessageLength * 3) {
+        if (!m_data || newCapacity > Arguments::MaxMessageLength * 3) {
             *state = Arguments::Finished;
             m_error.setCode(Error::ArgumentsTooLong);
         }
