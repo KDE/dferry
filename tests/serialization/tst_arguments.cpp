@@ -448,7 +448,7 @@ static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncr
                 // allocate the new one before destroying the old one to make sure that the pointer differs
                 chunk oldData = shortData;
                 shortData.length = std::min(shortData.length + dataIncrement, data.length);
-                shortData.ptr = reinterpret_cast<byte *>(aligned_alloc(sizeof(uint64), shortData.length));
+                shortData.ptr = reinterpret_cast<byte *>(aligned_alloc(8, (shortData.length + 7) & ~7));
                 for (uint32 i = 0; i < shortData.length; i++) {
                     shortData.ptr[i] = data.ptr[i];
                 }
