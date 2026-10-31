@@ -117,8 +117,6 @@ public:
 
 private:
     void beginRead();
-    //void doReadPrimitiveType();
-    void doReadString(uint32 lengthPrefixSize);
     bool beginArrayInternal();
 
     enum class StateType{Primitive, String, Aggregate};
@@ -132,9 +130,6 @@ private:
     const void *advanceStatePrimitive(Arguments::IoState expectedState);
     const void *advanceStateString(Arguments::IoState expectedState);
     const void *advanceStateAggregate(Arguments::IoState expectedState);
-    //void beginArrayOrDict(bool isDict, EmptyArrayOption option);
-    //void skipArrayOrDictSignature(bool isDict);
-    //void skipArrayOrDict(bool isDict);
 
     Arguments::IoState m_state;
 

@@ -408,12 +408,12 @@ static void verifyAfterRoundtrip(const Arguments &original, const ArgumentsReade
     chunk originalData = original.data();
 
     chunk copyData = copy.data();
-    TEST(originalData.length == copyData.length);
-    if (debugPrint && !chunksEqual(originalData, copyData)) {
+    TEST(chunksEqual(originalData, copyData));
+    // if we are here, the previous TEST() succeeded, so chunks are equal...
+    if (debugPrint) {
         printChunk(originalData);
         printChunk(copyData);
     }
-    TEST(chunksEqual(originalData, copyData));
 }
 
 static void doRoundtripWithShortReads(const Arguments &original, uint32 dataIncrement, bool debugPrint)

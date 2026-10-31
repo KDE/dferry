@@ -281,7 +281,7 @@ bool ArgumentsBcReader::beginArrayInternal()
     // Align newPtr to array contents before using it to calculate endPtr. We also need the aligned beginning
     // of the array contents for empty arrays because that is where the next data field starts. It's a quirk
     // of DBus serialization that even zero elements are aligned.
-    const byte *unalignedNewPtr = newPtr;
+    const byte *const unalignedNewPtr = newPtr;
     if (ferOp.postAlign) {
         assert(ferOp.postAlign == 8); // we're already 4-aligned at / after the length field
         newPtr = align(newPtr, 8);
@@ -432,11 +432,6 @@ void ArgumentsBcReader::endDictEntry()
 }
 #endif
 
-void ArgumentsBcReader::doReadString(uint32 lengthPrefixSize)
-{
-    (void)lengthPrefixSize;
-}
-
 void ArgumentsBcReader::beginRead()
 {
     //std::cout << "BcBegin " << printableFerOps(*d->m_ops) << '\n';
@@ -480,8 +475,8 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
 #endif
     d->m_opsPtr++;
 
-    const byte* ret = d->m_dataPtr;
-    const byte* newPtr = ret;
+    const byte *ret = d->m_dataPtr;
+    const byte *newPtr = ret;
 
     if constexpr (stateType == StateType::Primitive) {
         switch (ferOp.op) {

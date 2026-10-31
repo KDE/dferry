@@ -63,7 +63,7 @@ union alignas(4) FerCode
     FerCode(FerNesting n) : nest{n} {}
 
     FerOp op;
-    FerRepeatArray repeatArray; // always follows a FerOp with BeginArray
+    FerRepeatArray repeatArray; // always follows a FerOp with EndArray
     FerNesting nest; // always follows a FerOp with BeginVariant
 
     bool operator==(const FerCode &other) const noexcept

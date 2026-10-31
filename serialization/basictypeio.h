@@ -33,6 +33,9 @@ static inline bool isPaddingZero(const chunk &buffer, uint32 padStart, uint32 pa
 
 static inline void zeroPad(byte *buffer, uint32 alignment, uint32 *bufferPos)
 {
+    if (alignment < 1 || alignment > 8) {
+        unreachable();
+    }
     uint32 i = *bufferPos;
     const uint32 padEnd = align(i, alignment);
     for (; i < padEnd; i++) {
