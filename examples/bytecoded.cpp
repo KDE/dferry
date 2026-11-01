@@ -3,6 +3,7 @@
 
 #include "arguments.h"
 #include "argumentsbcreader.h"
+#include "argumentsbcwriter.h"
 #include "argumentsreader.h"
 #include "argumentswriter.h"
 #include "argumentsbcreader.h"
@@ -73,6 +74,84 @@ int main(int, char *[])
                   << " microseconds\n";
     }
     std::cout << "Serialized size is " << args.data().length / 1024 << " KiB.\n";
+
+    // BcWriter no elided structs
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        ArgumentsBcWriter writer(args.signature());
+        writer.beginStruct();
+            writer.writeInt32(1); // program index
+            writer.beginArray(); // list of paths
+                for (uint32 iPath = 0; iPath < 20; iPath++) {
+                    writer.beginStruct();
+                        writer.writeInt32(iPath); // path index
+                        writer.beginArray(); // list of waypoints
+                            for (uint32 iWaypoint = 0; iWaypoint < 2000; iWaypoint++) {
+                                writer.beginStruct();
+                                    writer.writeDouble(10.0); // x coordinate
+                                    writer.writeDouble(10.0); // y coordinate
+
+                                    // write two waypoint attributes for every 10th waypoint
+                                    const uint32 attrCount = (iWaypoint % 10 == 0) ? 2 : 0;
+                                    // list of waypoint attributes
+                                    writer.beginArray();
+                                        for (uint32 iAttr = 0; iAttr < attrCount; iAttr++) {
+                                            writer.beginStruct();
+                                                writer.writeInt32(iAttr); // attribute ID
+                                                writer.writeDouble(iAttr ? 23.0 : 42.0); // attribute value
+                                            writer.endStruct();
+                                        }
+                                    writer.endArray(); // list of waypoint attributes
+                                writer.endStruct();
+                            }
+                        writer.endArray(); // list of waypoints
+                    writer.endStruct();
+                }
+            writer.endArray(); // list of paths
+        writer.endStruct();
+        Arguments args2 = writer.finish();
+
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::cout << "ArgumentsBcWriter took "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count()
+                  << " microseconds\n";
+    }
+
+    // BcWriter elided structs
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        ArgumentsBcWriter writer(args.signature(), Arguments::FerEncodeOptions::ElideStructs);
+        writer.writeInt32(1); // program index
+        writer.beginArray(); // list of paths
+            for (uint32 iPath = 0; iPath < 20; iPath++) {
+                writer.writeInt32(iPath); // path index
+                writer.beginArray(); // list of waypoints
+                    for (uint32 iWaypoint = 0; iWaypoint < 2000; iWaypoint++) {
+                        writer.writeDouble(10.0); // x coordinate
+                        writer.writeDouble(10.0); // y coordinate
+
+                        // write two waypoint attributes for every 10th waypoint
+                        const uint32 attrCount = (iWaypoint % 10 == 0) ? 2 : 0;
+                        // list of waypoint attributes
+                        writer.beginArray();
+                        for (uint32 iAttr = 0; iAttr < attrCount; iAttr++) {
+                            writer.writeInt32(iAttr); // attribute ID
+                            writer.writeDouble(iAttr ? 23.0 : 42.0); // attribute value
+                        }
+                        writer.endArray(); // list of waypoint attributes
+                    }
+                writer.endArray(); // list of waypoints
+            }
+        writer.endArray(); // list of paths
+        Arguments args2 = writer.finish();
+
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::cout << "ArgumentsBcWriter (elided structs) took "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count()
+                  << " microseconds\n";
+    }
 
     // Read with ArgumentsReader
     {
