@@ -281,9 +281,10 @@ bool ArgumentsBcReader::beginArrayInternal()
     // Align newPtr to array contents before using it to calculate endPtr. We also need the aligned beginning
     // of the array contents for empty arrays because that is where the next data field starts. It's a quirk
     // of DBus serialization that even zero elements are aligned.
+    const uint32 contentsAlign = ferOp.cleanPostAlignment();
     const byte *const unalignedNewPtr = newPtr;
-    if (ferOp.postAlign) {
-        assert(ferOp.postAlign == 8); // we're already 4-aligned at / after the length field
+    if (contentsAlign) {
+        assert(contentsAlign == 8); // we're already 4-aligned at / after the length field
         newPtr = align(newPtr, 8);
     }
 
@@ -313,44 +314,9 @@ bool ArgumentsBcReader::beginArrayInternal()
             m_state = Arguments::EndDict;
         }
 
-        // Skip d->m_opsPtr to the end of the array (TODO? add skip-to-end-index data to FerCode?)
-        // We need to special-case opcodes that are followed by data that doesn't *have* opcodes so that
-        // we don't misinterpret it, reading bogus opcodes. Skip that data entirely.
-
-        int skipArrayDepth = 1; // We're already inside the current array
-        while (true) {
-            const FerOpcode op = d->m_opsPtr->op.op;
-            switch (op) {
-            case FerOpcode::BeginArray:
-                skipArrayDepth += 1;
-                break;
-            case FerOpcode::EndArray:
-                skipArrayDepth -= 1;
-
-                if (skipArrayDepth == 0) { // leaving the array at which we started
-                    return false;
-                }
-
-                d->m_opsPtr++; // skip the FerRepeatArray that follows
-                break;
-            case FerOpcode::EnterVariant:
-                d->m_opsPtr++; // skip the FerNesting that follows
-                break;
-            case FerOpcode::BeginVariantSignature:
-            case FerOpcode::EndVariantSignature:
-                // We should never run into these: BeginVariantSignature can only occur before BeginArray, and
-                // EndVariantSignature can only occur after leaving the last array of the signature.
-                assert(false);
-                [[fallthrough]];
-            default:
-                break;
-            }
-
-            d->m_opsPtr++;
-        }
-
-        unreachable();
-        return false; // just in case
+        // skip to end of array
+        d->m_opsPtr = d->m_opsBase + ferOp.arrayEndIndex();
+        return false;
     }
 }
 
@@ -616,7 +582,7 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
     // EndArray is handled by "looking ahead" from the last element in the array so that API clients don't
     // need to call anything like nextArrayElement() to immediately read the next element.
     // Probably not great for performance!
-    if (ferOp.isLastOfArray) {
+    if (ferOp.isLastOfArray()) {
         if (newPtr < d->m_dataEnd) {
             const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
 

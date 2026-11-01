@@ -7,6 +7,8 @@
 #include "arguments.h"
 #include "argumentsbcreader.h"
 
+#include <cassert>
+
 enum FerOpcode : byte
 {
     Copy1 = 0,  // This arrangement of CopyN values allows the expression 1 << uint32(CopyN)
@@ -38,7 +40,49 @@ struct alignas(4) FerOp
     FerOpcode op;
     byte postAlign; // this is for the *following* element!
     Arguments::IoState ioState;
-    bool isLastOfArray = false; // could use ioState or the next FerOp, but this simplifies the check
+    byte arrayNotes{};
+
+    // For BeginArray opcodes, arrayNotes and bits 7..4 of postAlign encode the index of the corresponding
+    // EndArray op, for fast skipping. Useful (faster) in ArgumentsBcReader::beginArray() for empty arrays
+    // and in ArgumentsBcWriter::endArray() for all arrays.
+    // For all other opcodes, arrayNotes != 0 indicates that this opcode is the last inside an array (so
+    // looping back is in order) and postAlign will not have any additional data stuffed in.
+
+    bool isLastOfArray() const
+    {
+        assert(op != FerOpcode::BeginArray);
+        return arrayNotes != 0;
+    }
+
+    void setCleanPostAlignment(uint32 align)
+    {
+        assert((align & 0xfffffff0) == 0);
+        postAlign &= 0xf0;
+        postAlign |= align;
+    }
+
+    uint32 cleanPostAlignment() const
+    {
+        return postAlign & 0x0f;
+    }
+
+    void setArrayEndIndex(uint32 endIndex)
+    {
+        assert(op == FerOpcode::BeginArray);
+        assert(endIndex <= 0xfff);
+        assert((postAlign & 0xf0) == 0);
+        if (endIndex > 0xfff) {
+            unreachable();
+        }
+        arrayNotes =  endIndex & 0x0ff;
+        postAlign |= (endIndex & 0xf00) >> 4;
+    }
+
+    uint32 arrayEndIndex() const
+    {
+        assert(op == FerOpcode::BeginArray);
+        return arrayNotes + ((postAlign & 0xf0) << 4);
+    }
 };
 
 struct alignas(4) FerRepeatArray

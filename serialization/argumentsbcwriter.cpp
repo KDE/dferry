@@ -286,8 +286,9 @@ void ArgumentsBcWriter::beginArrayInternal(bool isDict)
 
     // Always align newPtr to array contents. It's a quirk of DBus serialization that even
     // zero elements are aligned.
-    if (ferOp.postAlign) {
-        assert(ferOp.postAlign == 8); // we're already 4-aligned at / after the length field
+    const uint32 contentsAlign = ferOp.cleanPostAlignment();
+    if (contentsAlign) {
+        assert(contentsAlign == 8); // we're already 4-aligned at / after the length field
         newPtr = zeroPad(newPtr, 8);
     }
     d->m_dataPtr = newPtr;
@@ -313,10 +314,15 @@ void ArgumentsBcWriter::endArrayInternal(bool isDict)
 
     byte *lengthField = d->m_dataBegin + arrayInfo.lengthFieldOffset;
     byte *contentsStart = lengthField + sizeof(uint32);
-    const uint32 contentsAlign = (d->m_opsPtr - 1)->op.postAlign;
+    FerOp beginOp = (d->m_opsPtr - 1)->op;
+    assert(beginOp.op == FerOpcode::BeginArray);
+    const uint32 contentsAlign = beginOp.cleanPostAlignment();
     if (contentsAlign) {
         contentsStart = align(contentsStart, contentsAlign);
     }
+
+    // skip to end of array
+    d->m_opsPtr = d->m_opsBase + beginOp.arrayEndIndex();
 
     uint32 arrayLength = 0;
     if (d->m_dataPtr > contentsStart) {
@@ -330,45 +336,7 @@ void ArgumentsBcWriter::endArrayInternal(bool isDict)
 
     m_state = isDict ? Arguments::EndDict : Arguments::EndArray;
 
-    // Skip d->m_opsPtr to the end of the array (TODO? add skip-to-end-index data to FerCode?)
-    // We need to special-case opcodes that are followed by data that doesn't *have* opcodes so that
-    // we don't misinterpret it, reading bogus opcodes. Skip that data entirely.
-
-    int skipArrayDepth = 1; // We're already inside the current array
-    while (true) {
-        const FerOpcode op = d->m_opsPtr->op.op;
-        switch (op) {
-        case FerOpcode::BeginArray:
-            skipArrayDepth += 1;
-            break;
-        case FerOpcode::EndArray:
-            skipArrayDepth -= 1;
-
-            if (skipArrayDepth == 0) { // leaving the array at which we started
-                advanceStateAggregate(m_state);
-                return;
-            }
-
-            d->m_opsPtr++; // skip the FerRepeatArray that follows
-            break;
-        case FerOpcode::EnterVariant:
-            d->m_opsPtr++; // skip the FerNesting that follows
-            break;
-        case FerOpcode::BeginVariantSignature:
-        case FerOpcode::EndVariantSignature:
-            // We should never run into these: BeginVariantSignature can only occur before BeginArray, and
-            // EndVariantSignature can only occur after leaving the last array of the signature.
-            assert(false);
-            [[fallthrough]];
-        default:
-            break;
-        }
-
-        d->m_opsPtr++;
-    }
-
-    unreachable();
-    return; // just in case
+    advanceStateAggregate(m_state);
 }
 
 /// Ends writing an array.
@@ -646,7 +614,7 @@ inline void ArgumentsBcWriter::advanceStateInternal(Arguments::IoState expectedS
     // nextArrayItem() or something before writing the next item. We need to go to the first element and
     // prepare everything to just go on writing without any special calls, then undo that when the client
     // calls endArray() instead.
-    if (ferOp.isLastOfArray) {
+    if (ferOp.isLastOfArray()) {
         const FerRepeatArray repeatArrayData = (d->m_opsPtr + 1)->repeatArray;
 
         // "another round"

@@ -2400,6 +2400,42 @@ static void test_arrayBugs()
     }
 }
 
+static void test_longBytecodeSignature()
+{
+    // An array results in three "FerCode" items, i.e. one signature byte in, three (four-byte) bytecode
+    // items out.
+    // At least the "skip to end of array index" is encoded using a kind of bit-stealing, which gets
+    // especially interesting if the end of array index needs more than eight bits to encode. That is what
+    // we test here. We include non-bytecode readers and writers because it's simpler and may be useful.
+    ArgumentsWriter writer;
+    for (int i = 0; i < 7; i++) {
+        writer.writeSignature("i"); // a variable length type to disturb the alignment
+        for (int j = 0; j < 32; j++) {
+            writer.beginArray(i % 1 ? ArgumentsWriter::NonEmptyArray
+                                    : ArgumentsWriter::WriteTypesOfEmptyArray);
+        }
+        writer.writeDouble(i);
+        for (int j = 0; j < 32; j++) {
+            writer.endArray();
+        }
+    }
+    // signature should be 7 * (1 + 32 + 1) = 238 bytes long here - go to the limit of 255,
+    // which is an additional edge case unrelated to the end of array index encoding.
+    for (int i = 238; i < 254; i++) {
+        writer.beginArray(ArgumentsWriter::WriteTypesOfEmptyArray);
+    }
+    writer.writeSignature("s");
+    for (int i = 238; i < 254; i++) {
+        writer.endArray();
+    }
+
+    Arguments arg = writer.finish();
+    TEST(!arg.error().isError());
+    TEST(arg.signature().length == 255); // self-test: did we test the edge case?
+
+    doRoundtrip(arg);
+}
+
 static void test_fileDescriptors()
 {
 #ifdef __unix__
@@ -2496,6 +2532,7 @@ int main([[maybe_unused]]int argc, [[maybe_unused]]char *argv[])
     test_signatureLengths();
     test_emptyArrayAndDict();
     test_arrayBugs();
+    test_longBytecodeSignature();
     test_fileDescriptors();
 
     // TODO (maybe): specific tests for begin/endDictEntry() for both Reader and Writer.

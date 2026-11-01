@@ -84,7 +84,7 @@ static void test_arrayEncode()
     my_shared_ptr<std::vector<FerCode>> ops;
 
     ops = ferCodeForSignature(cstring("axoo"));
-    TEST((*ops == std::vector<FerCode>{
+    std::vector<FerCode> expectOps {
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginArray},
         FerOp{FerOpcode::BeginArray, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::EndArray, true},
@@ -92,20 +92,26 @@ static void test_arrayEncode()
         FerRepeatArray{0, 0, 2},
         FerOp{FerOpcode::ObjectPath, 4, Arguments::ObjectPath},
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
-        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}
+    };
+    expectOps[1].op.setArrayEndIndex(3);
+    TEST(*ops == expectOps);
 
     ops = ferCodeForSignature(cstring("a{is}"));
-    TEST((*ops == std::vector<FerCode>{
+    expectOps = std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginDict},
         FerOp{FerOpcode::BeginArray, 8, Arguments::Int32},
         FerOp{FerOpcode::Copy4, 0, Arguments::String},
         FerOp{FerOpcode::String, 0, Arguments::EndDict, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::Finished},
         FerRepeatArray{8, 0, 2},
-        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}
+    };
+    expectOps[1].op.setArrayEndIndex(4);
+    TEST(*ops == expectOps);
 
     ops = ferCodeForSignature(cstring("a(ad)"));
-    TEST((*ops == std::vector<FerCode>{
+    expectOps = std::vector<FerCode>{
         FerOp{FerOpcode::BeginMethodSignature, 0, Arguments::BeginArray},
         FerOp{FerOpcode::BeginArray, 8, Arguments::BeginStruct},
         FerOp{FerOpcode::Copy0, 0, Arguments::BeginArray},
@@ -116,7 +122,11 @@ static void test_arrayEncode()
         FerOp{FerOpcode::Copy0, 0, Arguments::EndArray, true},
         FerOp{FerOpcode::EndArray, 0, Arguments::Finished},
         FerRepeatArray{0, 0, 2},
-        FerOp{FerOpcode::End, 0, Arguments::Finished}}));
+        FerOp{FerOpcode::End, 0, Arguments::Finished}
+    };
+    expectOps[1].op.setArrayEndIndex(8);
+    expectOps[3].op.setArrayEndIndex(5);
+    TEST(*ops == expectOps);
 }
 
 static void test_reader_basic()

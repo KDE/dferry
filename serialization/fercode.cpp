@@ -383,9 +383,12 @@ static std::string printableAlignValue(byte alignment)
 
 static std::string printableFerOp(FerOp op)
 {
-    std::string ret = printableAlignValue(op.postAlign) + printableOpcode(op.op) + " " +
+    std::string ret = printableAlignValue(op.cleanPostAlignment()) + printableOpcode(op.op) + " " +
                       printableState(op.ioState).ptr;
-    if (op.isLastOfArray) {
+    if (op.op == FerOpcode::BeginArray) {
+        ret.append(" EndOpIndex ");
+        ret.append(std::to_string(op.arrayEndIndex()));
+    } else if (op.isLastOfArray()) {
         ret.append(" isLastOfArray");
     }
     return ret;
@@ -540,7 +543,7 @@ static uint32 applyAlignment(uint32 addrSet, uint alignment)
 
 static uint32 applyAlignment(uint32 addrSet, FerOp alignOp)
 {
-    return applyAlignment(addrSet, alignOp.postAlign);
+    return applyAlignment(addrSet, alignOp.cleanPostAlignment());
 }
 
 static uint32 applyAddition(uint32 addrSet, FerOpcode addOp)
@@ -647,13 +650,14 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
         // "Shift left" (so that alignment and setting m_state for the *next* op can be processed as part of
         // handling the *current* op), also eliminate alignment operations that do nothing
         if (addrSet != prevAddrSet) {
-            (*ops)[prevAlignIndex].op.postAlign = ferOp.postAlign;
+            FerOp &alignOp = (*ops)[prevAlignIndex].op;
+            alignOp.setCleanPostAlignment(ferOp.cleanPostAlignment());
         }
         (*ops)[prevIoStateIndex].op.ioState = ferOp.ioState;
 
         // These have now been left-shifted to the next appropriate op. Mark them as inert / invalid -
         // they will (ioState) or might (postAlign) be filled in again by further left-shifting.
-        (*ops)[i].op.postAlign = 0;
+        (*ops)[i].op.setCleanPostAlignment(0);
         (*ops)[i].op.ioState = Arguments::Finished;
 
 
@@ -670,7 +674,7 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
             prevAlignIndex = i;
         }
         if (ferOp.op == FerOpcode::EndArray) {
-            (*ops)[prevIoStateIndex].op.isLastOfArray = true;
+            (*ops)[prevIoStateIndex].op.arrayNotes = 1; // "is last of array"
         }
 
         prevIoStateIndex = i;
@@ -816,7 +820,11 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
                 // a linear scan. In the case of e.g. an "aay" type signature, upon repeating the outer
                 // array after a nonempty inner array, the data address is usually not 4-aligned and the
                 // second "a" needs a 4-alignment for its length field that isn't preserved in any other way.
-                (*ops)[i + 1].repeatArray.goBackAlign = (*ops)[beginArrayIndex + 1].op.postAlign;
+                (*ops)[i + 1].repeatArray.goBackAlign = (*ops)[beginArrayIndex + 1].op.cleanPostAlignment();
+
+                // For fast skip-to-end, only needs to be set once
+                assert((*ops)[beginArrayIndex].op.op == FerOpcode::BeginArray);
+                (*ops)[beginArrayIndex].op.setArrayEndIndex(i);
             }
 
             arrayAlign.afterContentsAddrSet = addrSet;
