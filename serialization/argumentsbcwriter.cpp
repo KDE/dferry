@@ -70,10 +70,9 @@ public:
     struct ArrayInfo
     {
         uint32 lengthFieldOffset;
-        uint16 containedTypeBegin; // allows two things:
-                                   // - determine whether the "signature cursor" is at a position that allows endArray()
-                                   // - re-derive the (aligned) data start offset
+        uint16 containedTypeBegin;
         bool isDict;
+        byte paddingAfterLengthField;
     };
 
 #ifdef HAVE_BOOST
@@ -279,10 +278,8 @@ void ArgumentsBcWriter::beginArrayInternal(bool isDict)
     FerOp ferOp = d->m_opsPtr->op;
     d->m_opsPtr++;
 
-    d->m_arrayStack.push_back({uint32(d->m_dataPtr - d->m_dataBegin),
-                               uint16(d->m_opsPtr - d->m_opsBase), isDict});
-
     byte* newPtr = d->m_dataPtr + sizeof(uint32);
+    byte* const ptrAfterLengthField = newPtr;
 
     // Always align newPtr to array contents. It's a quirk of DBus serialization that even
     // zero elements are aligned.
@@ -291,6 +288,12 @@ void ArgumentsBcWriter::beginArrayInternal(bool isDict)
         assert(contentsAlign == 8); // we're already 4-aligned at / after the length field
         newPtr = zeroPad(newPtr, 8);
     }
+
+    d->m_arrayStack.push_back({uint32(d->m_dataPtr - d->m_dataBegin),
+                               uint16(d->m_opsPtr - d->m_opsBase),
+                               isDict,
+                               byte(newPtr - ptrAfterLengthField)});
+
     d->m_dataPtr = newPtr;
     m_state = ferOp.ioState;
 }
@@ -312,14 +315,10 @@ void ArgumentsBcWriter::endArrayInternal(bool isDict)
     const FerCode *expectedOpPosition = d->m_opsBase + arrayInfo.containedTypeBegin;
     VALID_IF(expectedOpPosition == d->m_opsPtr, Error::ReadWrongType); // TODO WriteWrongType?
 
-    byte *lengthField = d->m_dataBegin + arrayInfo.lengthFieldOffset;
-    byte *contentsStart = lengthField + sizeof(uint32);
+    byte *const lengthField = d->m_dataBegin + arrayInfo.lengthFieldOffset;
+    byte *const contentsStart = lengthField + sizeof(uint32) + arrayInfo.paddingAfterLengthField;
     FerOp beginOp = (d->m_opsPtr - 1)->op;
     assert(beginOp.op == FerOpcode::BeginArray);
-    const uint32 contentsAlign = beginOp.cleanPostAlignment();
-    if (contentsAlign) {
-        contentsStart = align(contentsStart, contentsAlign);
-    }
 
     // skip to end of array
     d->m_opsPtr = d->m_opsBase + beginOp.arrayEndIndex();
