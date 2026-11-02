@@ -452,9 +452,9 @@ inline void ArgumentsBcWriter::advanceStateInternal(Arguments::IoState expectedS
 
     FerOp ferOp = d->m_opsPtr->op;
 #if 0
-    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - &(*d->m_ops)[0])
-              << ", op: " << ferOp.op
-              << ", dataIdx: " << uint64(d->m_dataPtr - d->m_data.ptr)
+    std::cout << "BcAdvance opsIdx: " << uint64(d->m_opsPtr - d->m_opsBase)
+              << ", op: " << int(ferOp.op)
+              << ", dataIdx: " << uint64(d->m_dataPtr - d->m_dataBegin)
               << '\n';
 #endif
     d->m_opsPtr++;
