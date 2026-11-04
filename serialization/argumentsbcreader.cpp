@@ -97,7 +97,7 @@ static const char s_nullBuffer[16] {}; // inert fake data for callers when readi
 /** \class ArgumentsBcReader
     Reads arguments out of Arguments using type signature byte-code.
 
-    This class is less flexible, but generally about 2x as fast as ArgumentsReader if the bytecode
+    This class is less flexible, but generally about 3-4x as fast as ArgumentsReader if the bytecode
     already exists.
 
     \see Arguments
