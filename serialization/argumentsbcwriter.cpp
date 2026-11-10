@@ -87,37 +87,16 @@ public:
 
     void mergeError(Error::Code errorCode);
 
-    bool reserveData(uint32 size)
+    inline bool reserveData(uint32 size)
     {
         size += 16; // enough extra for anything but variable-length data such as strings and arrays
         if (likely(m_dataPtr + size <= m_dataEnd)) {
             return true;
         }
-
-        const uintptr_t dataPos = uintptr_t(m_dataPtr - m_dataBegin);
-        uint32 newCapacity = m_dataEnd - m_dataBegin;
-        do {
-            newCapacity *= 2;
-        } while (size > newCapacity);
-
-        m_dataBegin = reinterpret_cast<byte *>(realloc(m_dataBegin, newCapacity));
-        m_dataEnd = m_dataBegin + newCapacity;
-        m_dataPtr = m_dataBegin + dataPos;
-
-        // Here, we trade off getting an ArgumentsTooLong error as early as possible for fewer
-        // conditional branches in the hot path. Because only the final message length has a well-defined
-        // limit, and Arguments doesn't, a precise check has limited usefulness anwyay. This is just
-        // a sanity check and out of bounds access / overflow protection.
-
-        // In most cases, callers do not need to check for errors: Very large single arguments are
-        // already rejected, and we actually allocate the too large buffer to prevent out-of-bounds
-        // access. Any following writing API calls will then cleanly abort due to m_state == Finished.
-        if (unlikely(!m_dataBegin || newCapacity > Arguments::MaxMessageLength * 3)) {
-            m_dataPtr = nullptr;
-            return false;
-        }
-        return true;
+        return reserveDataOutofline(size);
     }
+
+    bool reserveDataOutofline(uint32 size);
 };
 
 void ArgumentsBcWriter::Private::mergeError(Error::Code errorCode)
@@ -126,6 +105,34 @@ void ArgumentsBcWriter::Private::mergeError(Error::Code errorCode)
         m_error.setCode(errorCode);
     }
 }
+
+bool ArgumentsBcWriter::Private::reserveDataOutofline(uint32 size)
+{
+    const uintptr_t dataPos = uintptr_t(m_dataPtr - m_dataBegin);
+    uint32 newCapacity = m_dataEnd - m_dataBegin;
+    do {
+        newCapacity *= 2;
+    } while (size > newCapacity);
+
+    m_dataBegin = reinterpret_cast<byte *>(realloc(m_dataBegin, newCapacity));
+    m_dataEnd = m_dataBegin + newCapacity;
+    m_dataPtr = m_dataBegin + dataPos;
+
+    // Here, we trade off getting an ArgumentsTooLong error as early as possible for fewer
+    // conditional branches in the hot path. Because only the final message length has a well-defined
+    // limit, and Arguments doesn't, a precise check has limited usefulness anwyay. This is just
+    // a sanity check and out of bounds access / overflow protection.
+
+    // In most cases, callers do not need to check for errors: Very large single arguments are
+    // already rejected, and we actually allocate the too large buffer to prevent out-of-bounds
+    // access. Any following writing API calls will then cleanly abort due to m_state == Finished.
+    if (unlikely(!m_dataBegin || newCapacity > Arguments::MaxMessageLength * 3)) {
+        m_dataPtr = nullptr;
+        return false;
+    }
+    return true;
+}
+
 
 /** \class ArgumentsBcWriter
     Writes arguments into Arguments.
