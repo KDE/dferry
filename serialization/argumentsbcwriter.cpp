@@ -36,9 +36,10 @@ static inline byte *zeroPad(byte *data, uint32 alignment)
         unreachable();
     }
     byte *padEnd = align(data, alignment);
-    for (; data < padEnd; data++) {
-        *data = '\0';
+    if (padEnd - data >= 8) {
+        unreachable();
     }
+    memset(data, 0, padEnd - data);
     return padEnd;
 }
 

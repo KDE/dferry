@@ -7,6 +7,7 @@
 #include "types.h"
 
 #include <algorithm> // for std::min on Windows...
+#include <cstring> // for memset
 
 static inline uint32 align(uint32 index, uint32 alignment)
 {
@@ -36,11 +37,12 @@ static inline void zeroPad(byte *buffer, uint32 alignment, uint32 *bufferPos)
     if (alignment < 1 || alignment > 8) {
         unreachable();
     }
-    uint32 i = *bufferPos;
-    const uint32 padEnd = align(i, alignment);
-    for (; i < padEnd; i++) {
-        buffer[i] = '\0';
+    const uint32 padStart = *bufferPos;
+    const uint32 padEnd = align(padStart, alignment);
+    if (padEnd - padStart >= 8) {
+        unreachable();
     }
+    memset(buffer + padStart, 0, padEnd - padStart);
     *bufferPos = padEnd;
 }
 
