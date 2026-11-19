@@ -220,8 +220,11 @@ void ArgumentsBcWriter::operator=(const ArgumentsBcWriter &other)
 
 ArgumentsBcWriter::~ArgumentsBcWriter()
 {
-    delete d;
-    d = nullptr;
+    if (d) {
+        free(d->m_dataBegin);
+        delete d;
+        d = nullptr;
+    }
 }
 
 /// \fn Arguments::IoState ArgumentsBcWriter::state() const
@@ -683,9 +686,9 @@ Arguments ArgumentsBcWriter::finish()
                 argsPriv->m_signature = cstring(d->m_dataBegin, d->m_signatureLength);
                 argsPriv->m_data = chunk(dataStart, dataSize);
 
-                d->m_dataPtr = nullptr; // now owned by Arguments and later freed there
+                d->m_dataPtr = nullptr;
                 d->m_dataEnd = nullptr;
-                d->m_dataBegin = nullptr;
+                d->m_dataBegin = nullptr; // now owned by Arguments and later freed there
 
                 argsPriv->m_fileDescriptors = std::move(d->m_fileDescriptors);
             }
