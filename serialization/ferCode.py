@@ -81,6 +81,7 @@ class FerRepeatArray:
 class FerNesting:
     array_depth: int
     paren_depth: int
+    combined_depth: int
 
 
 # Type for heterogeneous bytecode list
@@ -158,8 +159,7 @@ def fer_encode_signature(signature: str, sig_type: str = "method") -> Optional[L
         # BeginVariantSignature header: 3 items: FerOp + 2x FerNesting
         out.append(FerOp(post_align=0, opcode=FerOpcode.BEGIN_VARIANT_SIGNATURE,
                          io_state=IoState.NOT_STARTED))
-        out.append(FerNesting(array_depth=0, paren_depth=0))
-        out.append(FerNesting(array_depth=0, paren_depth=0))
+        out.append(FerNesting(array_depth=0, paren_depth=0, combined_depth=0))
 
         # Encode one complete type
         if not fer_encode_single_complete_type(signature, 0, nest, out):
@@ -171,7 +171,7 @@ def fer_encode_signature(signature: str, sig_type: str = "method") -> Optional[L
         # Patch nesting depth fields
         out[1].array_depth = nest.max_array
         out[1].paren_depth = nest.max_paren
-        out[2].array_depth = nest.max_combined  # really combined depth
+        out[1].combined_depth = nest.max_combined
 
         out.append(FerOp(post_align=0, opcode=FerOpcode.END_VARIANT_SIGNATURE,
                          io_state=IoState.END_VARIANT))
@@ -247,7 +247,7 @@ def fer_encode_single_complete_type(signature: str, pos: int,
         if not nest.begin_variant():
             return False, pos
         out.append(FerOp(post_align=0, opcode=FerOpcode.ENTER_VARIANT, io_state=IoState.BEGIN_VARIANT))
-        out.append(FerNesting(array_depth=nest.array, paren_depth=nest.paren))
+        out.append(FerNesting(array_depth=nest.array, paren_depth=nest.paren, combined_depth=nest.total()))
         # Consume the variant body (one complete type)
         success, new_pos = fer_encode_single_complete_type(signature, pos + 1, nest, out)
         if not success:
@@ -443,7 +443,7 @@ def optimize_fer_ops(ops: List[FerCodeItem]) -> Dict[int, ArrayAlignments]:
     prev_align_index = 0
     prev_io_state_index = 0
 
-    i = 3 if is_variant else 1
+    i = 2 if is_variant else 1
 
     while i < len(ops):
         prev_addr_set = addr_set
@@ -589,7 +589,7 @@ def elide_structs(ops: List[FerCodeItem]) -> None:
     is_variant = ops[0].opcode == FerOpcode.BEGIN_VARIANT_SIGNATURE
     alignment_from_preceding_struct = False
 
-    out_index = 3 if is_variant else 1
+    out_index = 2 if is_variant else 1
     i = out_index
 
     while i < len(ops):

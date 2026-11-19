@@ -26,7 +26,7 @@ enum FerOpcode : byte
                     // occurs, so current nesting + variant's nesting can be checked against limits
 
     BeginVariantSignature,  // Only occurs as first (index 0) field of FerCode vector.
-                            // Single complete type / Always followed by two FerNesting /
+                            // Single complete type / Always followed by a FerNesting /
                             // assumes data starting from an unaligned address
     EndVariantSignature,
 
@@ -96,8 +96,8 @@ struct alignas(4) FerNesting
 {
     byte arrayDepth;
     byte parenDepth;
-    // TODO add the other depth thing and use it for variant signatures
-    uint16 padding = 0;
+    byte combinedDepth;
+    byte padding = 0;
 };
 
 union alignas(4) FerCode

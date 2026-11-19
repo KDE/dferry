@@ -60,16 +60,14 @@ static void test_variantSignature()
     ops = ferCodeForSignature(cstring("i"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginVariantSignature, 4, Arguments::Int32},
-        FerNesting{0, 0},
-        FerNesting{0, 0},
+        FerNesting{0, 0, 0},
         FerOp{FerOpcode::Copy4, 0, Arguments::EndVariant},
         FerOp{FerOpcode::EndVariantSignature, 0, Arguments::Finished}}));
 
     ops = ferCodeForSignature(cstring("(ixix)"), Arguments::VariantSignature);
     TEST((*ops == std::vector<FerCode>{
         FerOp{FerOpcode::BeginVariantSignature, 8, Arguments::BeginStruct},
-        FerNesting{0, 1},
-        FerNesting{1, 0},
+        FerNesting{0, 1, 1},
         FerOp{FerOpcode::Copy0, 0, Arguments::Int32},
         FerOp{FerOpcode::Copy4, 8, Arguments::Int64},
         FerOp{FerOpcode::Copy8, 0, Arguments::Int32},

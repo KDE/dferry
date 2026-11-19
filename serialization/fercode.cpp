@@ -176,7 +176,8 @@ static bool ferEncodeSingleCompleteType(cstring *s, NestingWithMax *nest, std::v
         }
 
         out->push_back(FerOp{FerOpcode::EnterVariant, 0, Arguments::BeginVariant});
-        out->push_back(FerNesting{static_cast<byte>(nest->array), static_cast<byte>(nest->paren)});
+        out->push_back(FerNesting{static_cast<byte>(nest->array), static_cast<byte>(nest->paren),
+                                  static_cast<byte>(nest->total())});
 
         chopFirst(s);
         nest->endVariant();
@@ -289,8 +290,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
     if (type == Arguments::VariantSignature) {
         out->push_back(FerOp{FerOpcode::BeginVariantSignature, 0,
                        Arguments::NotStarted /*will be overwritten */});
-        out->push_back(FerNesting{0, 0});
-        out->push_back(FerNesting{0, 0});
+        out->push_back(FerNesting{0, 0, 0});
 
         if (!sig->length) {
             return false;
@@ -304,7 +304,7 @@ static bool ferEncodeSignature(cstring *sig, Arguments::SignatureType type, std:
 
         (*out)[1].nest.arrayDepth = nest.maxArray;
         (*out)[1].nest.parenDepth = nest.maxParen;
-        (*out)[2].nest.arrayDepth /* really combinedDeptth */ = nest.maxCombined;
+        (*out)[1].nest.combinedDepth = nest.maxCombined;
 
         out->push_back(FerOp{FerOpcode::EndVariantSignature, 0, Arguments::EndVariant});
     } else {
@@ -402,14 +402,14 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
         ret.append(printableFerOp(fc.op));
 
         if (fc.op.op == FerOpcode::BeginVariantSignature) {
-            i += 2;
+            i++;
             if (i < ops.size()) {
                 ret.append(" A");
-                ret.append(std::to_string(ops[i - 1].nest.arrayDepth));
+                ret.append(std::to_string(ops[i].nest.arrayDepth));
                 ret.append(" P");
-                ret.append(std::to_string(ops[i - 1].nest.parenDepth));
+                ret.append(std::to_string(ops[i].nest.parenDepth));
                 ret.append(" C");
-                ret.append(std::to_string(ops[i].nest.arrayDepth /* really combinedDepth */));
+                ret.append(std::to_string(ops[i].nest.combinedDepth));
             } else {
                 ret.append(" BeginVariantSignatureTrunc");
             }
@@ -633,7 +633,7 @@ static void optimizeFerOps(std::vector<FerCode> *ops)
     // less weird (we'd have to special case 0 + n otherwise)
     uint32 addrSet = isVariant ? anyAddrSet : 0b10000000;
 
-    for (size_t i = isVariant ? 3 : 1 ; i < ops->size(); i++) {
+    for (size_t i = isVariant ? 2 : 1; i < ops->size(); i++) {
 
         assert(prevAlignIndex <= i);
 
@@ -867,7 +867,7 @@ static void elideStructs(std::vector<FerCode> *ops)
     const bool isVariant = (*ops)[0].op.op == BeginVariantSignature;
 
     bool alignmentFromPrecedingStruct = false;
-    size_t outIndex = isVariant ? 3 : 1;
+    size_t outIndex = isVariant ? 2 : 1;
     size_t i = outIndex;
     for (; i < ops->size(); i++) {
         assert(outIndex <= i);

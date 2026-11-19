@@ -514,11 +514,10 @@ inline const void *ArgumentsBcReader::advanceStateInternal(Arguments::IoState ex
             ferOp = d->m_opsPtr->op;
 
             const FerNesting innerNest = (d->m_opsPtr + 1)->nest;
-            const FerNesting extraNest = (d->m_opsPtr + 2)->nest;
-            d->m_opsPtr += 3;
+            d->m_opsPtr += 2;
             if (d->m_nesting.array + innerNest.arrayDepth > Nesting::arrayMax ||
                 d->m_nesting.paren + innerNest.parenDepth > Nesting::parenMax ||
-                d->m_nesting.total() + extraNest.arrayDepth /* really combinedDeptth */ > Nesting::totalMax) {
+                d->m_nesting.total() + innerNest.combinedDepth > Nesting::totalMax) {
                 assert(false); // for now, TODO error handling
             }
 
