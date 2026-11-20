@@ -404,12 +404,13 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
         if (fc.op.op == FerOpcode::BeginVariantSignature) {
             i++;
             if (i < ops.size()) {
+                const FerNesting nest = ops[i].nest;
                 ret.append(" A");
-                ret.append(std::to_string(ops[i].nest.arrayDepth));
+                ret.append(std::to_string(nest.arrayDepth));
                 ret.append(" P");
-                ret.append(std::to_string(ops[i].nest.parenDepth));
+                ret.append(std::to_string(nest.parenDepth));
                 ret.append(" C");
-                ret.append(std::to_string(ops[i].nest.combinedDepth));
+                ret.append(std::to_string(nest.combinedDepth));
             } else {
                 ret.append(" BeginVariantSignatureTrunc");
             }
@@ -417,10 +418,11 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
             i++;
             if (i < ops.size()) {
                 // These bytes are the "go back index" for the array, I suppose we could also print it?
+                const FerRepeatArray repeatArray = ops[i].repeatArray;
                 ret.append(" GoBackOpIndex ");
-                ret.append(std::to_string(ops[i].repeatArray.goBackOpIndex));
+                ret.append(std::to_string(repeatArray.goBackOpIndex));
                 ret.append(" GoBackAlign ");
-                ret.append(printableAlignValue(ops[i].repeatArray.goBackAlign));
+                ret.append(printableAlignValue(repeatArray.goBackAlign));
                 ret.pop_back(); // remove trailing space
             } else {
                 ret.append(" GoBackTrunc");
@@ -428,10 +430,11 @@ std::string printableFerOps(const std::vector<FerCode>& ops)
         } else if (fc.op.op == FerOpcode::EnterVariant) {
             i++;
             if (i < ops.size()) {
+                const FerNesting nest = ops[i].nest;
                 ret.append(" A");
-                ret.append(std::to_string(ops[i].nest.arrayDepth));
+                ret.append(std::to_string(nest.arrayDepth));
                 ret.append(" P");
-                ret.append(std::to_string(ops[i].nest.parenDepth));
+                ret.append(std::to_string(nest.parenDepth));
             } else {
                 ret.append("EnterVariantTrunc");
             }
