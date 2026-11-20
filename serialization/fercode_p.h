@@ -67,22 +67,29 @@ struct alignas(4) FerOp
         return postAlign & 0x0f;
     }
 
-    void setArrayEndIndex(uint32 endIndex)
+    void setArrayExtraData(uint32 endIndex, bool isPrimitive)
     {
         assert(op == FerOpcode::BeginArray);
         assert(endIndex <= 0xfff);
         assert((postAlign & 0xf0) == 0);
-        if (endIndex > 0xfff) {
+        if (endIndex > 0x7ff) {
             unreachable();
         }
         arrayNotes =  endIndex & 0x0ff;
-        postAlign |= (endIndex & 0xf00) >> 4;
+        postAlign |= (endIndex & 0x700) >> 4;
+        postAlign |= isPrimitive << 7;
     }
 
     uint32 arrayEndIndex() const
     {
         assert(op == FerOpcode::BeginArray);
-        return arrayNotes + ((postAlign & 0xf0) << 4);
+        return arrayNotes + ((postAlign & 0x70) << 4);
+    }
+
+    bool isPrimitiveArray() const
+    {
+        assert(op == FerOpcode::BeginArray);
+        return postAlign & 0x80;
     }
 };
 

@@ -777,6 +777,8 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
         arrAlignIt->second.beforeContentsAddrSet |= addrSet;
     }
 
+    bool isPrimitive = true;
+
     for (size_t i = beginArrayIndex + 1; ; i++) {
         const FerOp ferOp = (*ops)[i].op;
 
@@ -785,10 +787,12 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
         if (isBasicAdditionOp(ferOp.op)) {
             addrSet = applyAddition(addrSet, ferOp.op);
         } else if (isVarLengthOp(ferOp.op)) {
+            isPrimitive = false;
             addrSet = anyAddrSet;
         } else if (ferOp.op == FerOpcode::BeginArray) {
             // Since we skip "our" BeginArray, what we have here is another array inside the current one
 
+            isPrimitive = false;
             addrSet = applyAddition(addrSet, FerOpcode::Copy4); // array length field!
             const size_t innerBeginArrayIndex = i;
 
@@ -838,7 +842,7 @@ static size_t optimizeArrays(std::vector<FerCode> *ops, uint32 addrSet, size_t b
 
                 // For fast skip-to-end, only needs to be set once
                 assert((*ops)[beginArrayIndex].op.op == FerOpcode::BeginArray);
-                (*ops)[beginArrayIndex].op.setArrayEndIndex(i);
+                (*ops)[beginArrayIndex].op.setArrayExtraData(i, isPrimitive);
             }
 
             arrayAlign.afterContentsAddrSet = addrSet;

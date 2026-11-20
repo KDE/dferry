@@ -92,7 +92,7 @@ static void test_arrayEncode()
         FerOp{FerOpcode::ObjectPath, 0, Arguments::Finished},
         FerOp{FerOpcode::End, 0, Arguments::Finished}
     };
-    expectOps[1].op.setArrayEndIndex(3);
+    expectOps[1].op.setArrayExtraData(3, true);
     TEST(*ops == expectOps);
 
     ops = ferCodeForSignature(cstring("a{is}"));
@@ -105,7 +105,7 @@ static void test_arrayEncode()
         FerRepeatArray{8, 0, 2},
         FerOp{FerOpcode::End, 0, Arguments::Finished}
     };
-    expectOps[1].op.setArrayEndIndex(4);
+    expectOps[1].op.setArrayExtraData(4, false);
     TEST(*ops == expectOps);
 
     ops = ferCodeForSignature(cstring("a(ad)"));
@@ -122,8 +122,8 @@ static void test_arrayEncode()
         FerRepeatArray{0, 0, 2},
         FerOp{FerOpcode::End, 0, Arguments::Finished}
     };
-    expectOps[1].op.setArrayEndIndex(8);
-    expectOps[3].op.setArrayEndIndex(5);
+    expectOps[1].op.setArrayExtraData(8, false);
+    expectOps[3].op.setArrayExtraData(5, true);
     TEST(*ops == expectOps);
 }
 
