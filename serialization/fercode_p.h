@@ -26,12 +26,13 @@ enum FerOpcode : byte
                     // occurs, so current nesting + variant's nesting can be checked against limits
 
     BeginVariantSignature,  // Only occurs as first (index 0) field of FerCode vector.
-                            // Single complete type / Always followed by a FerNesting /
-                            // assumes data starting from an unaligned address
+                            // Signature is for a single complete type. Always followed by a FerNesting.
+                            // Assumes data starting from an unknown/unaligned address because the variant
+                            // may occur anywhere in a "parent" signature.
     EndVariantSignature,
 
-    BeginMethodSignature,   // Only occurs as first (index 0) field of FerCode vector.
-                            // Never followed by FerNesting / assumes starting from an 8-byte aligned address
+    BeginMethodSignature,   // Only occurs as first (index 0) field of FerCode vector. Never followed by
+                            // FerNesting. Assumes data starting at an 8-byte aligned address.
     End,
 };
 
